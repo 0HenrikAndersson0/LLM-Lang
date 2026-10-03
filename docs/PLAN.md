@@ -1,0 +1,209 @@
+# Implementation Plan (v3, revised)
+
+> **Planning mode.** Phase 0 exits 2026-10-03 with a GO. Phase 1 (reader &
+> expansion) authorized; design doc v1 grammar is the frozen input. Status
+> legend: `☐ todo` `◐ doing` `☑ done` `⊘ cut` `⏸ blocked`
+
+## North Star
+
+A dense IR language that reduces LLM token spend on code generation and
+round-trips to/from C#/JS. Success metric: **≥30% token reduction** on a real
+corpus, measured on the whole-pipeline view (footnote [1]), while round-trip
+compile-identity holds and an LLM can write and debug it in a closed loop.
+
+---
+
+## Phase 0 — Decisions by measurement (DONE 2026-10-03)
+
+**Route decision (2026-10-03): Route 1 adopted.** Full s-expr surface
+falsified by measurement (A/B/C = 118.7–132.7% of baseline); variant D —
+infix definitions/calls + braceless keyword control flow — scored
+**89.7% o200k / 90.1% llama** on the 10 golden examples, the first variant
+under baseline. Routes 2/3 shelved; design doc rewritten for Route 1
+(language-design.md v1, measured) with grammar + core forms frozen.
+
+**Goal:** Go/no-go token-savings number on a real corpus (whole-pipeline
+view [1]). Design decisions are frozen (design doc §8); grammar changes
+now require re-running the bench per working agreements.
+
+**Exit:** go/no-go number recorded in `bench/results.md` as measured over
+`bench/corpus/real/`. If no-go, the project stops here — the cheapest
+possible failure point.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 0.1 | Python venv with `tiktoken` + `tokenizers` (o200k_base, llama vocab) | `bench/scripts/` runnable | ☑ |
+| 0.2 | Scoring script: per-file token counts, min/max/mean, % of baseline, per-tokenizer verdicts | `bench/scripts/score.py` (+ `toktest.py` probe script) | ☑ |
+| 0.3 | Golden-example corpus from language-design §7 as fixture files | `bench/corpus/*.ir` | ☑ |
+| 0.4 | Real-world C#/JS corpus (10–20 files each; license-clean) | `bench/corpus/real/` | ☑ — 16 files: 9 C# (Humanizer, MIT) + 7 JS/TS (cheerio, MIT), construct-diverse |
+| 0.5 | Hand-written IR renditions of real corpus files (informs the design!) | `bench/corpus/real/*.ir` | ☑ — all 16 hand-rendered in variant D; fidelity notes inline (opaque fallbacks flagged) |
+| 0.6 | Hand-render each golden example in each variant syntax (variant table, design doc §1) | `bench/variants/**` | ☑ (B, C rendered; C = 118.7% o200k; **D (Route 1 hybrid) rendered, 89.7% o200k / 90.1% llama — first variant under baseline**) |
+| 0.7 | Decision runs: arrow, bools, nullable, static-call, async/annotations — isolate one construct per run | `bench/results.md` verdict table | ☑ — decided inline during D rendering + probes (results.md route section, design doc §8 frozen-decisions table); all spelling ties resolved by readability floor |
+| 0.8 | Go/no-go: token delta of IR renditions vs real C#/JS baseline, whole-pipeline view [1] | headline number in `bench/results.md` | ☑ — **GO: 46.4% o200k / 46.5% llama** (25,299→11,735 / 32,300→15,005) over 16 real files; one-shot view, whole-pipeline confirmation deferred to loop test 2.7 |
+| 0.9 | Design-doc update: replace §1 variant-table hypotheses with measured verdicts; freeze grammar + core forms | design doc v1 | ☑ — language-design.md rewritten for Route 1 (v1, measured); grammar/core forms frozen pending 0.8 sanity check |
+
+> [1] **Whole-pipeline view:** measure `baseline C# → generated output →
+> model re-reads its own output` (stack traces, fix-up loops), not just the
+> one-shot IR token count. That is the number that predicts agent-loop spend.
+>
+> **Decision order (settled 2026-10-03, see design doc §8):** arrow + bools
+> + nullable spellings, statics, async annotations — all measured inline
+> during variant D rendering; ties resolved by readability floor.
+
+---
+
+## Phase 1 — Reader & expansion (starts after Phase 0 exit)
+
+**Goal:** `ir text → core forms` works for the golden corpus; invariants upheld.
+
+**Exit:** all golden examples parse + expand; parse→expand→print is identity
+on canonical form; reader survives fuzzing.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 1.1 | Cargo workspace: `crates/lang` (lib) + `crates/cli` | builds clean | ☐ |
+| 1.2 | Lexer from frozen grammar, symbol table driven by Phase 0 verdicts | unit-tested lexer | ☐ |
+| 1.3 | Reader: text → form tree (EBNF, design doc §1) | unit tests over golden corpus | ☐ |
+| 1.4 | Expander: macro table → core forms; enforce core-form closure invariant | expansion snapshots | ☐ |
+| 1.5 | Canonical printer: IR → text (§6 layout) + `--expand` debug mode | printer + snapshots | ☐ |
+| 1.6 | Property-based fuzzing (proptest) on reader: never panics, always returns error | fuzz suite | ☐ |
+| 1.7 | Golden-corpus snapshot tests wired into `cargo test` | CI test target | ☐ |
+
+---
+
+## Phase 2 — JS target (first target; no type system)
+
+**Goal:** IR → compilable JS for the full golden corpus + real JS corpus.
+
+**Exit:** outputs pass `node --check` / `tsc --noEmit`; LLM loop test (2.7)
+shows the model repairs its own IR from JS runtime errors.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 2.1 | JS AST + printer design (estree-style, canonical layout) | design note | ☐ |
+| 2.2 | Core-form → JS lowering table (design doc §2 semantics) | lowering-table doc | ☐ |
+| 2.3 | JS printer | emits golden corpus | ☐ |
+| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ☐ |
+| 2.5 | `ir --expand` / `--ir` debug flags (§6 readability floor) | CLI flags | ☐ |
+| 2.6 | Error localization: printer carries source spans so IR ↔ JS line mapping is recoverable | span tracking | ☐ |
+| 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ☐ |
+
+> [2] **Diff-against-hand-written:** Phase 0 hand renditions (0.5) are ground
+> truth for printer quality when transpiler output doesn't compile — it
+> isolates transpiler bugs from design bugs.
+
+---
+
+## Phase 3 — C# target
+
+**Goal:** IR → compilable C# for golden + real C# corpus.
+
+**Exit:** all outputs compile (`dotnet build` zero errors); LLM loop test
+replicates 2.7's fix-from-stack-trace capability.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 3.1 | C# AST + printer design (Roslyn-inspired, namespaces/usings/attributes) | design note | ☐ |
+| 3.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☐ |
+| 3.3 | C# printer | emits golden corpus | ☐ |
+| 3.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ☐ |
+| 3.5 | LLM loop test for C# | report | ☐ |
+
+---
+
+## Phase 4 — Round-trip (C#/JS → IR)
+
+**Goal:** Existing C#/JS → lossy IR, meeting the §5 fidelity budget and the
+double-round-trip acceptance criterion (C# → IR → C# must compile and behave
+identically).
+
+**Exit:** double round-trip holds over the real corpus; actual §5 budget
+documented.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 4.1 | tree-sitter-c-sharp + tree-sitter-javascript grammars for parsing targets | parser setup | ☐ |
+| 4.2 | IR-form coverage audit on real corpus: % of constructs representable in core+ sugar | coverage report | ☐ |
+| 4.3 | Mapping table: C#/JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☐ |
+| 4.4 | Target-language reader (C#/JS → IR), reusing the canonical printer | reader | ☐ |
+| 4.5 | Double round-trip over real corpus: compile + behavior identity checks | round-trip report | ☐ |
+| 4.6 | Document actual §5 budget (what was dropped in practice) | fidelity doc | ☐ |
+
+> [3] **`(opaque …)` passthrough:** unrepresentable members are captured
+> verbatim (spans + original text) and re-emitted untouched by the printer.
+> This bounds worst-case fidelity loss at zero for members the IR can't
+> express.
+
+---
+
+## Phase 5 — Hardening & release
+
+**Goal:** Stable v0.1 usable as an agent file format.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 5.1 | Bench rerun vs Phase 0 headline: did savings hold on the whole-pipeline view? | updated results | ☐ |
+| 5.2 | LLM loop test at scale: larger corpus, multiple models (GPT/Claude/Llama) | scale report | ☐ |
+| 5.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☐ |
+| 5.4 | Versioning policy: additive-only core forms; macros absorb growth | policy doc | ☐ |
+| 5.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☐ |
+| 5.6 | Release v0.1: crates.io + example repo | release | ☐ |
+
+---
+
+## Risk register
+
+| Risk | Phase | Mitigation |
+|---|---|---|
+| Token savings < 30% (no-go) | 0.8 | hand renditions inform design; stop cheaply if no-go |
+| Over-minification degrades LLM reasoning | 0.7, 2.7 | readability floor (§6); LLM repair test is the acceptance gate |
+| Round-trip fidelity worse than budget | 4.2–4.6 | `(opaque …)` bounds per-member loss at zero; recheck budget after coverage audit |
+| LLM can't repair from target-language errors | 2.6–2.7 | span tracking maps stack traces back to IR; unfixable ⇒ real no-go at Phase 2 exit |
+| Reader crashes on adversarial input | 1.6 | proptest fuzzing; never panics, always returns error |
+
+---
+
+## Verification map
+
+Each phase exit is a verification act, not a checklist:
+
+| Phase | Exit artifact | Verifies |
+|-------|---------------|----------|
+| 0 | `bench/results.md` verdicts + go/no-go number | the concept: token savings ≥30% |
+| 1 | golden corpus parse→expand→print identity | grammar & core forms are sufficient in practice |
+| 2 | JS outputs compile + LLM repair test | the language is generatable & debuggable by an LLM |
+| 3 | C# outputs compile + LLM repair test | same, with a type system |
+| 4 | double round-trip compile identity | the round-trip contract (§5) |
+| 5 | v0.1 release + scale report | usable as an agent file format |
+
+---
+
+## Working agreements
+
+- **Plan upkeep:** statuses flip only on *verified* progress (artifacts exist
+  and pass their checks), not intent.
+- **Design-first:** Phase 0 runs before any transpiler code; grammar/core-form
+  freeze requires Phase 0 to exit.
+- **Fixtures are ground truth:** hand renditions (0.5/0.6) are the reference
+  for printer-quality disputes.
+- **Core-form closure:** changes to core forms are additive-only and require
+  re-running the Phase 0 bench before merge.
+
+---
+
+## Changelog
+
+- **v3** — Route decision recorded: full s-expr falsified, Route 1 (infix
+  hybrid) adopted; variant D scored 89.7%/90.1% on golden corpus; 0.7
+  decided inline, 0.9 frozen in design-doc v1. **0.8 GO recorded: 46.4%
+  o200k / 46.5% llama on 16-file real corpus (Humanizer + cheerio); Phase 0
+  exit criteria met — Phase 1 authorized.** *Amendment (same day): grammar
+  reconcile pass over the 12 construct families the 0.5 renders needed —
+  probe-adjudicated (results.md reconcile section), design doc updated to
+  grammar v1.1 (~24 core forms); real corpus re-scored 46.1%/46.2%,
+  golden unchanged. Grammar now genuinely covers both corpora.*
+- **v2** — Full 6-phase plan: task tables with deliverables/status, per-phase
+  exit criteria, risk register, verification map, working agreements. Phase 0
+  expanded into 9 tasks with a decision order; whole-pipeline measurement
+  (footnote [1]) made the north-star metric.
+- **v1** — Initial outline (Phases 0–5, ~15 tasks).

@@ -1,0 +1,6 @@
+async fn Load(Int id) User?{
+  try await Repo.Get id
+  catch NotFound return null
+  catch Error e throw e
+  finally Log("done")
+}

@@ -1,0 +1,88 @@
+@1 @ns Humanizer
+
+type LocaliserRegistry<TLocaliser> : Object{
+  Dictionary<String, Func<CultureInfo, TLocaliser>> localisersBuilder
+  Object lockObject
+  volatile FrozenDictionary<String, Func<CultureInfo, TLocaliser>>? frozenLocalisers
+  Func<CultureInfo, TLocaliser> defaultLocaliser
+  ConditionalWeakTable<CultureInfo, StrongBox<TLocaliser>> cultureSpecificCache
+  volatile Bool useGeneratedCultureResolver
+
+  ctor(TLocaliser defaultLocaliser){
+    this.defaultLocaliser = _ => defaultLocaliser
+  }
+
+  ctor(Func<CultureInfo, TLocaliser> defaultLocaliser){
+    this.defaultLocaliser = defaultLocaliser
+  }
+
+  fn ResolveForUiCulture() TLocaliser{ResolveForCulture(CultureInfo.CurrentUICulture)}
+
+  fn ResolveForCulture(CultureInfo? culture) TLocaliser{
+    var cultureInfo = culture ?? CultureInfo.CurrentCulture
+    return cultureSpecificCache.GetValue(cultureInfo, c=>new(FindLocaliser(c)(c))).Value!
+  }
+
+  fn Register(String localeCode, TLocaliser localiser){
+    lock lockObject{
+      if frozenLocalisers != null{
+        throw new InvalidOperationException("Cannot register localisers after the registry has been used.")
+      }
+      localisersBuilder[localeCode] = _ => localiser
+    }
+  }
+
+  fn Register(String localeCode, Func<CultureInfo, TLocaliser> localiser){
+    lock lockObject{
+      if frozenLocalisers != null{
+        throw new InvalidOperationException("Cannot register localisers after the registry has been used.")
+      }
+      localisersBuilder[localeCode] = localiser
+    }
+  }
+
+  fn GetRegisteredLocaleCodes() Array<String>{
+    lock lockObject{
+      return [.. localisersBuilder.Keys.OrderBy((locale) => locale, StringComparer.Ordinal)]
+    }
+  }
+
+  fn UseGeneratedCultureResolver(){
+    lock lockObject{
+      if frozenLocalisers != null{
+        throw new InvalidOperationException(
+          "Cannot change culture resolution after the registry has been used.")
+      }
+      useGeneratedCultureResolver = true
+    }
+  }
+
+  fn FindLocaliser(CultureInfo culture) Func<CultureInfo, TLocaliser>{
+    var frozen = frozenLocalisers
+    if frozen == null{
+      lock lockObject{
+        frozen = frozenLocalisers
+        if frozen == null{
+          frozen = localisersBuilder.ToFrozenDictionary()
+          frozenLocalisers = frozen
+        }
+      }
+    }
+
+    if useGeneratedCultureResolver{
+      if frozen.TryGetValue(culture.Name, out var exactLocaliser){
+        return exactLocaliser
+      }
+      return GeneratedCultureResolver.TryResolve(culture.Name, out var resolution)
+        && frozen.TryGetValue(resolution.LocaleProfileOwner, out var generatedLocaliser)
+        ? generatedLocaliser : defaultLocaliser
+    }
+
+    for c = culture; !String.IsNullOrEmpty(c.Name); c = c.Parent{
+      if frozen.TryGetValue(c.Name, out var localiser){
+        return localiser
+      }
+    }
+    return defaultLocaliser
+  }
+}

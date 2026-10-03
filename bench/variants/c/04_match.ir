@@ -1,0 +1,5 @@
+(fn Handle[r Request->Response]
+  (match r.Kind
+    (case "GET" (Read r.Path))
+    (case "POST" (Write r.Body))
+    (else (Response.Err 405 "method not allowed"))))

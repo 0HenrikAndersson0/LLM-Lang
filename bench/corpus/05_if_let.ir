@@ -1,0 +1,2 @@
+(def FindEmail [u User -> (Opt String)]
+  (if-let e (. u Email) e (null)))

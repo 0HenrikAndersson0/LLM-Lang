@@ -1,0 +1,304 @@
+@1 @ns Humanizer
+
+type DefaultFormatter : IGrammaticalCaseTimeSpanFormatter{
+  var EnglishFallback=new(CultureInfo.GetCultureInfo("en"))
+  var phraseTable
+  LocalePhraseTable PhraseTable => phraseTable
+
+  CultureInfo Culture
+
+  ctor(CultureInfo culture){
+    Culture = culture
+    phraseTable = LocalePhraseTableCatalog.Resolve(culture)
+      ?? throw new InvalidOperationException("The generated locale phrase tables are missing the required English fallback.")
+  }
+
+  ctor(String localeCode) : CultureInfo(localeCode){}
+
+  fn DateHumanize_Now() String{phraseTable.DateNow ?? "now"}
+
+  fn DateHumanize_Today(String now) String{
+    now == (phraseTable.DateNow ?? "now") ? phraseTable.DateToday ?? now : now
+  }
+
+  fn DateHumanize_Never() String{phraseTable.DateNever ?? "never"}
+
+  fn DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, Int unit) String{
+    TryFormatDateFromPhraseTable(timeUnit, timeUnitTense, unit, out var result)
+      ? result
+      : throw new InvalidOperationException($"Missing generated relative-date phrase for '{Culture.Name}' and unit '{timeUnit}'.")
+  }
+
+  fn TimeSpanHumanize_Zero() String{phraseTable.TimeSpanZero ?? "no time"}
+
+  fn TimeSpanHumanize(TimeUnit timeUnit, Int unit, Bool toWords=false) String{
+    TryFormatTimeSpanFromPhraseTable(timeUnit, unit, toWords, out var result)
+      ? result
+      : throw new InvalidOperationException($"Missing generated time-span phrase for '{Culture.Name}' and unit '{timeUnit}'.")
+  }
+
+  fn TimeSpanHumanizeWithFractionalSeconds(Decimal seconds, Bool toSymbols) String{
+    ArgumentOutOfRangeException.ThrowIfNegative(seconds)
+
+    var visibleSeconds = decimal.Parse(
+      seconds.ToString("0.#######", CultureInfo.InvariantCulture),
+      CultureInfo.InvariantCulture)
+    var countValue = visibleSeconds.ToString(
+      "0.#######",
+      LocaleNumberFormattingOverrides.GetFormattingNumberFormat(Culture))
+
+    var category = ValidateFractionalSecondGrammar(visibleSeconds, toSymbols)
+
+    if toSymbols{return String.Concat(countValue, TimeUnitHumanize(TimeUnit.Second))}
+
+    if !phraseTable.TryGetTimeSpanPhrase(TimeUnit.Second, out var phrase)
+       || phrase.Multiple is not { } multiple{
+      throw new InvalidOperationException($"Missing generated fractional-second phrase for '{Culture.Name}'.")
+    }
+
+    if visibleSeconds == 1 && phrase.Single is { } single{return single}
+
+    var form = GetFractionalTimeSpanPhraseForm(visibleSeconds, category)
+    RenderCountedPhrase(
+      multiple,
+      ResolveTimeSpanPhraseForms(multiple.Forms, form),
+      countValue,
+      GetTimeSpanPhraseSecondaryPlaceholder(TimeUnit.Second, visibleSeconds, false))
+  }
+
+  fn ValidateFractionalSecondGrammar(Decimal seconds, Bool toSymbols) CardinalPluralCategory{
+    if !LocalizedInflectionCatalog.TrySelectCategory(Culture, seconds, out var category){
+      throw new InvalidOperationException($"Missing generated fractional-second grammar for '{Culture.Name}'.")
+    }
+    if !toSymbols
+       && (!phraseTable.TryGetTimeSpanPhrase(TimeUnit.Second, out var phrase)
+           || phrase.Multiple is null){
+      throw new InvalidOperationException($"Missing generated fractional-second phrase for '{Culture.Name}'.")
+    }
+    category
+  }
+
+  fn TimeSpanHumanize(TimeUnit timeUnit, Int unit, GrammaticalCase grammaticalCase) String{
+    if GetType().Assembly != typeof(DefaultFormatter).Assembly{
+      throw new NotSupportedException(
+        $"Custom formatter type '{GetType().FullName}' must explicitly implement {nameof(IGrammaticalCaseTimeSpanFormatter)} to support grammatical-case-aware durations.")
+    }
+    if (UInt)grammaticalCase > (UInt)GrammaticalCase.Causal{
+      throw new ArgumentOutOfRangeException(nameof(grammaticalCase), grammaticalCase, "Unsupported grammatical case.")
+    }
+    if (UInt)timeUnit > (UInt)TimeUnit.Year{
+      throw new ArgumentOutOfRangeException(nameof(timeUnit), timeUnit, "Unsupported time unit.")
+    }
+    var table = LocaleDurationCaseTableCatalog.Resolve(Culture)
+      ?? throw new NotSupportedException(
+        $"Culture '{Culture.Name}' has no grammatical-case classification for duration phrases.")
+    if table.Classification == LocaleDurationCaseClassification.Unsupported{
+      throw new NotSupportedException(
+        $"Culture '{Culture.Name}' has an applicable grammatical case system, but verified duration forms are unavailable.")
+    }
+    if table.Classification == LocaleDurationCaseClassification.NotApplicable{
+      throw new NotSupportedException(
+        $"Culture '{Culture.Name}' does not support grammatical-case duration phrases.")
+    }
+    if !table.TryGetCase(grammaticalCase, out var caseOverlay){
+      throw new NotSupportedException(
+        $"Culture '{Culture.Name}' does not support grammatical case '{grammaticalCase}' for duration phrases.")
+    }
+    var unitOverlay = caseOverlay.Units[(Int)timeUnit]
+    <rest-omitted>
+  }
+
+  fn GetTimeUnitGender(TimeUnit unit) GrammaticalGender?{null}
+
+  fn GetDatePhraseForm(TimeUnit unit, Tense tense, Int number) FormatterNumberForm{
+    Math.Abs(number) == 1 ? FormatterNumberForm.Singular : FormatterNumberForm.Default
+  }
+
+  fn GetTimeSpanPhraseForm(TimeUnit unit, Int number, Bool toWords) FormatterNumberForm{
+    Math.Abs(number) == 1 ? FormatterNumberForm.Singular : FormatterNumberForm.Default
+  }
+
+  fn GetFractionalTimeSpanPhraseForm(Decimal seconds, CardinalPluralCategory category) FormatterNumberForm{
+    category == CardinalPluralCategory.One ? FormatterNumberForm.Singular : FormatterNumberForm.Default
+  }
+
+  fn GetCaseAwareTimeSpanPhraseForm(TimeUnit unit, Int number) FormatterNumberForm{
+    LocaleDurationCaseTableCatalog.Resolve(Culture) is { } table
+      && table.NumberDetector != FormatterNumberDetectorKind.None
+      ? ProfiledFormatter.DetectNumberForm(number, table.NumberDetector)
+      : GetTimeSpanPhraseForm(unit, number, false)
+  }
+
+  fn GetDataUnitPhraseForm(DataUnit dataUnit, Float count) FormatterNumberForm{
+    Math.Abs(count) == 1d ? FormatterNumberForm.Singular : FormatterNumberForm.Default
+  }
+
+  fn GetDataUnitPhraseForm(DataUnit dataUnit, Decimal count, CardinalPluralCategory category) FormatterNumberForm{
+    category == CardinalPluralCategory.One ? FormatterNumberForm.Singular : FormatterNumberForm.Default
+  }
+
+  fn GetDataUnitPhrasePrefix(DataUnit dataUnit, Decimal count, CardinalPluralCategory category) String{
+    String.Empty
+  }
+
+  fn ResolveDatePhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) String{
+    forms.Resolve(form)
+  }
+
+  fn ResolveTimeSpanPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) String{
+    forms.Resolve(form)
+  }
+
+  fn ResolveCaseAwareTimeSpanPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) String{
+    LocaleDurationCaseTableCatalog.Resolve(Culture) is { } table
+      && table.NumberDetector != FormatterNumberDetectorKind.None
+      ? ProfiledFormatter.ResolveProfiledPhraseForms(forms, form, table.NumberDetector)
+      : ResolveTimeSpanPhraseForms(forms, form)
+  }
+
+  fn ResolveDataUnitPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) String{
+    forms.Resolve(form)
+  }
+
+  fn ShouldUseDatePhraseTable(TimeUnit unit, Tense tense, Int count, LocalizedDatePhrase phrase) Bool{true}
+
+  fn ShouldUseTimeSpanPhraseTable(TimeUnit unit, Int count, Bool toWords, LocalizedTimeSpanPhrase phrase) Bool{true}
+
+  fn ShouldUseDatePhraseTemplate(TimeUnit unit, Tense tense, Int count, LocalizedDatePhrase phrase) Bool{false}
+
+  fn ShouldAppendImplicitDataUnitPluralSuffix(
+    DataUnit dataUnit, Float count, FormatterNumberForm form,
+    LocalizedPhraseForms forms, PhraseTemplate? template) Bool{
+    count > 1 && form == FormatterNumberForm.Default
+      && forms.Singular is null && template is null
+  }
+
+  fn ShouldAppendImplicitDataUnitPluralSuffixExact(FormatterNumberForm form, LocalizedPhraseForms forms) Bool{
+    form == FormatterNumberForm.Default
+      && forms is { Singular: null, Dual: null, Paucal: null, Plural: null }
+  }
+
+  fn TransformDataUnitResult(
+    DataUnit dataUnit, Float count, FormatterNumberForm form,
+    String result, LocalizedPhraseForms forms, PhraseTemplate? template) String{
+    result
+  }
+
+  fn NormalizeDecimal(Decimal value) Decimal{
+    decimal.Parse(
+      value.ToString("G29", CultureInfo.InvariantCulture),
+      NumberStyles.Float, CultureInfo.InvariantCulture)
+  }
+
+  fn TryFormatDateFromPhraseTable(TimeUnit unit, Tense tense, Int count, out String result) Bool{
+    result = null!
+    if count == 0 && phraseTable.DateNow is { } now{
+      result = now
+      return true
+    }
+    if !phraseTable.TryGetDatePhrase(unit, tense, out var phrase){return false}
+    if !ShouldUseDatePhraseTable(unit, tense, count, phrase){return false}
+    if count == 1 && phrase.Single is { } single{
+      result = single
+      return true
+    }
+    if count == 2 && phrase.Template is { Name: "two", Template: { } exactTwo }
+       && ShouldUseDatePhraseTemplate(unit, tense, count, phrase){
+      result = exactTwo
+      return true
+    }
+    if phrase.Multiple is not { } multiple{return false}
+    var form = GetDatePhraseForm(unit, tense, count)
+    result = RenderCountedPhrase(
+      multiple, ResolveDatePhraseForms(multiple.Forms, form),
+      count.ToString(CultureInfo.CurrentCulture),
+      GetDatePhraseSecondaryPlaceholder(unit, tense, count))
+    true
+  }
+
+  fn TryFormatTimeSpanFromPhraseTable(TimeUnit unit, Int count, Bool toWords, out String result) Bool{
+    result = null!
+    if count == 0 && toWords && phraseTable.TimeSpanZero is { } zero{
+      result = zero
+      return true
+    }
+    if !phraseTable.TryGetTimeSpanPhrase(unit, out var phrase){return false}
+    if !ShouldUseTimeSpanPhraseTable(unit, count, toWords, phrase){return false}
+    if count == 1 && phrase.Single is { } single{
+      result = single
+      return true
+    }
+    var multiple = toWords ? phrase.MultipleWordsVariant ?? phrase.Multiple : phrase.Multiple
+    if multiple is not { } countedPhrase{
+      throw new InvalidOperationException(
+        $"Missing generated time-span phrase for '{Culture.Name}' and unit '{unit}'.")
+    }
+    var form = GetTimeSpanPhraseForm(unit, count, toWords)
+    result = RenderCountedPhrase(
+      countedPhrase, ResolveTimeSpanPhraseForms(countedPhrase.Forms, form),
+      FormatCountValue(unit, count, toWords),
+      GetTimeSpanPhraseSecondaryPlaceholder(unit, count, toWords))
+    true
+  }
+
+  fn FormatCountValue(TimeUnit unit, Int number, Bool toWords) String{
+    toWords ? NumberToWords(unit, number, Culture) : number.ToString(CultureInfo.CurrentCulture)
+  }
+
+  fn FormatCountValue(Float number) String{number.ToString(CultureInfo.CurrentCulture)}
+
+  fn RenderCountedPhrase(
+    LocalizedCountedPhrase phrase, String unitText, String countValue, String secondaryPlaceholder) String{
+    if phrase.CountPlacement == PhraseCountPlacement.None{
+      return RenderPattern(unitText, countValue, secondaryPlaceholder)
+    }
+    if phrase.Template is { } template{
+      return RenderTemplate(template, countValue, unitText, secondaryPlaceholder)
+    }
+    var beforeCount = RenderPattern(phrase.BeforeCountText, countValue, secondaryPlaceholder)
+    var renderedUnit = RenderPattern(unitText, countValue, secondaryPlaceholder)
+    var afterCount = RenderPattern(phrase.AfterCountText, countValue, secondaryPlaceholder)
+    phrase.CountPlacement switch{
+      PhraseCountPlacement.BeforeForm JoinPhraseParts(beforeCount, countValue, renderedUnit, afterCount)
+      PhraseCountPlacement.AfterForm JoinPhraseParts(beforeCount, renderedUnit, countValue, afterCount)
+      _ RenderPattern(renderedUnit, countValue, secondaryPlaceholder)
+    }
+  }
+
+  fn RenderTemplate(PhraseTemplate template, String countValue, String unitText, String secondaryPlaceholder) String{
+    template.Template
+      .Replace("{count}", countValue)
+      .Replace("{unit}", unitText)
+      .Replace("{prep}", secondaryPlaceholder)
+      .Replace("{value}", unitText)
+      .Replace("{0}", countValue)
+  }
+
+  fn RenderPattern(String? pattern, String countValue, String secondaryPlaceholder) String{
+    if String.IsNullOrEmpty(pattern){return pattern ?? String.Empty}
+    var resolvedPattern = pattern!
+    resolvedPattern
+      .Replace("{count}", countValue)
+      .Replace("{prep}", secondaryPlaceholder)
+      .Replace("{0}", countValue)
+      .Replace("{1}", secondaryPlaceholder)
+      .Trim()
+  }
+
+  fn JoinPhraseParts(String? first, String? second, String? third, String? fourth) String{
+    var partCount = 0
+    <rest-omitted>
+  }
+
+  fn FirstPhrasePart(String? first, String? second, String? third, String? fourth) String{
+    if !String.IsNullOrWhiteSpace(first){return first!}
+    if !String.IsNullOrWhiteSpace(second){return second!}
+    !String.IsNullOrWhiteSpace(third) ? third! : fourth!
+  }
+
+  fn AppendPhrasePart(StringBuilder builder, String? part){
+    if String.IsNullOrWhiteSpace(part){return}
+    if builder.Length > 0{builder.Append(' ')}
+    builder.Append(part)
+  }
+}

@@ -1,0 +1,13 @@
+@1 @ns Humanizer
+
+type LithuanianNumberFormDetector{
+  fn Detect(Int64 number) LithuanianNumberForm{
+    var tens = number % 100 / 10
+    var units = number % 10
+    // Teens and round tens use the genitive plural form, even though the
+    // final digit might otherwise map to singular or plural buckets.
+    if tens == 1 || units == 0{return LithuanianNumberForm.GenitivePlural}
+    if units == 1{return LithuanianNumberForm.Singular}
+    LithuanianNumberForm.Plural
+  }
+}

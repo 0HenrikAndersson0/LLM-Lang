@@ -1,0 +1,5 @@
+(type Order ^export
+  [(field LineItems (List LineItem))
+   (field Customer Customer)]
+  (method Total [-> Decimal]
+    (|> LineItems (map (li -> (. li Amount))) (sum))))

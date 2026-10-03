@@ -1,0 +1,77 @@
+@1 @ns Cheerio @use domhandler @use domutils
+
+// overloaded via optional prop/val — the 4 overload signatures collapse
+// into one implementation (IR has no overload set; fidelity budget item 5)
+fn Cheerio<T>.css(
+  prop?: String | Array<String> | Record<String, String>,
+  val?: String | ((this: Element, i: Int, style: String) => String | void),
+) Cheerio<T> | Record<String, String> | String | undefined{
+  if (prop != null && val != null)
+     || (typeof prop === 'object' && !Array.isArray(prop)){
+    return domEach(this, (el, i) => {
+      if isTag(el){setCss(el, prop as String, val, i)}
+    })
+  }
+  if this.length === 0{return}
+  getCss(this[0], prop as String)
+}
+
+fn setCss(
+  Element el,
+  prop: String | Record<String, String>,
+  value: String | ((this: Element, i: Int, style: String) => String | void) | undefined,
+  Int idx){
+  if typeof prop === 'string'{
+    var styles = getCss(el)
+    var val = typeof value === 'function' ? value.call(el, idx, styles[prop]) : value
+    if val === ''{delete styles[prop]}
+    else if val != null{styles[prop] = val}
+    el.attribs['style'] = stringify(styles)
+  }else if typeof prop === 'object'{
+    var keys = Object.keys(prop)
+    for i in 0..keys.length{
+      var k = keys[i]
+      setCss(el, k, prop[k], i)
+    }
+  }
+}
+
+fn getCss(AnyNode el, props?: Array<String>) Record<String, String> | String | undefined{
+  if !(el && isTag(el)){return}
+  var styles = parse(el.attribs['style'])
+  if typeof prop === 'string'{return styles[prop]}
+  if Array.isArray(prop){
+    var newStyles: Record<String, String> = {}
+    for item in prop{
+      if styles[item] != null{newStyles[item] = styles[item]}
+    }
+    return newStyles
+  }
+  styles
+}
+
+fn stringify(Record<String, String> obj) String{
+  Object.keys(obj).reduce(
+    (str, prop) => `${str}${str ? ' ' : ''}${prop}: ${obj[prop]};`, '')
+}
+
+fn parseStyles(String styles) Record<String, String>{
+  styles = (styles || '').trim()
+  if !styles{return {}}
+
+  var obj: Record<String, String> = {}
+  let key: String | undefined
+
+  for str in styles.split(';'){
+    var n = str.indexOf(':')
+    // If no colon, or first/last char, append to previous item's value
+    if n < 1 || n === str.length - 1{
+      var trimmed = str.trimEnd()
+      if trimmed.length > 0 && key !== undefined{obj[key] += `;${trimmed}`}
+    }else{
+      key = str.slice(0, n).trim()
+      obj[key] = str.slice(n + 1).trim()
+    }
+  }
+  obj
+}

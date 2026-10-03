@@ -1,0 +1,5 @@
+(ir 1)
+(ns Acme.Users)
+
+(def-async GetUser [(id Int) -> (Opt User)]
+  (await (static Users Find id)))

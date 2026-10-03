@@ -1,0 +1,8 @@
+(#ir 1)
+(#ns Acme.Orders)
+
+(type Order ^export
+  [(field LineItems List<LineItem>)
+   (field Customer Customer)]
+  (fn Total [-> Decimal]
+    (|> LineItems (map (li -> li.Amount)) (sum))))

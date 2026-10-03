@@ -1,0 +1,6 @@
+(def-async Load [(id Int) -> User]
+  (try
+    (await (static Repo Get id))
+    (catch e NotFound (null))
+    (catch e Error (throw e))
+    (finally (static Log "done"))))

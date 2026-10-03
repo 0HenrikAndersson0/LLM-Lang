@@ -1,0 +1,5 @@
+(#ir 1)
+(#ns Acme.Users)
+(#use Acme.Domain)
+
+(export(def Users(Users)))

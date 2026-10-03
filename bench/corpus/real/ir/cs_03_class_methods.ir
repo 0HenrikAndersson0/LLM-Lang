@@ -1,0 +1,86 @@
+@1 @ns Humanizer
+
+type DefaultCollectionFormatter(String defaultSeparator) : ICollectionFormatter{
+  String DefaultSeparator=defaultSeparator
+
+  fn Humanize<T>(IEnumerable<T> collection) String{
+    Humanize(collection, o=>o?.ToString(), DefaultSeparator)
+  }
+  fn Humanize<T>(IEnumerable<T> collection, Func<T, String?> objectFormatter) String{
+    Humanize(collection, objectFormatter, DefaultSeparator)
+  }
+  fn Humanize<T>(IEnumerable<T> collection, Func<T, Object?> objectFormatter) String{
+    Humanize(collection, objectFormatter, DefaultSeparator)
+  }
+  fn Humanize<T>(IEnumerable<T> collection, String separator) String{
+    Humanize(collection, o=>o?.ToString(), separator)
+  }
+  fn Humanize<T>(IEnumerable<T> collection, Func<T, String?> objectFormatter, String separator) String{
+    ArgumentNullException.ThrowIfNull(collection)
+    ArgumentNullException.ThrowIfNull(objectFormatter)
+    HumanizeDisplayStrings(collection, objectFormatter, separator)
+  }
+
+  fn Humanize<T>(IEnumerable<T> collection, Func<T, Object?> objectFormatter, String separator) String{
+    ArgumentNullException.ThrowIfNull(collection)
+    ArgumentNullException.ThrowIfNull(objectFormatter)
+    HumanizeDisplayObjects(collection, objectFormatter, separator)
+  }
+
+  fn HumanizeDisplayStrings<T>(IEnumerable<T> collection, Func<T, String?> objectFormatter, String separator) String{
+    var items = CreateDisplayItems(collection)
+    for item in collection{
+      AddDisplayString(items, objectFormatter(item))
+    }
+    HumanizeDisplayItems(items, separator)
+  }
+
+  fn HumanizeDisplayObjects<T>(IEnumerable<T> collection, Func<T, Object?> objectFormatter, String separator) String{
+    var items = CreateDisplayItems(collection)
+    for item in collection{
+      AddDisplayString(items, objectFormatter(item)?.ToString())
+    }
+    HumanizeDisplayItems(items, separator)
+  }
+
+  fn CreateDisplayItems<T>(IEnumerable<T> collection) List<String>{
+    collection switch{
+      ICollection<T> items new(items.Count)
+      IReadOnlyCollection<T> items new(items.Count)
+      _ []
+    }
+  }
+
+  fn AddDisplayString(List<String> items, String? item){
+    if String.IsNullOrWhiteSpace(item){return}
+    items.Add(item!.Trim())
+  }
+
+  fn HumanizeDisplayItems(List<String> items, String separator) String{
+    var count = items.Count
+    if count == 0{return ""}
+    if count == 1{return items[0]}
+
+    var conjunctionFormat = GetConjunctionFormatString(count)
+    if conjunctionFormat == "{0} {1} {2}"{
+      return count == 2
+        ? String.Concat(items[0], " ", separator, " ", items[1])
+        : String.Concat(JoinLeadingItems(items), " ", separator, " ", items[^1])
+    }
+    String.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1])
+  }
+
+  fn JoinLeadingItems(List<String> items) String{
+    var count = items.Count - 1
+    if count == 1{return items[0]}
+    var builder = new StringBuilder()
+    builder.Append(items[0])
+    for i in 1..count{
+      builder.Append(", ")
+      builder.Append(items[i])
+    }
+    builder.ToString()
+  }
+
+  fn GetConjunctionFormatString(Int itemCount) String{"{0} {1} {2}"}
+}

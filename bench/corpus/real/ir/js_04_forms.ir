@@ -1,0 +1,43 @@
+@1 @ns Cheerio @use domhandler
+
+const submittableSelector = 'input,select,textarea,keygen'
+const r20 = /%20/g
+const rCRLF = /\r?\n/g
+
+fn Cheerio<T>.serialize() String{
+  // Convert form elements into name/value objects
+  var arr = this.serializeArray()
+  // Serialize each element into a key/value string
+  var retArr = arr.map(
+    data => `${encodeURIComponent(data.name)}=${encodeURIComponent(data.value)}`)
+  retArr.join('&').replace(r20, '+')
+}
+
+fn Cheerio<T>.serializeArray() Array<{name: String, value: String}>{
+  // Resolve all form elements from either forms or collections of form elements
+  this.map((_, elem) => {
+    var $elem = this._make(elem)
+    if isTag(elem) && elem.name === 'form'{
+      return $elem.find(submittableSelector).toArray()
+    }
+    $elem.filter(submittableSelector).toArray()
+  })
+  .filter(
+    // Verify elements have a name and are not disabled; not submit/button/etc;
+    // either checked or don't have a checkable state
+    '[name!=""]:enabled:not(:submit, :button, :image, :reset, :file)'
+      + ':matches([checked], :not(:checkbox, :radio))')
+  .map<AnyNode, {name: String, value: String}>((_, elem) => {
+    var $elem = this._make(elem)
+    var name = $elem.attr('name')
+    if !name{return []}
+    // If there is no value set, default to empty
+    var value = $elem.val() ?? ''
+    if Array.isArray(value){
+      // Trim/normalize line endings for cross-platform consistency
+      return value.map(val => ({name, value: val.replace(rCRLF, '\r\n')}))
+    }
+    return {name, value: value.replace(rCRLF, '\r\n')}
+  })
+  .toArray()
+}

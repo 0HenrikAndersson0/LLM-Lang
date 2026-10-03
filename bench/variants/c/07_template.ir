@@ -1,0 +1,2 @@
+(fn Greet[u User->String]
+  `Hello, ${u.Name}! You have ${u.PendingCount} tasks.`)

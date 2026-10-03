@@ -1,0 +1,6 @@
+(fn-async Load[id Int->User]
+  (try
+    (await(Repo.Get id))
+    (catch NotFound null)
+    (catch e Error(throw e))
+    (finally(Log "done"))))

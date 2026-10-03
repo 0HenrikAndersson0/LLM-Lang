@@ -1,0 +1,5 @@
+(fn ActiveHeavy [-> List<Order>]
+  (|> Orders
+      (filter (o -> (o.Paid && o.Total > 100m)))
+      (map (o -> o.Total))
+      (sort)))

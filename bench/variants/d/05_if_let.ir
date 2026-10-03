@@ -1,0 +1,1 @@
+fn FindEmail(User u) String?{u.Email}

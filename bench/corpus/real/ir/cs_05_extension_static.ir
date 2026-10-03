@@ -1,0 +1,216 @@
+@1 @ns Humanizer
+
+type MetricNumeralExtensions export{
+  const var Limit=27
+  var BigLimit=Math.Pow(10, Limit)
+  var SmallLimit=Math.Pow(10, -Limit)
+  var Symbols=[
+    ['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'],
+    ['m', 'μ', 'n', 'p', 'f', 'a', 'z', 'y'],
+  ]
+  var UnitPrefixes=new Dictionary<Char, UnitPrefix>{
+    ['Y'] new("yotta", "septillion", "quadrillion")
+    ['Z'] new("zetta", "sextillion", "trilliard")
+    ['E'] new("exa", "quintillion")
+    ['P'] new("peta", "quadrillion")
+    ['T'] new("tera", "trillion")
+    ['G'] new("giga", "billion")
+    ['M'] new("mega", "million")
+    ['k'] new("kilo", "thousand")
+    ['m'] new("milli", "thousandth")
+    ['μ'] new("micro", "millionth")
+    ['n'] new("nano", "billionth", "milliardth")
+    ['p'] new("pico", "trillionth", "billionth")
+    ['f'] new("femto", "quadrillionth", "billiardth")
+    ['a'] new("atto", "quintillionth", "trillionth")
+    ['z'] new("zepto", "sextillionth", "trilliardth")
+    ['y'] new("yocto", "septillionth", "quadrillionth")
+  }.ToFrozenDictionary()
+
+  fn ShouldKeepTrailingZeros(MetricNumeralFormats? formats, Int? decimals) Bool{
+    if !decimals.HasValue || !formats.HasValue
+       || !formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros){return false}
+    if decimals is < 0 or > 15{
+      throw new ArgumentOutOfRangeException(nameof(decimals), decimals, "Fixed metric precision must be between 0 and 15.")
+    }
+    true
+  }
+
+  fn FormatLongWithTrailingZeros(Int64 input, Int decimals, NumberFormatInfo nfi) String{
+    decimals > 0
+      ? input.ToString(nfi) + nfi.NumberDecimalSeparator + new String('0', decimals)
+      : input.ToString(nfi)
+  }
+
+  fn String.FromMetric() Float{
+    input = CleanRepresentation(input)
+    BuildNumber(input, input[^1])
+  }
+
+  fn Int.ToMetric(MetricNumeralFormats? formats=null, Int? decimals=null) String{
+    if !formats.HasValue && !decimals.HasValue{return BuildDefaultRepresentation(input)}
+    ((Float)input).ToMetric(formats, decimals)
+  }
+
+  fn BuildDefaultRepresentation(Int input) String{
+    if input == 0{return input.ToString()}
+    var absolute = Math.Abs((Int64)input)
+    var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
+    if absolute < 1_000{return input.ToString(nfi)}
+    if absolute < 1_000_000{return (input / 1_000d).ToString("G15", nfi) + "k"}
+    if absolute < 1_000_000_000{return (input / 1_000_000d).ToString("G15", nfi) + "M"}
+    (input / 1_000_000_000d).ToString("G15", nfi) + "G"
+  }
+
+  fn Int64.ToMetric(MetricNumeralFormats? formats=null, Int? decimals=null) String{
+    if input.Equals(0){
+      if ShouldKeepTrailingZeros(formats, decimals){
+        var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
+        var space = formats.GetValueOrDefault().HasFlag(MetricNumeralFormats.WithSpace) ? " " : String.Empty
+        return FormatLongWithTrailingZeros(input, decimals.GetValueOrDefault(), nfi) + space
+      }
+      return input.ToString()
+    }
+    BuildRepresentation(input, formats, decimals)
+  }
+
+  fn Float.ToMetric(MetricNumeralFormats? formats=null, Int? decimals=null) String{
+    if input.Equals(0){
+      if ShouldKeepTrailingZeros(formats, decimals){
+        var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
+        var space = formats.GetValueOrDefault().HasFlag(MetricNumeralFormats.WithSpace) ? " " : String.Empty
+        return input.ToString($"F{decimals.GetValueOrDefault()}", nfi) + space
+      }
+      return input.ToString()
+    }
+    if input.IsOutOfRange(){throw new ArgumentOutOfRangeException(nameof(input))}
+    BuildRepresentation(input, formats, decimals)
+  }
+
+  fn CleanRepresentation(String input) String{
+    ArgumentNullException.ThrowIfNull(input)
+    input = input.Trim()
+    input = ReplaceNameBySymbol(input)
+    if input.Length == 0 || input.IsInvalidMetricNumeral(){
+      throw new ArgumentException("Empty or invalid Metric string.", nameof(input))
+    }
+    input.Replace(" ", String.Empty)
+  }
+
+  fn BuildNumber(String input, Char last) Float{
+    char.IsLetter(last) ? BuildMetricNumber(input, last) : double.Parse(input)
+  }
+
+  fn BuildMetricNumber(String input, Char last) Float{
+    var number = double.Parse(input[..^1])
+    var indexInPositive = Symbols[0].IndexOf(last)
+    if indexInPositive >= 0{
+      var exponent = (indexInPositive + 1) * 3.0
+      return number * Math.Pow(10, exponent)
+    }
+    var indexInNegative = Symbols[1].IndexOf(last)
+    var exponent2 = (indexInNegative + 1) * 3.0
+    number * Math.Pow(10, -exponent2)
+  }
+
+  fn ReplaceNameBySymbol(String input) String{
+    UnitPrefixes.Aggregate(input, (current, unitPrefix) =>
+      current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()))
+  }
+
+  fn BuildRepresentation(Int64 input, MetricNumeralFormats? formats, Int? decimals) String{
+    var number = Math.Abs(input / 10)
+    var exponent = 0
+    while number>0{
+      exponent++
+      number /= 10
+    }
+    var scale = exponent / 3
+    if !scale.Equals(0){return BuildMetricRepresentation(input, scale, formats, decimals)}
+    var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
+    var representation = ShouldKeepTrailingZeros(formats, decimals)
+      ? FormatLongWithTrailingZeros(input, decimals.GetValueOrDefault(), nfi)
+      : input.ToString(nfi)
+    var space = (formats & MetricNumeralFormats.WithSpace) == MetricNumeralFormats.WithSpace ? " " : String.Empty
+    representation + space
+  }
+
+  fn BuildMetricRepresentation(Int64 input, Int scale, MetricNumeralFormats? formats, Int? decimals) String opaque{
+    // long-form rounding logic preserved verbatim (banker's rounding on
+    // fractional digits); see fidelity budget §6 item 5
+  }
+
+  fn BuildRepresentation(Float input, MetricNumeralFormats? formats, Int? decimals) String{
+    var exponent = (Int)Math.Floor(Math.Log10(Math.Abs(input)) / 3)
+    if !exponent.Equals(0){return BuildMetricRepresentation(input, exponent, formats, decimals)}
+    if decimals.HasValue{
+      input = Math.Round(input, decimals.Value)
+      if Math.Abs(input) >= 1000{return BuildMetricRepresentation(input, 1, formats, decimals)}
+    }
+    var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
+    var representation = ShouldKeepTrailingZeros(formats, decimals)
+      ? input.ToString($"F{decimals.GetValueOrDefault()}", nfi)
+      : input.ToString(nfi)
+    var space = (formats & MetricNumeralFormats.WithSpace) == MetricNumeralFormats.WithSpace ? " " : String.Empty
+    representation + space
+  }
+
+  fn BuildMetricRepresentation(Float input, Int exponent, MetricNumeralFormats? formats, Int? decimals) String{
+    var number = input * Math.Pow(1000, -exponent)
+    if decimals.HasValue{number = Math.Round(number, decimals.Value)}
+    if Math.Abs(number) >= 1000 && exponent < Symbols[0].Count{
+      number /= 1000
+      exponent += 1
+    }
+    var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
+    var representation = ShouldKeepTrailingZeros(formats, decimals)
+      ? number.ToString($"F{decimals.GetValueOrDefault()}", nfi)
+      : number.ToString("G15", nfi)
+    var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)
+      ? parsedNumber : (Decimal)number
+    var unitText = GetUnitText(exponent, formats, displayedNumber)
+    var space = formats.HasValue && formats.Value.HasFlag(MetricNumeralFormats.WithSpace) ? " " : String.Empty
+    representation + space + unitText
+  }
+
+  fn GetUnitText(Int scale, MetricNumeralFormats? formats, Decimal displayedNumber) String{
+    Math.Sign(scale) switch{
+      +1 GetUnitText(Symbols[0][scale - 1], formats, displayedNumber)
+      -1 GetUnitText(Symbols[1][-scale - 1], formats, displayedNumber)
+      _ String.Empty
+    }
+  }
+
+  fn GetUnitText(Char symbol, MetricNumeralFormats? formats, Decimal displayedNumber) String{
+    if formats.HasValue{
+      var formatValue = formats.Value
+      if formatValue.HasFlag(MetricNumeralFormats.UseName){return UnitPrefixes[symbol].Name}
+      if formatValue.HasFlag(MetricNumeralFormats.UseShortScaleWord){return UnitPrefixes[symbol].ShortScaleWord}
+      if formatValue.HasFlag(MetricNumeralFormats.UseLongScaleWord){return UnitPrefixes[symbol].LongScaleWord}
+      if formatValue.HasFlag(MetricNumeralFormats.UseScaleWord){
+        return LocalizedMetricScaleWordCatalog.TryResolve(CultureInfo.CurrentUICulture, symbol, displayedNumber, out var scaleWord)
+          ? scaleWord : symbol.ToString()
+      }
+    }
+    symbol.ToString()
+  }
+
+  fn Float.IsOutOfRange() Bool{
+    fn outside(Float min, Float max) Bool{!(max > input && input > min)}
+    (Math.Sign(input) == 1 && outside(SmallLimit, BigLimit))
+      || (Math.Sign(input) == -1 && outside(-BigLimit, -SmallLimit))
+  }
+
+  fn String.IsInvalidMetricNumeral() Bool{
+    var index = input.Length - 1
+    var last = input[index]
+    var isSymbol = UnitPrefixes.ContainsKey(last)
+    !double.TryParse(isSymbol ? input[..index] : input, out _)
+  }
+
+  type UnitPrefix(String name, String shortScaleWord, String? longScaleWord=null){
+    String Name=name
+    String ShortScaleWord=shortScaleWord
+    String LongScaleWord => longScaleWord ?? ShortScaleWord
+  }
+}

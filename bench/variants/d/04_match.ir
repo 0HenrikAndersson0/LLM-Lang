@@ -1,0 +1,7 @@
+fn Handle(Request r) Response{
+  match r.Kind{
+    "GET" Read(r.Path)
+    "POST" Write(r.Body)
+    else Response.Err 405 "method not allowed"
+  }
+}

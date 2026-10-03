@@ -1,0 +1,13 @@
+@1 @ns Humanizer
+
+// interface: `type IFormatter interface{` — signature-only members
+type IFormatter interface{
+  DateHumanize_Now() String
+  DateHumanize_Never() String
+  DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, Int unit) String
+  TimeSpanHumanize_Zero() String
+  TimeSpanHumanize(TimeUnit timeUnit, Int unit, Bool toWords=false) String
+  TimeSpanHumanize_Age() String
+  DataUnitHumanize(DataUnit dataUnit, Float count, Bool toSymbol=true) String
+  TimeUnitHumanize(TimeUnit timeUnit) String
+}

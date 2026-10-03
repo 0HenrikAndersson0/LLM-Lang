@@ -1,0 +1,41 @@
+@1 @ns Cheerio
+
+// TS type predicate: `maybeCheerio is Cheerio<T>` on return — the printer
+// reconstructs the predicate signature (fidelity §6.6)
+fn isCheerio<T>(Any? maybeCheerio) Bool{
+  (maybeCheerio as Cheerio<T> | null | undefined)?.cheerio === '[cheerio object]'
+}
+
+fn camelCase(String str) String{
+  str.replace(/[._-](\w|$)/g, (_, x) => x.toUpperCase())
+}
+
+fn cssCase(String str) String{
+  str.replace(/[A-Z]/g, '-$&').toLowerCase()
+}
+
+fn domEach<T extends AnyNode, Arr extends ArrayLike<T> = Cheerio<T>>(
+  Arr array, fn: (T elem, Int index) => void) Arr{
+  const len = array.length
+  for i in 0..len{fn(array[i], i)}
+  array
+}
+
+const CharacterCode = {
+  LowerA: 97
+  LowerZ: 122
+  UpperA: 65
+  UpperZ: 90
+  Exclamation: 33
+} as const
+
+fn isHtml(String str) Bool{
+  if typeof str !== 'string'{return false}
+  var tagStart = str.indexOf('<')
+  if tagStart === -1 || tagStart > str.length - 3{return false}
+  var tagChar = str.charCodeAt(tagStart + 1)
+  ((tagChar >= CharacterCode.LowerA && tagChar <= CharacterCode.LowerZ)
+    || (tagChar >= CharacterCode.UpperA && tagChar <= CharacterCode.UpperZ)
+    || tagChar === CharacterCode.Exclamation)
+    && str.includes('>', tagStart + 2)
+}

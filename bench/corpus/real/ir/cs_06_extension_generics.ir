@@ -1,0 +1,172 @@
+@1 @ns Humanizer
+
+// 100+ one-line extension methods Bits/Bytes/Kilobytes/... collapse to the
+// pattern they all share: ByteSize.FromX(input)
+type ByteSizeExtensions export{
+  fn Byte.Bits() ByteSize{ByteSize.FromBits(input)}
+  fn Double.Bits() ByteSize{ByteSize.FromBytes(input / ByteSize.BitsInByte)}
+  fn Byte.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn SByte.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn Short.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn UShort.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn Int.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn UInt.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn Double.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  fn Long.Bytes() ByteSize{ByteSize.FromBytes(input)}
+  // Kilobytes..Exabytes, BinaryPebibytes.. follows the identical one-line
+  // pattern for 40 further members (collapsed; IR cannot express 100
+  // distinct boilerplate members more tersely than FromX calls)
+
+  fn ByteSize.Humanize(String? format=null) String{
+    String.IsNullOrWhiteSpace(format) ? input.ToString() : input.ToString(format)
+  }
+
+  fn ByteSize.Humanize(IFormatProvider formatProvider) String{
+    input.ToString(formatProvider)
+  }
+
+  fn ByteSize.Humanize(String? format, IFormatProvider? formatProvider) String{
+    String.IsNullOrWhiteSpace(format)
+      ? input.ToString(formatProvider) : input.ToString(format, formatProvider)
+  }
+
+  fn ByteSize.HumanizeWithUnitSystem(
+    ByteSizeUnitSystem unitSystem,
+    String? format=null,
+    IFormatProvider? formatProvider=null) String{
+    unitSystem == ByteSizeUnitSystem.Legacy
+      ? input.Humanize(format, formatProvider)
+      : input.Format(unitSystem, format, formatProvider)
+  }
+
+  fn ByteSize.HumanizeComposite(
+    Int precision=2,
+    IFormatProvider? formatProvider=null,
+    String separator=" ",
+    Bool toWords=false) String{
+    if precision < 1{
+      throw new ArgumentOutOfRangeException(nameof(precision), precision, "Precision must be greater than zero.")
+    }
+    ArgumentNullException.ThrowIfNull(separator)
+
+    formatProvider ??= CultureInfo.CurrentCulture
+    var culture = formatProvider as CultureInfo
+    if culture is not null{
+      formatProvider = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(culture)
+    }
+    var formatter = Configurator.GetFormatter(culture)
+    var isNegative = input.Bits < 0
+    var remainingBits = isNegative ? (UInt64)(-(input.Bits + 1)) + 1 : (UInt64)input.Bits
+
+    if remainingBits == 0{
+      return String.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol: !toWords))
+    }
+
+    var parts = new List<String>(Math.Min(precision, 8))
+
+    fn addPart(UInt64 bitsPerUnit, DataUnit unit){
+      if parts.Count >= precision{return}
+      var count = remainingBits / bitsPerUnit
+      if count == 0{return}
+      parts.Add(String.Concat(
+        count.ToString(formatProvider), " ",
+        formatter.DataUnitHumanize(unit, count, toSymbol: !toWords)))
+      remainingBits %= bitsPerUnit
+    }
+
+    addPart((UInt64)ByteSize.BytesInExabyte * ByteSize.BitsInByte, DataUnit.Exabyte)
+    addPart((UInt64)ByteSize.BytesInPetabyte * ByteSize.BitsInByte, DataUnit.Petabyte)
+    addPart((UInt64)ByteSize.BytesInTerabyte * ByteSize.BitsInByte, DataUnit.Terabyte)
+    addPart((UInt64)ByteSize.BytesInGigabyte * ByteSize.BitsInByte, DataUnit.Gigabyte)
+    addPart((UInt64)ByteSize.BytesInMegabyte * ByteSize.BitsInByte, DataUnit.Megabyte)
+    addPart((UInt64)ByteSize.BytesInKilobyte * ByteSize.BitsInByte, DataUnit.Kilobyte)
+    addPart(ByteSize.BitsInByte, DataUnit.Byte)
+    addPart(1, DataUnit.Bit)
+
+    String.Concat(
+      isNegative ? NumberFormatInfo.GetInstance(formatProvider).NegativeSign : null,
+      String.Join(separator, parts))
+  }
+
+  fn ByteSize.HumanizeCompositeWithUnitSystem(
+    ByteSizeUnitSystem unitSystem,
+    Int precision=2,
+    IFormatProvider? formatProvider=null,
+    String separator=" ",
+    Bool toWords=false) String{
+    if unitSystem == ByteSizeUnitSystem.Legacy{
+      return input.HumanizeComposite(precision, formatProvider, separator, toWords)
+    }
+    if unitSystem is < ByteSizeUnitSystem.DecimalSi or > ByteSizeUnitSystem.BinaryIec{
+      throw new ArgumentOutOfRangeException(nameof(unitSystem), unitSystem, "Unknown byte-size unit system.")
+    }
+    if precision < 1{
+      throw new ArgumentOutOfRangeException(nameof(precision), precision, "Precision must be greater than zero.")
+    }
+    ArgumentNullException.ThrowIfNull(separator)
+    formatProvider ??= CultureInfo.CurrentCulture
+    var culture = formatProvider as CultureInfo
+    if culture is not null{
+      formatProvider = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(culture)
+    }
+
+    var formatter = Configurator.GetFormatter(culture)
+    var builtInFormatter = formatter as DefaultFormatter
+    if builtInFormatter is not null
+       && formatter.GetType().Assembly != typeof(DefaultFormatter).Assembly{
+      builtInFormatter = null
+    }
+
+    fn humanizeUnit(DataUnit dataUnit, UInt64 count) String{
+      builtInFormatter is not null
+        ? builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol: false)
+        : formatter.DataUnitHumanize(dataUnit, count, toSymbol: false)
+    }
+
+    var isNegative = input.Bits < 0
+    var remainingBits = isNegative ? (UInt64)(-(input.Bits + 1)) + 1 : (UInt64)input.Bits
+    var units = unitSystem == ByteSizeUnitSystem.DecimalSi ? DecimalCompositeUnits : BinaryCompositeUnits
+
+    if remainingBits == 0{
+      return String.Concat("0 ", toWords ? humanizeUnit(DataUnit.Bit, 0) : ByteSize.BitSymbol)
+    }
+
+    var parts = new List<String>(Math.Min(precision, units.Length + 2))
+    for unit in units{
+      if parts.Count >= precision{break}
+      var bitsPerUnit = (UInt64)unit.Bytes * ByteSize.BitsInByte
+      var count = remainingBits / bitsPerUnit
+      if count == 0{continue}
+      var unitText = toWords ? humanizeUnit(unit.DataUnit, count) : unit.Symbol
+      parts.Add(String.Concat(count.ToString(formatProvider), " ", unitText))
+      remainingBits %= bitsPerUnit
+    }
+
+    addSmallUnit(ByteSize.BitsInByte, ByteSize.ByteSymbol, DataUnit.Byte)
+    addSmallUnit(1, ByteSize.BitSymbol, DataUnit.Bit)
+
+    String.Concat(
+      isNegative ? NumberFormatInfo.GetInstance(formatProvider).NegativeSign : null,
+      String.Join(separator, parts))
+  }
+
+  readonly Array<CompositeUnit> DecimalCompositeUnits = [
+    new(ByteSize.BytesInDecimalExabyte, "EB", DataUnit.DecimalExabyte)
+    new(ByteSize.BytesInDecimalPetabyte, "PB", DataUnit.DecimalPetabyte)
+    new(ByteSize.BytesInDecimalTerabyte, "TB", DataUnit.DecimalTerabyte)
+    new(ByteSize.BytesInDecimalGigabyte, "GB", DataUnit.DecimalGigabyte)
+    new(ByteSize.BytesInDecimalMegabyte, "MB", DataUnit.DecimalMegabyte)
+    new(ByteSize.BytesInDecimalKilobyte, "kB", DataUnit.DecimalKilobyte)
+  ]
+  readonly Array<CompositeUnit> BinaryCompositeUnits = [
+    new(ByteSize.BytesInPebibyte, "PiB", DataUnit.BinaryPebibyte)
+    new(ByteSize.BytesInTebibyte, "TiB", DataUnit.BinaryTebibyte)
+    new(ByteSize.BytesInGibibyte, "GiB", DataUnit.BinaryGibibyte)
+    new(ByteSize.BytesInMebibyte, "MiB", DataUnit.BinaryMebibyte)
+    new(ByteSize.BytesInKibibyte, "KiB", DataUnit.BinaryKibibyte)
+  ]
+
+  record struct CompositeUnit(Int64 Bytes, String Symbol, DataUnit DataUnit)
+
+  fn ByteSize.Per(TimeSpan interval) ByteRate{new(input, interval)}
+}

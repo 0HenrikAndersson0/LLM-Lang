@@ -1,0 +1,7 @@
+@1 @ns Humanizer
+
+type DefaultDateTimeHumanizeStrategy : IDateTimeHumanizeStrategy{
+  fn Humanize(DateTime input, DateTime comparisonBase, CultureInfo? culture) String{
+    DateTimeHumanizeAlgorithms.DefaultHumanize(input, comparisonBase, culture)
+  }
+}

@@ -1,0 +1,5 @@
+fn SumAll(List<Int> xs) Int{
+  var acc=0
+  for x in xs{acc+=x}
+  acc
+}

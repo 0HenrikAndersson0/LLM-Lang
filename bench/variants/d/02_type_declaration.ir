@@ -1,0 +1,7 @@
+@1 @ns Acme.Orders
+
+type Order export{
+  List<LineItem> LineItems
+  Customer Customer
+  fn Total() Decimal{LineItems.map(li=>li.Amount).sum()}
+}

@@ -1,0 +1,46 @@
+@1 @ns Cheerio @use cheerioselect @use domserializer @use domhandler @use htmlparser2 @use parse5 @use parse5treeadapter
+
+// interfaces = `type I interface{` (reconcile row 10)
+type HTMLParser2Options interface : DomHandlerOptions, DomSerializerOptions, HTMLParser2ParserOptions{
+  Bool? xmlMode
+}
+
+type CheerioOptions interface : Parse5ParserOptions<Htmlparser2TreeAdapterMap>{
+  // Configure htmlparser2 for XML parsing; switches Cheerio to htmlparser2.
+  HTMLParser2Options | Bool? xml
+  // Deprecated: use `xml` instead.
+  Bool? xmlMode
+  String | URL? baseURI
+  SelectOptions.quirksMode? quirksMode
+  // Extension point for pseudo-classes: name -> value/function map
+  Record<String, String | Function>? pseudos
+}
+
+type InternalOptions interface : HTMLParser2Options, CheerioOptions{
+  Bool? _useHtmlParser2
+}
+
+var defaultOpts: InternalOptions = {
+  _useHtmlParser2: false
+}
+
+// Flatten the options for Cheerio: sets _useHtmlParser2 if `xml` is truthy.
+fn flattenOptions(
+  options?: CheerioOptions | null,
+  baseOptions?: InternalOptions,
+) InternalOptions{
+  if !options{return baseOptions ?? defaultOpts}
+  var opts: InternalOptions = {
+    _useHtmlParser2: !!options.xmlMode
+    ...baseOptions
+    ...options
+  }
+  if options.xml{
+    opts._useHtmlParser2 = true
+    opts.xmlMode = true
+    if options.xml !== true{Object.assign(opts, options.xml)}
+  }else if options.xmlMode{
+    opts._useHtmlParser2 = true
+  }
+  opts
+}

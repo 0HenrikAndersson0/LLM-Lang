@@ -1,0 +1,2 @@
+(fn FindEmail[u User->String?]
+  (if-let e u.Email e null))

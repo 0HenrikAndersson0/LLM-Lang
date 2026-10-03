@@ -1,0 +1,40 @@
+@1 @ns Cheerio @use domhandler @use domutils
+
+// higher-order factory: returns configured parse fn
+fn getParse(parser: (String content, InternalOptions options, Bool isDocument, ParentNode context) => Document) Parser{
+  fn parse(
+    content: String | Document | AnyNode | AnyNode[] | Buffer,
+    InternalOptions options,
+    Bool isDocument,
+    ParentNode context) Document{
+    if typeof Buffer !== 'undefined' && Buffer.isBuffer(content){
+      content = content.toString()
+    }
+    if typeof content === 'string'{return parser(content, options, isDocument, context)}
+    var doc = content as AnyNode | AnyNode[] | Document
+    if !Array.isArray(doc) && checkIsDocument(doc){return doc}
+
+    var root = new Document([])
+    update(doc, root)
+    root
+  }
+}
+
+fn update(AnyNode[] | AnyNode newChilds, ParentNode? parent) ParentNode?{
+  // Normalize
+  var arr = Array.isArray(newChilds) ? newChilds : [newChilds]
+  if parent{parent.children = arr}else{parent = null}
+
+  for i in 0..arr.length{
+    var node = arr[i]
+    if node.parent && node.parent.children !== arr{removeElement(node)}
+    if parent{
+      node.prev = arr[i - 1] || null
+      node.next = arr[i + 1] || null
+    }else{
+      node.prev = node.next = null
+    }
+    node.parent = parent
+  }
+  parent
+}

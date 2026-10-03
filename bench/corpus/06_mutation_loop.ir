@@ -1,0 +1,4 @@
+(def SumAll [xs (List Int) -> Int]
+  (let acc (mut 0)
+    (for x xs (set! acc (+ acc x)))
+    acc))

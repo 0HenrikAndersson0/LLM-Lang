@@ -1,0 +1,15 @@
+@1 @ns Cheerio @use domserializer @use domhandler @use htmlparser2 @use domhandler.reexport
+
+// re-export lines pass through as opaque (printer emits verbatim)
+export type Cheerio from 'cheerio'
+export type {AnyNode, CheerioAPI, Document, Element, ParentNode} from 'load'
+export type {CheerioOptions, HTMLParser2Options} from 'options'
+export {contains, merge} from 'static'
+export type * from 'types'
+
+// TS-style typed arrow binding: load = getLoad(getParse(parseDocument), render)
+export const load: (
+  content: String | AnyNode | Array<AnyNode> | Buffer,
+  options?: CheerioOptions | null,
+  isDocument?: Bool,
+) => CheerioAPI = getLoad(getParse(parseDocument), render)
