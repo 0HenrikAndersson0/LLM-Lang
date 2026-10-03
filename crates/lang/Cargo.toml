@@ -1,0 +1,9 @@
+[package]
+name = "ir-lang"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tokenizer-optimized IR language for LLM codegen: reader, expander, printers"
+
+[dependencies]
+proptest = { workspace = true }

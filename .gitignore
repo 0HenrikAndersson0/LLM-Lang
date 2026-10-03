@@ -1,4 +1,5 @@
 .DS_Store
 bench/.venv/
 __pycache__/
+target/
 *.pyc

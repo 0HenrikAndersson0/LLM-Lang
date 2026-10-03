@@ -1,0 +1,13 @@
+[package]
+name = "irc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for the IR language: parse, expand, print"
+
+[[bin]]
+name = "irc"
+path = "src/main.rs"
+
+[dependencies]
+ir-lang = { path = "../lang" }
