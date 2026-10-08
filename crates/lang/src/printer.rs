@@ -285,6 +285,151 @@ fn is_keyword(id: &str) -> bool {
     KEYWORDS.contains(&id)
 }
 
+/// Debug view (readability floor §5.2, PLAN 1.5): macro-expanded core forms
+/// rendered one per line for review. Not canonical IR text — every form is
+/// labeled with its core kind so the closure invariant is visible.
+pub fn print_debug(core: &[Core]) -> String {
+    let mut out = String::new();
+    for c in core {
+        out.push_str(&debug_core(c, 0));
+        out.push('\n');
+    }
+    out
+}
+
+fn debug_core(c: &Core, level: usize) -> String {
+    let ind = indent(level);
+    match c {
+        Core::Header { version, ns, uses } => {
+            let mut s = format!("{ind}(header");
+            if !version.is_empty() {
+                s.push_str(&format!(" @{version}"));
+            }
+            if let Some(n) = ns {
+                s.push_str(&format!(" @ns {n}"));
+            }
+            for u in uses {
+                s.push_str(&format!(" @use {u}"));
+            }
+            s.push(')');
+            s
+        }
+        Core::Fn(f) => debug_fn(f, level),
+        Core::Type(t) => debug_type(t, level),
+        Core::Var(v) => debug_var(v, level),
+        Core::Expr(atoms) if atoms.is_empty() => format!("{ind}(expr)"),
+        Core::Expr(atoms) => format!("{ind}(expr {})", debug_atoms(atoms)),
+    }
+}
+
+fn debug_fn(f: &FnDecl, level: usize) -> String {
+    let ind = indent(level);
+    let mut s = format!("{ind}(fn {}", f.name);
+    if let Some(r) = &f.receiver {
+        s.push_str(&format!(" (receiver {r})"));
+    }
+    if !f.modifiers.is_empty() {
+        s.push_str(&format!(" (mods {})", f.modifiers.join(" ")));
+    }
+    if f.params.is_empty() {
+        s.push_str(" (params)");
+    } else {
+        s.push_str(" (params");
+        for (n, t) in &f.params {
+            if t.is_empty() {
+                s.push_str(&format!(" ({n})"));
+            } else {
+                s.push_str(&format!(" ({n} {t})"));
+            }
+        }
+        s.push(')');
+    }
+    if let Some(b) = &f.base {
+        s.push_str(&format!(" (base {b})"));
+    }
+    if let Some(r) = &f.ret {
+        s.push_str(&format!(" (ret {r})"));
+    }
+    match &f.body {
+        Body::Inline(b) if b.is_empty() => s.push_str(" (body)"),
+        Body::Inline(b) => s.push_str(&format!(" (body (expr {}))", debug_atoms(b))),
+        Body::Bare(stmts) => debug_body(&mut s, stmts, false),
+        Body::Block(stmts) => debug_body(&mut s, stmts, true),
+        Body::Opaque(raw) => s.push_str(&format!(" (body (opaque {raw:?}))")),
+    }
+    s.push(')');
+    s
+}
+
+fn debug_body(s: &mut String, stmts: &[Core], block: bool) {
+    if block {
+        s.push_str(" (body (block");
+    } else {
+        s.push_str(" (body");
+    }
+    for st in stmts {
+        s.push(' ');
+        s.push_str(&debug_core(st, 0));
+    }
+    if block {
+        s.push(')');
+    }
+    s.push(')');
+}
+
+fn debug_type(t: &TypeDecl, level: usize) -> String {
+    let ind = indent(level);
+    let mut s = format!("{ind}(type {}", t.name);
+    s.push_str(&format!(" (kind {})", t.kind));
+    if !t.modifiers.is_empty() {
+        s.push_str(&format!(" (mods {})", t.modifiers.join(" ")));
+    }
+    if let Some(p) = &t.primary {
+        s.push_str(" (primary");
+        for (n, ty) in p {
+            if ty.is_empty() {
+                s.push_str(&format!(" ({n})"));
+            } else {
+                s.push_str(&format!(" ({n} {ty})"));
+            }
+        }
+        s.push(')');
+    }
+    if !t.bases.is_empty() {
+        s.push_str(&format!(" (bases {})", t.bases.join(" ")));
+    }
+    s.push_str(" (members");
+    for m in &t.members {
+        s.push(' ');
+        s.push_str(&debug_core(m, 0));
+    }
+    s.push_str("))");
+    s
+}
+
+fn debug_var(v: &VarDecl, level: usize) -> String {
+    let mut s = format!("{}(var {}", indent(level), v.name);
+    if !v.modifiers.is_empty() {
+        s.push_str(&format!(" (mods {})", v.modifiers.join(" ")));
+    }
+    if let Some(t) = &v.ty {
+        s.push_str(&format!(" (ty {t})"));
+    }
+    if let Some(val) = &v.value {
+        s.push_str(&format!(" (val {})", debug_atoms(val)));
+    }
+    s.push(')');
+    s
+}
+
+fn debug_atoms(atoms: &[Atom]) -> String {
+    atoms
+        .iter()
+        .map(|a| a.to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,6 +467,20 @@ mod tests {
         assert_eq!(render_atoms(&[Atom::Ident("o".into()), Atom::Sym("&&".into()), Atom::Ident("x".into())]), "o&&x");
         assert_eq!(render_atoms(&[Atom::Ident("a".into()), Atom::Ident("b".into())]), "a b");
         assert_eq!(render_atoms(&[Atom::Ident("a".into()), Atom::Sym("+".into()), Atom::Ident("b".into())]), "a+b");
+    }
+
+    #[test]
+    fn debug_view_labels_core_kinds() {
+        let core = expand("@1 @ns Acme.Users\n\nfn GetUser(Int id) User?{await Users.Find id}\n").unwrap();
+        let dbg = print_debug(&core);
+        assert_eq!(
+            dbg,
+            "(header @1 @ns Acme.Users)\n(fn GetUser (params (id Int)) (ret User?) (body (expr await Users . Find id)))\n"
+        );
+        // closure invariant visible in the view: every top form is labeled
+        for line in dbg.lines() {
+            assert!(line.starts_with("(header") || line.starts_with("(fn") || line.starts_with("(type") || line.starts_with("(var") || line.starts_with("(expr"));
+        }
     }
 }
 fn finish_opaque(s: &mut String, raw: &str, level: usize) -> String {

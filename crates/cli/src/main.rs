@@ -1,11 +1,16 @@
-
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // `--expand` before the subcommand = debug view on parse (task 1.5);
+    // `irc expand <files>` = expanded-core debug view directly (task 2.5 alias)
+    let debug = args.iter().position(|a| a == "--expand").map(|i| args.remove(i)).is_some();
     match args.first().map(|s| s.as_str()) {
         Some("lex") => lex_files(&args[1..]),
-        Some("parse") => parse_files(&args[1..]),
+        Some("parse") => parse_files(&args[1..], debug),
+        Some("expand") => expand_files(&args[1..]),
         _ => {
-            eprintln!("usage: irc lex <files...> | irc parse <files...>");
+            eprintln!(
+                "usage: irc [--expand] lex|parse|expand <files...>\n       --expand  show macro-expanded core forms instead of the canonical print"
+            );
             std::process::exit(2);
         }
     }
@@ -21,14 +26,31 @@ fn lex_files(paths: &[String]) {
     }
 }
 
-fn parse_files(paths: &[String]) {
+fn parse_files(paths: &[String], debug: bool) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
+        if debug {
+            match ir_lang::expander::expand(&src) {
+                Ok(core) => print!("{}", ir_lang::printer::print_debug(&core)),
+                Err(e) => println!("{path}: ERROR {e}"),
+            }
+            continue;
+        }
         match ir_lang::reader::read(&src) {
             Ok(forms) => {
                 let (lines, dirs) = count(&forms);
                 println!("{path}: {} top forms ({} lines, {} directives)", forms.len(), lines, dirs);
             }
+            Err(e) => println!("{path}: ERROR {e}"),
+        }
+    }
+}
+
+fn expand_files(paths: &[String]) {
+    for path in paths {
+        let src = std::fs::read_to_string(path).expect("read");
+        match ir_lang::expander::expand(&src) {
+            Ok(core) => print!("{}", ir_lang::printer::print_debug(&core)),
             Err(e) => println!("{path}: ERROR {e}"),
         }
     }

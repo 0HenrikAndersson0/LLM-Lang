@@ -65,7 +65,7 @@ on canonical form; reader survives fuzzing.
 | 1.2 | Lexer from frozen grammar, symbol table driven by Phase 0 verdicts | unit-tested lexer | ☑ — 11 unit tests; regex literals, interpolated strings, number suffixes; all 26 corpus files lex |
 | 1.3 | Reader: text → form tree (EBNF, design doc §1) | unit tests over golden corpus | ☑ — line/block reader with R1-R8 rules (param continuation, infix continuation, inline literals, close-lines w/ trailing atoms); all 26 files parse + unit tests |
 | 1.4 | Expander: macro table → core forms; enforce core-form closure invariant | expansion snapshots | ☑ — Core{Header,Fn,Type,Var,Expr} closure; golden tests; expr-statement fallback |
-| 1.5 | Canonical printer: IR → text (§6 layout) + `--expand` debug mode | printer + snapshots | ◐ — printer done, print→expand→print **identity on all 26 files**; `--expand` flag pending |
+| 1.5 | Canonical printer: IR → text (§6 layout) + `--expand` debug mode | printer + snapshots | ☑ — printer done, print→expand→print **identity on all 26 files**; `--expand` flag shipped (`irc --expand parse` / `irc expand`, `printer::print_debug` labeled core-form view) |
 | 1.6 | Property-based fuzzing (proptest) on reader: never panics, always returns error | fuzz suite | ☑ — grammar-driven generator, 8k+ cases no-panic |
 | 1.7 | Golden-corpus snapshot tests wired into `cargo test` | CI test target | ☑ — tests/golden_snapshots.rs: parse+expand+print stable over every fixture |
 
