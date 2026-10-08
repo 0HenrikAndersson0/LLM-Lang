@@ -7,7 +7,7 @@
 //! 4. Single-expression bodies fuse onto the header line.
 
 use crate::ast::Atom;
-use crate::expander::{Body, Core, FnDecl, TypeDecl, VarDecl};
+use crate::expander::{Arm, Body, Core, FnDecl, TypeDecl, VarDecl};
 
 pub fn print(core: &[Core]) -> String {
     let mut out = String::new();
@@ -66,7 +66,239 @@ fn print_core(c: &Core, level: usize) -> String {
         Core::Type(t) => print_type(t, level),
         Core::Var(v) => print_var(v, level),
         Core::Expr(atoms) => format!("{}{}", indent(level), render_atoms(atoms)),
+        Core::Stmt { head, body, arms } => print_stmt(head, body, arms, level),
+        Core::Clause(_) => String::new(), // associated into the owner pre-print
     }
+}
+
+/// Structured statement → canonical IR text. Shapes (design §2.3):
+/// - primary + arms: braced blocks; else-arms re-fuse onto the close line:
+///   `}else{…}`, `}else if c2{…}`.
+/// - inline single-expr body: fused `{e}` on the header line.
+/// - `else`/`catch`/`finally` fragments (reader re-parents them as sibling
+///   lines after the close) print keyword-first with their own body.
+fn print_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> String {
+    let ind = indent(level);
+    // fragment lines: `catch NotFound return null`, `finally Log("x")`, `else{…}`
+    if let Some(Atom::Ident(kw)) = head.first() {
+        if matches!(kw.as_str(), "else" | "catch" | "finally")
+            && (arms.len() == 1 || (arms.is_empty() && !matches!(body, Body::Inline(b) if b.is_empty())))
+        {
+            // normalized clause: body lives in `body`, pattern empty-or-arms[0]
+            let synthesized = Arm { pattern: Vec::new(), body: body.clone() };
+            let a: &Arm = if arms.len() == 1 { &arms[0] } else { &synthesized };
+            match &a.body {
+                Body::Inline(b) if !b.is_empty() => {
+                    // fused single-expr, braceless ONLY for patternless
+                    // fragments (`catch NotFound return null`, `finally e`,
+                    // `else e`). `else if c{e}` prints braced — a braceless
+                    // else-if + stmt re-parses as pattern-only and loses the
+                    // body (ambiguity: no stmt-keyword anchor).
+                    let mut s = format!("{ind}{kw}");
+                    if !a.pattern.is_empty() {
+                        s.push(' ');
+                        s.push_str(&render_atoms(&a.pattern));
+                    }
+                    if a.pattern.is_empty() {
+                        s.push(' ');
+                        s.push_str(&render_atoms(b));
+                        return s;
+                    }
+                    s.push_str(&render_body_inline(b));
+                    return s;
+                }
+                Body::Inline(_) => {
+                    // `else` bare (match default arm); braces only if a
+                    // re-parse needs them — bare fragment is reader-stable
+                    return format!("{ind}{kw}");
+                }
+                b => {
+                    let mut s = if a.pattern.is_empty() {
+                        format!("{ind}{kw}{{")
+                    } else {
+                        format!("{ind}{kw} {}{{", render_atoms(&a.pattern))
+                    };
+                    s.push('\n');
+                    s.push_str(&render_body_block(b, level));
+                    s.push_str(&ind);
+                    s.push('}');
+                    return s;
+                }
+            }
+        }
+    }
+    // primary stmt: `head` atoms + body + arms (else glue re-fused)
+    let mut s = format!("{ind}{}", render_atoms(head));
+    // match/switch-expr: arms print as pattern-body lines in a braced block
+    let head_is_switch = head.last().map(|a| matches!(a, Atom::Ident(k) if k == "switch")).unwrap_or(false);
+    if matches!(head.first(), Some(Atom::Ident(k)) if k == "match") || head_is_switch {
+        s.push('{');
+        for a in arms {
+            let pat = render_atoms(&a.pattern);
+            s.push('\n');
+            s.push_str(&indent(level + 1));
+            match &a.body {
+                Body::Inline(b) if !b.is_empty() => {
+                    let b_txt = render_atoms(b);
+                    if pat.is_empty() || pat == "else" {
+                        s.push_str(&format!("else {b_txt}"));
+                    } else {
+                        // `{pat} {call(…)}` — the SPACE keeps arm pattern and
+                        // body split across re-parses (fusing was unstable)
+                        s.push_str(&format!("{pat} {b_txt}"));
+                    }
+                }
+                Body::Inline(_) => {
+                    s.push_str(&if pat.is_empty() { String::new() } else { pat });
+                }
+                b => {
+                    if !pat.is_empty() {
+                        s.push_str(&format!("{pat}"));
+                    } else {
+                        s.push_str("else");
+                    }
+                    s.push_str("{\n");
+                    s.push_str(&render_body_block(b, level + 1));
+                    s.push_str(&indent(level + 1));
+                    s.push('}');
+                }
+            }
+        }
+        s.push('\n');
+        s.push_str(&ind);
+        s.push('}');
+        return s;
+    }
+    // try: arms are catch/finally fragments (pattern[0] = clause keyword)
+    if matches!(head.first(), Some(Atom::Ident(k)) if k == "try") {
+        let mut frags: Vec<String> = Vec::new();
+        match body {
+            // canon: single stmt fuses ONTO the try line (`try await Repo.Get id`)
+            Body::Inline(b) if !b.is_empty() => {
+                s.push(' ');
+                s.push_str(&render_atoms(b));
+            }
+            Body::Inline(_) => {}
+            b => {
+                s.push_str("{\n");
+                s.push_str(&render_body_block(b, level));
+                s.push_str(&ind);
+                s.push('}');
+            }
+        }
+        for a in arms {
+            let kw = match a.pattern.first() {
+                Some(Atom::Ident(k)) => k.clone(),
+                _ => "catch".to_string(),
+            };
+            let pat = &a.pattern[1usize.min(a.pattern.len())..];
+            let pat_txt = render_atoms(pat);
+            let mut line = if pat_txt.is_empty() {
+                format!("{ind}{kw}")
+            } else {
+                format!("{ind}{kw} {pat_txt}")
+            };
+            match &a.body {
+                Body::Inline(b) if !b.is_empty() => {
+                    line.push(' ');
+                    line.push_str(&render_atoms(b));
+                    frags.push(line);
+                }
+                Body::Inline(_) => frags.push(line),
+                b => {
+                    line.push_str("{\n");
+                    frags.push(line);
+                    frags.push(render_body_block(b, level));
+                    frags.push(format!("{}}}", ind));
+                }
+            }
+        }
+        s.push('\n');
+        s.push_str(&frags.join("\n"));
+        return s;
+    }
+    match (body, arms.is_empty()) {
+        (Body::Inline(b), true) if !b.is_empty() => s.push_str(&render_body_inline(b)),
+        (Body::Inline(_), true) => {}
+        (b, _) => {
+            s.push('{');
+            match b {
+                Body::Inline(x) if !x.is_empty() => {
+                    s.push('\n');
+                    s.push_str(&print_core(&Core::Expr(x.clone()), level + 1));
+                    s.push('\n');
+                    s.push_str(&ind);
+                }
+                Body::Bare(v) | Body::Block(v) => {
+                    if !v.is_empty() {
+                        s.push('\n');
+                        for st in v {
+                            s.push_str(&print_core(st, level + 1));
+                            s.push('\n');
+                        }
+                        s.push_str(&ind);
+                    }
+                }
+                _ => {}
+            }
+            s.push('}');
+            for (ai, a) in arms.iter().enumerate() {
+                // first link re-fuses on the just-closed brace; further links
+                // open with their own close-line (chain shape: close+else per
+                // line, reader-stable)
+                if ai > 0 {
+                    s.push('\n');
+                    s.push_str(&ind);
+                    s.push('}');
+                }
+                s.push_str(&print_arm_glue_rest(a, level));
+            }
+        }
+    }
+    s
+}
+
+/// arm text after the auto-close `}`: `else{…}` / `else if c{…}` / fused
+fn print_arm_glue_rest(a: &Arm, level: usize) -> String {
+    let ind = indent(level);
+    let mut s = String::new();
+    if !a.pattern.is_empty() {
+        s.push_str(&render_atoms(&a.pattern));
+    }
+    match &a.body {
+        Body::Inline(b) if !b.is_empty() => {
+            s.push_str(&render_body_inline(b));
+        }
+        Body::Inline(_) => {
+            s.push('{');
+            s.push('}');
+        }
+        b => {
+            s.push_str("{\n");
+            s.push_str(&render_body_block(b, level));
+            s.push('\n');
+            s.push_str(&ind);
+            s.push('}');
+        }
+    }
+    s
+}
+
+fn render_body_inline(b: &[Atom]) -> String {
+    format!("{{{}}}", render_atoms(b))
+}
+
+fn render_body_block(b: &Body, level: usize) -> String {
+    let stmts = match b {
+        Body::Bare(v) | Body::Block(v) => v,
+        _ => return String::new(),
+    };
+    let mut s = String::new();
+    for st in stmts {
+        s.push_str(&print_core(st, level + 1));
+        s.push('\n');
+    }
+    s
 }
 
 fn print_fn(f: &FnDecl, level: usize) -> String {
@@ -96,8 +328,9 @@ fn print_fn(f: &FnDecl, level: usize) -> String {
         .map(|(n, t)| {
             if t.is_empty() {
                 n.clone()
-            } else if t.contains('(') || t.contains('|') {
-                // ambiguous type exprs print colon form (stability)
+            } else if t.contains('(') || t.contains('|') || t.contains(' ') {
+                // ambiguous type exprs / modifier-prefixed types (`out String`)
+                // print colon form (stability)
                 format!("{n}: {t}")
             } else {
                 format!("{n} {t}")
@@ -319,7 +552,32 @@ fn debug_core(c: &Core, level: usize) -> String {
         Core::Var(v) => debug_var(v, level),
         Core::Expr(atoms) if atoms.is_empty() => format!("{ind}(expr)"),
         Core::Expr(atoms) => format!("{ind}(expr {})", debug_atoms(atoms)),
+        Core::Stmt { head, body, arms } => {
+            let mut s = format!("{ind}(stmt {} (body {})", debug_atoms(head), debug_body_short(body));
+            for a in arms {
+                s.push_str(&format!(" (arm {} {})", debug_atoms(&a.pattern), debug_body_short(&a.body)));
+            }
+            s.push(')');
+            s
+        }
+        Core::Clause(a) => format!("{ind}(clause {})", debug_atoms(a)),
     }
+}
+
+fn debug_body_short(b: &Body) -> String {
+    match b {
+        Body::Inline(a) if a.is_empty() => "-".to_string(),
+        Body::Inline(a) => format!("(expr {})", debug_atoms(a)),
+        Body::Bare(stmts) | Body::Block(stmts) => format!(
+            "(block {})",
+            stmts.iter().map(debug_core_short).collect::<Vec<_>>().join(" ")
+        ),
+        Body::Opaque(raw) => format!("(opaque {raw:?})"),
+    }
+}
+
+fn debug_core_short(c: &Core) -> String {
+    debug_core(c, 0)
 }
 
 fn debug_fn(f: &FnDecl, level: usize) -> String {

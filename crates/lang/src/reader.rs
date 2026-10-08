@@ -130,16 +130,46 @@ impl Parser {
             return Ok(Form::Directive(a));
         }
 
+        let mut opaque_cont: Vec<Vec<TokPos>> = Vec::new();
+        // `opaque` decl lines (`opaque type X = 'a'|'b'…`): following
+        // `|`-leader lines extend the same decl (TS unions span lines) —
+        // BEFORE the opaque blob early-exit (which would skip them)
+        if toks.first().map(|t| matches!(&t.tok, Tok::Ident(id) if id == "opaque")).unwrap_or(false) {
+            loop {
+                if self.pos + 1 >= self.lines.len() {
+                    break;
+                }
+                let nxt = self.lines[self.pos + 1].toks.clone();
+                if nxt.first().map(|t| t.sym()).is_some_and(|sy| sy == Some("|")) {
+                    self.pos += 1;
+                    opaque_cont.push(nxt);
+                } else {
+                    break;
+                }
+            }
+        }
+
         // `opaque` keyword anywhere in the header: verbatim blob scan covers
-        // braces AND brackets (array literals); goes before R1 gathering
-        if toks.iter().any(|t| matches!(&t.tok, Tok::Ident(id) if id == "opaque")) {
+        // braces AND brackets (array literals); goes before R1 gathering.
+        // Decl lines (`opaque type X = 'a'|…`) carry no blob opener — they
+        // fall through to the normal construct path (with absorbed `|`
+        // continuations) instead of the blob scanner.
+        let has_blob_opener = toks.iter().any(|t| matches!(&t.tok, Tok::Sym(s) if s == "{" || s == "["));
+        if toks.iter().any(|t| matches!(&t.tok, Tok::Ident(id) if id == "opaque")) && has_blob_opener {
             return self.parse_opaque_blob();
         }
 
         // ---- R1: paren/bracket continuation ----
         // gather header tokens, possibly across multiple physical lines, until
         // every open `(` and `[` is balanced (tracked over the gathered run)
-        let mut header_toks: Vec<TokPos> = toks;
+        let mut header_toks: Vec<TokPos> = toks.clone();
+        for c in &opaque_cont {
+            // continuation lines precede the header line in canon? no —
+            // they FOLLOW: header_toks = line + absorbed (absorbed collected
+            // in order); header itself is `toks` (already first); append
+            header_toks.extend(c.iter().cloned());
+        }
+        let _ = &toks;
         let mut line_toks_consumed = 1usize;
         if unbalanced_parens(&header_toks) || header_ends_opener(&header_toks) {
             loop {
@@ -162,6 +192,33 @@ impl Parser {
         }
         let _ = line_toks_consumed;
         self.pos += line_toks_consumed;
+
+        // ---- R1b: infix-start continuation absorption ----
+        // A line starting with an infix operator is a continuation of THIS
+        // construct's header — but only when the header so far ends
+        // mid-expression (operator/`,`/`(`/`[` tail). After a balanced
+        // expression, `+1 …`/`-1 …` are match ARMS, not continuations.
+        loop {
+            if self.pos >= self.lines.len() {
+                break;
+            }
+            let next = &self.lines[self.pos];
+            let leads_dot = next
+                .toks
+                .first()
+                .map(|t| t.sym())
+                .is_some_and(|s| s == Some("."));
+            let header_open = header_ends_opener(&header_toks) || unbalanced_parens(&header_toks);
+            let logic = starts_with_logic(&next.toks);
+            if leads_dot
+                || !(logic || (header_open && starts_with_infix(&next.toks)))
+                || next.toks.is_empty()
+            {
+                break;
+            }
+            header_toks.extend(next.toks.iter().cloned());
+            self.pos += 1;
+        }
 
         // ---- R3: brace handling on the gathered header run ----
         // Algorithm (shape-only):
@@ -341,7 +398,8 @@ impl Parser {
                 closed = true;
                 // trailing atoms after the close (`else{`, `as const`,
                 // `.ToFrozenDictionary()`) may REOPEN blocks:
-                // - `else{...}` → new sibling block at hdr indent
+                // - `else{...}` → else fragment w/ its own block body
+                //   (the `{` at close-line end opens it)
                 // - `as const` / `}.x()` → plain statement: record nothing
                 if !close_only {
                     let close_toks: Vec<TokPos> = {
@@ -350,11 +408,71 @@ impl Parser {
                     };
                     // everything after the matching close `}` — approximate:
                     // find last top-level `}` in the line
-                    if let Some(k) = close_toks.iter().rposition(|t| t.sym() == Some("}")) {
+                                        // the body-close is the FIRST top-level `}` (pos 0 for
+                    // close-lines); everything after = trailing atoms
+                    if let Some(k) = close_toks.iter().position(|t| t.sym() == Some("}")) {
                         let trailing: Vec<TokPos> = close_toks[k + 1..].to_vec();
                         if let Some(t0) = trailing.first() {
                             if t0.tok == Tok::Ident("else".into()) {
-                                kids.push(self.parse_construct(hdr_indent)?);
+                                //                                 // else-fragment(s) on one close line:
+                                // (a) `}else{` — `{` opens a multi-line body
+                                // (b) `}else if c{stmt}` — brace-GLUED inline
+                                //     body on this line, possibly several
+                                //     links (`}else…{…}else…{…}`)
+                                // (c) `}else stmt` — braceless fused stmt
+                                // Split into LINKS at top-level `else` atoms
+                                // (each link = hdr atoms + optional `{…}`
+                                // inline tail); each link = one Form::Line.
+                                let frags: Vec<Atom> = trailing.iter().cloned().map(to_atom).collect();
+                                let mut links: Vec<Vec<Atom>> = Vec::new();
+                                let mut cur: Vec<Atom> = Vec::new();
+                                let mut depth = 0i32;
+                                for a in frags {
+                                    if let Atom::Sym(sx) = &a {
+                                        match sx.as_str() {
+                                            "{" | "(" | "[" => {
+                                                depth += 1;
+                                                cur.push(a);
+                                            }
+                                            "}" | ")" | "]" => {
+                                                depth -= 1;
+                                                cur.push(a);
+                                            }
+                                            "else" if depth == 0 => {
+                                                links.push(std::mem::take(&mut cur));
+                                                cur.push(a);
+                                            }
+                                            _ => cur.push(a),
+                                        }
+                                    } else {
+                                        cur.push(a);
+                                    }
+                                }
+                                if !cur.is_empty() {
+                                    links.push(std::mem::take(&mut cur));
+                                }
+                                // note: a link's `else` stays as its FIRST atom
+                                let mut ekids: Vec<Form> = Vec::new();
+                                let nlinks = links.len();
+                                for (lk, link) in links.into_iter().enumerate() {
+                                    // classify link body: trailing `{` = block
+                                    // opener (multi-line body follows); else =
+                                    // fused stmt in the atoms (incl `{…}` pairs)
+                                    match link.last() {
+                                        Some(Atom::Sym(sx)) if sx == "{" && lk + 1 == nlinks => {
+                                            let hdr2 = link[..link.len() - 1].to_vec();
+                                            let kids2 = self.parse_block_body(hdr_indent, open_line)?.0;
+                                            ekids.push(Form::Line { atoms: hdr2, inline_body: None, children: kids2 });
+                                        }
+                                        _ => {
+                                            ekids.push(Form::Line { atoms: link, inline_body: None, children: Vec::new() });
+                                        }
+                                    }
+                                }
+                                                                for e in ekids {
+                                    kids.push(e);
+                                }
+
                             } else {
                                 kids.push(Form::Line {
                                     atoms: trailing.iter().cloned().map(to_atom).collect(),
@@ -615,7 +733,15 @@ fn atoms_or_header_has_opaque(toks: &[TokPos]) -> bool {
 
 fn starts_with_infix(toks: &[TokPos]) -> bool {
     toks.first().map(|t| t.sym()).is_some_and(|s|
-        matches!(s, Some("||") | Some("&&") | Some("?") | Some(":") | Some("=") | Some(".") | Some("+") | Some("-") | Some("*") | Some("/")))
+        matches!(s, Some("||") | Some("&&") | Some("?") | Some(":") | Some("=") | Some("+") | Some("-") | Some("*") | Some("/") | Some(",")))
+}
+
+/// logical-continuation ops: these ALWAYS extend the header (conditions/
+/// expressions span lines after a balanced run); arithmetic leaders on a
+/// balanced header are match arms instead (cs_05 `+1 …`).
+fn starts_with_logic(toks: &[TokPos]) -> bool {
+    toks.first().map(|t| t.sym()).is_some_and(|s|
+        matches!(s, Some("||") | Some("&&") | Some("?") | Some(":") | Some("=")))
 }
 
 fn close_like_line(toks: &[TokPos]) -> bool {
@@ -681,6 +807,12 @@ impl Parser {
                         let raw = render_atom_text(&toks[oi..=ci]);
                         atoms.push(Atom::Str(format!("opaque:{raw}")));
                         atoms.extend(toks[ci + 1..].iter().cloned().map(to_atom));
+                        // `|`-leader continuation lines (TS union decls) glue
+                        // onto the same opaque decl
+                        while self.pos < self.lines.len() && self.lines[self.pos].toks.first().map(|t| t.sym()).is_some_and(|sy| sy == Some("|")) {
+                            atoms.extend(self.lines[self.pos].toks.iter().cloned().map(to_atom));
+                            self.pos += 1;
+                        }
                     }
                     None => {
                         // spans lines: close = first bracket-line at/below hdr

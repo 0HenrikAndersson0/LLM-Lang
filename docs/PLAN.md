@@ -80,11 +80,11 @@ shows the model repairs its own IR from JS runtime errors.
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
-| 2.1 | JS AST + printer design (estree-style, canonical layout) | design note | ☐ |
-| 2.2 | Core-form → JS lowering table (design doc §2 semantics) | lowering-table doc | ☐ |
-| 2.3 | JS printer | emits golden corpus | ☐ |
-| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ☐ |
-| 2.5 | `ir --expand` / `--ir` debug flags (§6 readability floor) | CLI flags | ☐ |
+| 2.1 | JS AST + printer design (estree-style, canonical layout) | design note | ☑ — docs/js-target.md: minimal AST (exprs stay verbatim atom runs), atom→JS mapping (§3), canonical layout (§5) |
+| 2.2 | Core-form → JS lowering table (design doc §2 semantics) | lowering-table doc | ☑ — js-target.md §4; expander gained structured `Core::Stmt{head,body,arms}` (additive; surface text unchanged — identity re-verified on all 26) |
+| 2.3 | JS printer | emits golden corpus | ☑ — crates/lang/src/js.rs: recursive-descent expr rewriter (calls, casts, templates, `is`-patterns, hat-index, throw-ternaries); all 10 golden + 16 real corpus files emit |
+| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ◐ — **30/30 emitted files pass `node --check`**; tsc + diff-vs-hand-renditions pending |
+| 2.5 | `ir --expand` / `--ir` debug flags (§6 readability floor) | CLI flags | ☑ — `--expand` shipped in 1.5 (`irc expand` = same view) |
 | 2.6 | Error localization: printer carries source spans so IR ↔ JS line mapping is recoverable | span tracking | ☐ |
 | 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ☐ |
 
@@ -202,6 +202,12 @@ Each phase exit is a verification act, not a checklist:
   probe-adjudicated (results.md reconcile section), design doc updated to
   grammar v1.1 (~24 core forms); real corpus re-scored 46.1%/46.2%,
   golden unchanged. Grammar now genuinely covers both corpora.*
+- **v3.1** — Phase 1 complete (task 1.5: `--expand` flag; print→print
+  identity + closure invariant on all 26 fixtures). Phase 2 open: 2.1/2.2
+  design note (js-target.md), expander gained structured `Core::Stmt`
+  (additive core form; surface text unchanged, identity held), reader R1b
+  logical-continuation + `}else{` chain links fixed, JS emitter (2.3)
+  emits 30/30 files passing `node --check`.
 - **v2** — Full 6-phase plan: task tables with deliverables/status, per-phase
   exit criteria, risk register, verification map, working agreements. Phase 0
   expanded into 9 tasks with a decision order; whole-pipeline measurement

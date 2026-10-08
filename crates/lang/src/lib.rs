@@ -4,3 +4,4 @@ pub mod reader;
 pub mod expander;
 pub mod printer;
 pub mod fuzz;
+pub mod js;

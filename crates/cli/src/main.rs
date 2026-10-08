@@ -7,9 +7,10 @@ fn main() {
         Some("lex") => lex_files(&args[1..]),
         Some("parse") => parse_files(&args[1..], debug),
         Some("expand") => expand_files(&args[1..]),
+        Some("to-js") => to_js_files(&args[1..]),
         _ => {
             eprintln!(
-                "usage: irc [--expand] lex|parse|expand <files...>\n       --expand  show macro-expanded core forms instead of the canonical print"
+                "usage: irc [--expand] lex|parse|expand|to-js <files...>\n       --expand  show macro-expanded core forms instead of the canonical print"
             );
             std::process::exit(2);
         }
@@ -52,6 +53,19 @@ fn expand_files(paths: &[String]) {
         match ir_lang::expander::expand(&src) {
             Ok(core) => print!("{}", ir_lang::printer::print_debug(&core)),
             Err(e) => println!("{path}: ERROR {e}"),
+        }
+    }
+}
+
+fn to_js_files(paths: &[String]) {
+    for path in paths {
+        let src = std::fs::read_to_string(path).expect("read");
+        match ir_lang::expander::expand(&src) {
+            Ok(core) => match ir_lang::js::emit(&core) {
+                Ok(js) => print!("{js}"),
+                Err(e) => println!("// {path}: LOWER-ERR {e}"),
+            },
+            Err(e) => println!("// {path}: ERROR {e}"),
         }
     }
 }
