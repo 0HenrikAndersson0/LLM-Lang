@@ -208,6 +208,12 @@ Each phase exit is a verification act, not a checklist:
   (additive core form; surface text unchanged, identity held), reader R1b
   logical-continuation + `}else{` chain links fixed, JS emitter (2.3)
   emits 30/30 files passing `node --check`.
+- **Next session (Phase 2 close):** 2.6 span tracking FIRST, then 2.7 LLM
+  loop test — the product's central unverified claim is *can the model
+  write + repair IR in a loop*, not the one-shot token number. Agreed
+  2026-10-08: unfamiliar-syntax risk means loop-clumsiness could consume
+  the savings; 2.7 is the real go/no-go. Only after 2.7 passes: tsc gate
+  + diff-vs-hand-renditions (2.4 exit), then Phase 3.
 - **v2** — Full 6-phase plan: task tables with deliverables/status, per-phase
   exit criteria, risk register, verification map, working agreements. Phase 0
   expanded into 9 tasks with a decision order; whole-pipeline measurement
