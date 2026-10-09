@@ -525,11 +525,11 @@ fn emit_var(v: &VarDecl, level: usize, _member: bool) -> Result<String, JsLowerE
     }
     let kw = if v.modifiers.iter().any(|m| m == "mut") { "let" } else { "const" };
     // `: ty` never materializes (js-target §1: locals untyped, no TS surface)
+    // obj-lit initializers beat the decl-only arms (the R3 block-shape leaves
+    // value None with objlit Some — `var x: T = {` + member lines + `}`)
     match (&v.value, &v.objlit) {
         (Some(a), _) if !a.is_empty() => Ok(format!("{}{} {} = {};", ind, kw, v.name, expr(a))),
-        (None, _) => Ok(format!("{}{} {};", ind, kw, v.name)),
-        (Some(_), None) => Ok(format!("{}{} {};", ind, kw, v.name)),
-        (_, Some(items)) => {
+        (_, Some(items)) if !items.is_empty() => {
             let mut s = format!("{}{} {} = {{", ind, kw, v.name);
             let mut first = true;
             for it in items {
@@ -553,6 +553,8 @@ fn emit_var(v: &VarDecl, level: usize, _member: bool) -> Result<String, JsLowerE
             s.push_str("};");
             Ok(s)
         }
+        // no value captured (uninitialized decl; JS-legal)
+        _ => Ok(format!("{}{} {};", ind, kw, v.name)),
     }
 }
 

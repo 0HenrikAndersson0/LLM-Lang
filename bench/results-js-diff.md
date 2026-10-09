@@ -55,6 +55,37 @@ rejection and no grammar failure in the set; the only true emitter gap
 (re-exports) is scheduled for Phase 4 tooling where it can land additively.
 LLM loop test (2.7): GO. **Phase 2 exit: met.**
 
+## J1 behavior gate (v4 Phase 3, added post-plan-rewrite)
+
+`bench/scripts/behavior/runner.py` (harness), gate report
+`bench/scripts/behavior/report.md`. Method: emit IR→JS; transform the
+original `.ts` with tsc (type-only imports erase — originals run standalone);
+rig calls both sides with identical inputs; three-way compare
+emitted==orig==hand-derived-expected.
+
+| subject | cases | result |
+|---|---|---|
+| js_01_util | 22 + 1 side-effect identity (domEach) | **BEHAVIOR-MATCH** |
+| js_08_options | 8 (flattenOptions incl. spread/xml/xmlMode) | **BEHAVIOR-MATCH** |
+
+Found by J1 (and fixed additively with the gate): **obj-lit initializers
+died on every path** — single-line `var x = {…}` lost its value entirely
+(reader R3 hijacked the `{…}` pair into `inline_body`; the var branch never
+read it — expander now re-wraps the pair as the initializer) and block
+objlits (`var x: T = {` + member lines + `}`) hit a decl-only arm that
+pre-empted the objlit arm (dead `(_, Some)` arm reordered). Corpus-wide,
+`js_08`'s `defaultOpts`/`opts` now initialize; regression test
+`objlit_initializers_survive` in tests/spans.rs.
+
+The rig's NOTE row also caught *expectation drift* in my own hand-derived
+cases (`... options` spreads kept `xml`/`xmlMode` keys — the derivation
+missed them) while emit==orig held — the third check separating harness
+from emitter worked as intended.
+
+Coverage limits (explicit): js_03/js_04/js_05/js_06 need either named
+imports (J4) or a DOM-ish `this` context — excluded from v1; js_02 is
+type-only (nothing runs). Extending coverage is part of J2/J4.
+
 ## Next
 
 - Phase 3 design note (3.1: C# AST + printer; `dotnet 10` available locally),

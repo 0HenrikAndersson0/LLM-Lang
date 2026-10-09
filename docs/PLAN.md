@@ -94,39 +94,50 @@ shows the model repairs its own IR from JS runtime errors.
 
 ---
 
-## Phase 3 — C# target
+## Phase 3 — JS depth (v4: "make it great"), C# deferred
 
-**Goal:** IR → compilable C# for golden + real C# corpus.
+**Goal (v4 reroute, 2026-10-09):** everything that makes the JS/agent-file
+story *excellent* before adding a second target language. Rationale: the
+loop test was the go/no-go and passed; a C# target adds breadth, not risk
+closure — while the JS pipeline has unverified claims (behavior!), open gap
+rows, and an unmeasured whole-pipeline number.
 
-**Exit:** all outputs compile (`dotnet build` zero errors); LLM loop test
-replicates 2.7's fix-from-stack-trace capability.
+**Exit:** emitted JS *behaves* identically to the originals on runnable
+cases; tsc clean on the TS corpus outside documented design limits; whole-
+pipeline token number measured.
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
-| 3.1 | C# AST + printer design (Roslyn-inspired, namespaces/usings/attributes) | design note | ☐ |
-| 3.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☐ |
-| 3.3 | C# printer | emits golden corpus | ☐ |
-| 3.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ☐ |
-| 3.5 | LLM loop test for C# | report | ☐ |
+| J1 | Behavior harness: emitted js_* vs original sources, same inputs → same outputs (leaf modules; sibling deps stubbed/executed) | behavior report | ☑ — `bench/scripts/behavior/runner.py`: emit vs tsc-transformed originals, 3-way deep compare; js_01 (22 cases + side-effect identity) and js_08 (8 cases) **BEHAVIOR-MATCH**; NOTE rows caught harness-side expectation drift while emit==orig held; js_03/04/05/06 excluded (need J4 named imports / DOM context), js_02 type-only. Obj-lit initializers died on every path — fixed additively (R3 inline-pair hijack re-wraps value; objlit arm ordering) + regression test |
+| J2 | Inline atom runs: statement-ify lambda bodies / if-expressions (emitter + expander classification; surface text unchanged ⇒ bench-neutral) | tsc failures js_04/js_05 closed | ☐ |
+| J3 | Gap rows: `export {…} from`/`export type *` re-exports, generics-in-expr erasure, value-match arms (bool/ident-literal) | tsc 7/7 on TS corpus | ☐ |
+| J4 | Real module imports: `@use` with named imports (usage-inferred) so multi-file features transpile + run | rig over 2 linked feature files | ☐ |
+| J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ☐ |
+| J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ☐ |
+
+> Bench discipline unchanged: J2/J3 touch no surface text (emission-side and
+> classification only) — bench-neutral by the Core::Stmt precedent; any
+> grammar-spelling change would require a Phase-0 re-run per working
+> agreements and is deliberately out of scope for this phase.
 
 ---
 
-## Phase 4 — Round-trip (C#/JS → IR)
+## Phase 4 — Round-trip JS → IR (JS only in v4)
 
-**Goal:** Existing C#/JS → lossy IR, meeting the §5 fidelity budget and the
-double-round-trip acceptance criterion (C# → IR → C# must compile and behave
-identically).
+**Goal:** Existing JS → lossy IR, meeting the §5 fidelity budget and the
+double-round-trip acceptance criterion (JS → IR → JS compiles and behaves
+identically). C# round-trip moves behind the C# target phase.
 
-**Exit:** double round-trip holds over the real corpus; actual §5 budget
+**Exit:** double round-trip holds over the js_* corpus; actual §5 budget
 documented.
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
-| 4.1 | tree-sitter-c-sharp + tree-sitter-javascript grammars for parsing targets | parser setup | ☐ |
-| 4.2 | IR-form coverage audit on real corpus: % of constructs representable in core+ sugar | coverage report | ☐ |
-| 4.3 | Mapping table: C#/JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☐ |
-| 4.4 | Target-language reader (C#/JS → IR), reusing the canonical printer | reader | ☐ |
-| 4.5 | Double round-trip over real corpus: compile + behavior identity checks | round-trip report | ☐ |
+| 4.1 | tree-sitter-javascript grammar for parsing JS targets | parser setup | ☐ |
+| 4.2 | IR-form coverage audit on js corpus: % of constructs representable in core+ sugar | coverage report | ☐ |
+| 4.3 | Mapping table: JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☐ |
+| 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ☐ |
+| 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ☐ |
 | 4.6 | Document actual §5 budget (what was dropped in practice) | fidelity doc | ☐ |
 
 > [3] **`(opaque …)` passthrough:** unrepresentable members are captured
@@ -136,18 +147,39 @@ documented.
 
 ---
 
-## Phase 5 — Hardening & release
+## Phase 5 — C# target (emit + round-trip; was Phase 3)
+
+**Goal:** IR → compilable C# for golden + real C# corpus; then C# → IR
+round-trip with behavior identity (folds the original Phase 3 + C# half of
+Phase 4 behind the JS-first line).
+
+**Exit:** all outputs compile (`dotnet build` zero errors); LLM loop test
+replicates 2.7's fix-from-stack-trace capability; double round-trip holds
+over the cs_* corpus.
+
+| # | Task | Deliverable | Status |
+|---|------|-------------|--------|
+| 5.1 | C# AST + printer design (Roslyn-inspired, namespaces/usings/attributes) | design note | ☐ |
+| 5.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☐ |
+| 5.3 | C# printer | emits golden corpus | ☐ |
+| 5.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ☐ |
+| 5.5 | LLM loop test for C# | report | ☐ |
+| 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ☐ |
+
+---
+
+## Phase 6 — Hardening & release
 
 **Goal:** Stable v0.1 usable as an agent file format.
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
-| 5.1 | Bench rerun vs Phase 0 headline: did savings hold on the whole-pipeline view? | updated results | ☐ |
-| 5.2 | LLM loop test at scale: larger corpus, multiple models (GPT/Claude/Llama) | scale report | ☐ |
-| 5.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☐ |
-| 5.4 | Versioning policy: additive-only core forms; macros absorb growth | policy doc | ☐ |
-| 5.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☐ |
-| 5.6 | Release v0.1: crates.io + example repo | release | ☐ |
+| 6.1 | Bench rerun vs Phase 0 headline: did savings hold on the whole-pipeline view? | updated results | ☐ |
+| 6.2 | LLM loop test at scale: larger corpus, multiple models (GPT/Claude/Llama) | scale report | ☐ |
+| 6.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☐ |
+| 6.4 | Versioning policy: additive-only core forms; macros absorb growth | policy doc | ☐ |
+| 6.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☐ |
+| 6.6 | Release v0.1: crates.io + example repo | release | ☐ |
 
 ---
 
@@ -158,7 +190,8 @@ documented.
 | Token savings < 30% (no-go) | 0.8 | hand renditions inform design; stop cheaply if no-go |
 | Over-minification degrades LLM reasoning | 0.7, 2.7 | readability floor (§6); LLM repair test is the acceptance gate |
 | Round-trip fidelity worse than budget | 4.2–4.6 | `(opaque …)` bounds per-member loss at zero; recheck budget after coverage audit |
-| LLM can't repair from target-language errors | 2.6–2.7 | span tracking maps stack traces back to IR; unfixable ⇒ real no-go at Phase 2 exit |
+| Emitted code parses but misbehaves | J1 | behavior harness vs original sources is the Phase-3 gate |
+| Loop-clumsiness consumes token savings | 2.7, J5–J6 | loop depth at more model scales + whole-pipeline measurement |
 | Reader crashes on adversarial input | 1.6 | proptest fuzzing; never panics, always returns error |
 
 ---
@@ -171,10 +204,11 @@ Each phase exit is a verification act, not a checklist:
 |-------|---------------|----------|
 | 0 | `bench/results.md` verdicts + go/no-go number | the concept: token savings ≥30% |
 | 1 | golden corpus parse→expand→print identity | grammar & core forms are sufficient in practice |
-| 2 | JS outputs compile + LLM repair test | the language is generatable & debuggable by an LLM |
-| 3 | C# outputs compile + LLM repair test | same, with a type system |
-| 4 | double round-trip compile identity | the round-trip contract (§5) |
-| 5 | v0.1 release + scale report | usable as an agent file format |
+| 2 | JS outputs compile + LLM repair test (GO, local-model bar) | the language is generatable & debuggable by an LLM |
+| 3 (J) | behavior identity + whole-pipeline number | the JS pipeline is *excellent*, not merely passing |
+| 4 | double round-trip compile identity (JS) | the round-trip contract (§5) |
+| 5 | C# outputs compile + LLM repair test + round-trip | same, with a type system |
+| 6 | v0.1 release + scale report | usable as an agent file format |
 
 ---
 
@@ -235,6 +269,21 @@ Each phase exit is a verification act, not a checklist:
   rendition-drift line), param-`?` erasure fixed with the gate. Emitter-gap
   list appended to js-target.md §7. **Next session: Phase 3 open (3.1 C#
   target design note); dotnet 10 available locally.**
+- **v4 (2026-10-09) — plan reroute: JS first, C# deferred.** Phase 2 closed
+  (2.4 ☑, 2.7 GO). New Phase 3 = JS depth (J1 behavior harness — emitted JS
+  must *behave* identically to originals, not merely parse; J2 inline atom
+  runs; J3 gap rows; J4 real module imports; J5 loop depth at more model
+  scales; J6 whole-pipeline token measurement — footnote [1] finally
+  measured). Phase 4 = JS→IR round-trip only. C# target (emit + round-trip)
+  moves to Phase 5; hardening becomes Phase 6. Rationale: breadth before
+  depth risk-closure inverted — the pipeline's remaining unknowns are all
+  JS-side.
+- **v4.1 (2026-10-09, later)** — Phase 3 open: **J1 done** — behavior harness
+  (`bench/scripts/behavior/`), first real same-input behavior evidence:
+  emitted==original on js_01 (22 cases) + js_08 (8 cases); obj-lit
+  initializer loss fixed additively en route (R3 pair-hijack value recovery +
+  objlit arm order; regression test). **Next session: J2 inline atom runs
+  (statement-ify lambda bodies / if-expressions) → J3 gap rows.**
 - **v3.2 amendment note (2026-10-09 early):** unfamiliar-syntax risk means
   loop-clumsiness could consume the savings — 2.7 is the real go/no-go
   (risk register). Only after 2.7 passes: tsc gate + diff-vs-hand-renditions

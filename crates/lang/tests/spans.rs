@@ -125,6 +125,18 @@ fn export_fn_expands_to_fn() {
 }
 
 #[test]
+fn objlit_initializers_survive() {
+    // J1 findings: single-line `var x = {…}` (reader R3 hijacks the pair into
+    // inline_body; value was Some([]) → `const x;`) and block objlits
+    // (`var x: T = {` + lines + `}` — objlit arm was pre-empted by decl-only)
+    let src = "@1\n\nconst var a={x:1, y:\"z\"}\nvar b: Record<String, Int> = {\n  k: 1\n}\n";
+    let (js, _) = js::emit_with_map(&expander::expand(src).unwrap()).unwrap();
+    assert!(js.contains("const a = {x: 1, y: \"z\"};"), "{js}");
+    assert!(js.contains("const b = {"), "{js}");
+    assert!(js.contains("k: 1"), "{js}");
+}
+
+#[test]
 fn emit_map_lookups() {
     let core = expander::expand(SNIPPET).unwrap();
     let (js, map) = js::emit_with_map(&core).unwrap();

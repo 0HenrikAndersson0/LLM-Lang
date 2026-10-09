@@ -649,6 +649,18 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 Some(Atom::Sym(s)) if s == "=" => Some(atoms[i + 1..].to_vec()),
                 _ => None,
             };
+            // R3 inline-pair hijack: single-line `var x = {…}` / `var x: T = {…}`
+            // — the reader models the `{...}` pair as `inline_body`, leaving
+            // value = Some([]). The pair IS the initializer: re-wrap it.
+            let value = match (&value, &inline) {
+                (Some(v2), Some(inl)) if v2.is_empty() && !inl.is_empty() => {
+                    let mut wrapped = vec![Atom::Sym("{".into())];
+                    wrapped.extend(inl.iter().cloned());
+                    wrapped.push(Atom::Sym("}".into()));
+                    Some(wrapped)
+                }
+                (other, _) => other.clone(),
+            };
             // `var X = {` + children + `} as const`-class obj-lits: reader
             // puts member lines as children; value = Some([]) empty or None
             let objlit = if !children.is_empty() {

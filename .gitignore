@@ -3,3 +3,6 @@ bench/.venv/
 __pycache__/
 target/
 *.pyc
+bench/corpus/real/ir/*.js
+bench/corpus/real/ir/*.map.json
+bench/scripts/behavior/build/
