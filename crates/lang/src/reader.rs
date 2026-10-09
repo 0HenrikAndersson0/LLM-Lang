@@ -344,11 +344,16 @@ impl Parser {
             }
             // R2: infix start extends previous sibling — but if the cont line
             // opens a `{` body, parse it as a construct at the PREVIOUS
-            // sibling's indent (the `{` belongs to that construct)
-            if starts_infix {
+            // sibling's indent (the `{` belongs to that construct).
+            // DOT-start: a leading `.` is ALWAYS a call-chain continuation —
+            // the chain's `{…}` pairs (arrow bodies, objlits) are literal
+            // groups INSIDE the run, never block openers — absorb into the
+            // previous sibling's atom run (J2).
+            if starts_infix || (kids_last_leads_dot(&self.lines[self.pos].toks)) {
                 let prev_indent = prev_child_indent.unwrap_or(hdr_indent);
                 let cont = &self.lines[self.pos];
-                if cont.toks.iter().any(|t| t.sym() == Some("{")) {
+                let dot_start = kids_last_leads_dot(&cont.toks);
+                if !dot_start && cont.toks.iter().any(|t| t.sym() == Some("{")) {
                     // reparse the cont line as a construct with the previous
                     // sibling's indent as header indent
                     kids.push(self.parse_construct(prev_indent)?);
@@ -476,7 +481,49 @@ impl Parser {
                                             ekids.push(Form::Line { atoms: hdr2, inline_body: None, children: kids2, span: close_span });
                                         }
                                         _ => {
-                                            ekids.push(Form::Line { atoms: link, inline_body: None, children: Vec::new(), span: close_span });
+                                            // brace-GLUED body link (`}else{a=null…}`,
+                                            // `}else if c{…}` all on the close line):
+                                            // strip the balanced pair — contents ride
+                                            // as inline_body (print re-fuses them;
+                                            // braces-in-atoms would double-render)
+                                            let mut pd = 0i32;
+                                            let mut bd = 0i32;
+                                            let mut bo = None;
+                                            let mut bc = None;
+                                            for (k2, a) in link.iter().enumerate() {
+                                                if let Atom::Sym(sx) = a {
+                                                    match sx.as_str() {
+                                                        "(" | "[" => pd += 1,
+                                                        ")" | "]" => pd -= 1,
+                                                        "{" if pd == 0 && bd == 0 && bo.is_none() => {
+                                                            bo = Some(k2);
+                                                            bd = 1;
+                                                        }
+                                                        "{" if pd == 0 => bd += 1,
+                                                        "}" if pd == 0 && bo.is_some() => {
+                                                            bd -= 1;
+                                                            if bd == 0 {
+                                                                bc = Some(k2);
+                                                                break;
+                                                            }
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                            }
+                                            match (bo, bc) {
+                                                (Some(o2), Some(c2)) if c2 == link.len() - 1 && !link[..o2].is_empty() => {
+                                                    ekids.push(Form::Line {
+                                                        atoms: link[..o2].to_vec(),
+                                                        inline_body: Some(link[o2 + 1..c2].to_vec()),
+                                                        children: Vec::new(),
+                                                        span: close_span,
+                                                    });
+                                                }
+                                                _ => {
+                                                    ekids.push(Form::Line { atoms: link, inline_body: None, children: Vec::new(), span: close_span });
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -506,8 +553,33 @@ impl Parser {
             }
             // R2: infix-start body lines are continuations — parse them at the
             // previous child's (or block's) indent so their `{` opens with the
-            // right header indent
-            if starts_with_infix(&cand.toks) {
+            // right header indent. DOT-start lines always extend the previous
+            // sibling (call-chain continuation; J2) — and while the absorbed
+            // run ends unbalanced (`.filter(` … / `.map(gen)(…{`), following
+            // lines keep extending it until parens balance (R1 rules at child
+            // level: comments self-skip; `}`-closers inside the call absorb).
+            if starts_with_infix(&cand.toks) || kids_last_leads_dot(&cand.toks) {
+                if let Some(last) = kids.last_mut() {
+                    if kids_last_leads_dot(&cand.toks) {
+                        extends_last_child(last, &cand.toks.clone());
+                        self.pos += 1;
+                        consumed += 1;
+                        while self.pos < self.lines.len() {
+                            let unbal = match last {
+                                Form::Line { atoms, .. } => atoms_unbalanced(atoms),
+                                _ => false,
+                            };
+                            if !unbal {
+                                break;
+                            }
+                            let nxt = &self.lines[self.pos];
+                            extends_last_child(last, &nxt.toks.clone());
+                            self.pos += 1;
+                            consumed += 1;
+                        }
+                        continue;
+                    }
+                }
                 let prev = child_indent.unwrap_or(cand_indent);
                 kids.push(self.parse_construct(prev)?);
                 consumed += 1;
@@ -761,6 +833,28 @@ fn starts_with_logic(toks: &[TokPos]) -> bool {
 
 fn close_like_line(toks: &[TokPos]) -> bool {
     !toks.is_empty() && toks[0].sym() == Some("}")
+}
+
+fn kids_last_leads_dot(toks: &[TokPos]) -> bool {
+    toks.first().map(|t| t.sym()).is_some_and(|s| s == Some("."))
+}
+
+/// atom-level unbalanced `(`/`[` check (dot-chain continuation guard; J2)
+fn atoms_unbalanced(atoms: &[Atom]) -> bool {
+    let mut p = 0i32;
+    let mut b = 0i32;
+    for a in atoms {
+        if let Atom::Sym(s) = a {
+            match s.as_str() {
+                "(" => p += 1,
+                ")" => p -= 1,
+                "[" => b += 1,
+                "]" => b -= 1,
+                _ => {}
+            }
+        }
+    }
+    p > 0 || b > 0
 }
 
 fn extends_last_child(last: &mut Form, cont: &[TokPos]) -> bool {

@@ -174,14 +174,21 @@ synthetic emission (primary-ctor field assigns) maps to `0`. The corpus
 gate (`tests/spans.rs`) asserts every non-blank JS line maps and no
 markers leak.
 
-Emitter gaps recorded at the 2.4 gate (bench/results-js-diff.md), all
-additive-fixable later: no `export type {…}/export {…} from` re-export row
-(v0 declassifies them to `const type;` — deferred to Phase 4's target
-reader); inline atom runs lower verbatim, so statement-shaped content
-inside single-line lambdas/exprs (if-expressions, multi-stmt arrow bodies,
-generics in expr runs) stays unlowered — the guide teaches around it and
-Phase 4's tree-sitter parse reclassifies properly. Hand-rendition drift
-outside grammar v1.1 (bare `let`, inline if-expressions, `= {}` obj-lit
-initializers) passes through verbatim by the opaque/verbatim rule — 0.8
-token counts include it; a grammar-drift cleanup pass would be bench-visible
-and needs a re-run per working agreements.
+Emitter gaps recorded at the 2.4 gate (bench/results-js-diff.md), status
+after J2/J3 (v4 Phase 3): RESOLVED — `export {…} from` re-exports (additive
+`Core::Reexport`: canon prints the re-export line; JS drops the `type`
+word), inline statement bodies in arrow-block runs (statement-ified at
+emit: `var/const/let` decls, `if/else` pieces, `return`/`throw`, bare
+terminal expr → callback return value; `split_stmt_runs` + `stmtify_piece`),
+callee-generics erasure (`map<T,…>(` → `map(`; type-ish heuristic guards
+comparisons), bare-`let` rendition drift canon-stabilized to `var mut`,
+typed-var initializers (the ty-branch consumed the `=` — latent since 2.3),
+empty-objlit `= {}` inits, and bool/null literal match arms. Canon rule
+added: one space between a generics-carrying ty and `=` (`Record<String,String>`
++ `={}` lexes `>=` and would reparse wrong).
+
+Still open (accepted v0): value-position `match` arms emit statements —
+models write explicit `return` per the guide; statement-shaped content
+that is NOT keyword-led inside inline runs (multi-assignment pieces without
+`var`) stays verbatim; `tree-sitter` (Phase 4) is the plan of record for
+full inline-run classification.

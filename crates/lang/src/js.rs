@@ -63,6 +63,7 @@ fn core_span(c: &Core) -> Span {
         Core::Header { span, .. }
         | Core::Stmt { span, .. }
         | Core::Expr(_, span)
+        | Core::Reexport { span, .. }
         | Core::Clause(_, span) => *span,
         Core::Fn(f) => f.span,
         Core::Type(t) => t.span,
@@ -308,6 +309,15 @@ fn emit_core_raw(c: &Core, level: usize) -> Result<String, JsLowerError> {
             Ok(format!("{}{};", indent(level), txt))
         }
         Core::Stmt { head, body, arms, .. } => emit_stmt(head, body, arms, level),
+        Core::Reexport { star, is_type, names, from, .. } => {
+            // ESM re-export; the `type` word is TS-only surface (dropped)
+            let _ = is_type;
+            if *star {
+                Ok(format!("export * from \"{}\";", from))
+            } else {
+                Ok(format!("export {{{}}} from \"{}\";", names.join(", "), from))
+            }
+        }
         Core::Clause(..) => Ok(String::new()), // associated into owner
     }
 }
@@ -747,6 +757,14 @@ fn emit_for(head: &[Atom], body: &Body, _arms: &[Arm], level: usize) -> Result<S
 fn emit_if(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<String, JsLowerError> {
     let ind = indent(level);
     let cond = expr(&head[1..]);
+    // then-arm consumption (split_glued_if convention: arms[0] with an empty
+    // pattern IS the then-block when the stmt body is empty-inline)
+    let empty_inline = matches!(body, Body::Inline(x) if x.is_empty());
+    let (body, arms): (&Body, &[Arm]) = if empty_inline && !arms.is_empty() && arms[0].pattern.is_empty() {
+        (&arms[0].body, &arms[1..])
+    } else {
+        (body, arms)
+    };
     let mut s = format!("{}if ({}) {}", ind, cond, emit_stmt_body_js(body, level)?);
     for a in arms {
         let p_txt = expr(&a.pattern);
@@ -1029,6 +1047,40 @@ fn expr_at(atoms: &[Atom]) -> String {
                     i += 1;
                     continue;
                 }
+                // callee generics: `map<AnyNode, {…}>(…)` → `map(…)` — the
+                // `<…>` run before a `(`, containing type-ish content
+                // (capitalized idents, braces, commas), is erased. Plain
+                // lowercase single-ident content stays a comparison `x<y(z)`.
+                if matches!(atoms.get(i + 1), Some(Atom::Sym(s2)) if s2 == "<") {
+                    let mut k = i + 2;
+                    let mut d = 1i32;
+                    let mut typeish = false;
+                    let mut end = None;
+                    while k < n {
+                        match &atoms[k] {
+                            Atom::Sym(s3) => match s3.as_str() {
+                                "<" => d += 1,
+                                ">" => {
+                                    d -= 1;
+                                    if d == 0 {
+                                        end = Some(k);
+                                        break;
+                                    }
+                                }
+                                "{" | "," => typeish = true,
+                                _ => {}
+                            },
+                            Atom::Ident(x3) if x3.chars().next().is_some_and(|c| c.is_uppercase()) => typeish = true,
+                            _ => {}
+                        }
+                        k += 1;
+                    }
+                    if let Some(e) = end {
+                        if typeish && matches!(atoms.get(e + 1), Some(Atom::Sym(s3)) if s3 == "(") {
+                            i = e; // on the matching `>`; call branch sees `(`
+                        }
+                    }
+                }
                 match atoms.get(i + 1) {
                     Some(Atom::Sym(s2)) if s2 == "(" => {
                         let head_word = if out.ends_with("new") {
@@ -1159,6 +1211,19 @@ fn expr_at(atoms: &[Atom]) -> String {
                     };
                     i += 1; // past the opener; slice starts here
                     let inner = bracket_slice(atoms, &mut i, c);
+                    // arrow-with-block body `=> {…}` — statementify (J2):
+                    // split the inner run at depth-0 stmt keywords; every
+                    // piece renders as a statement; a terminal bare expr is
+                    // the arrow's value → `return`. Single non-stmt pieces
+                    // stay object literals (today's path).
+                    if c == '}' && out.ends_with("=>") {
+                        let pieces = split_stmt_runs(&inner);
+                        if let Some(body) = arrow_body_js(&pieces) {
+                            out.push_str(&body);
+                            i += 1; // consume the `}` closer
+                            continue;
+                        }
+                    }
                     // `(UInt)x` prefix cast: all-caps single ident content +
                     // a next operand → drop the group
                     if c == ')' {
@@ -1457,7 +1522,293 @@ fn dedup_spaces(s: &str) -> String {
     out
 }
 
+/// keywords that BEGIN a statement run inside inline atom runs (J2)
+const STMT_BEGIN: &[&str] = &["var", "const", "volatile", "let", "return", "throw", "if"];
+
+/// split an atom run into statement runs at depth-0 statement keywords
+/// (braces/brackets/parens shield interior keywords)
+pub fn split_stmt_runs(atoms: &[Atom]) -> Vec<Vec<Atom>> {
+    let mut outv: Vec<Vec<Atom>> = Vec::new();
+    let mut cur: Vec<Atom> = Vec::new();
+    let mut depth = 0i32;
+    let mut open_at: Vec<i32> = Vec::new();
+    let mut consumed_close = false;
+    for a in atoms {
+        // after a depth-0 brace-group closed, the next atom begins a new
+        // statement run (an `else` clause stays with its if)
+        if consumed_close && !matches!(a, Atom::Ident(x) if x == "else") && !cur.is_empty() {
+            outv.push(std::mem::take(&mut cur));
+        }
+        consumed_close = false;
+        let mut closed_depth0_brace = false;
+        if let Atom::Sym(s) = a {
+            match s.as_str() {
+                "(" | "[" | "{" => {
+                    open_at.push(depth);
+                    depth += 1;
+                }
+                ")" | "]" | "}" => {
+                    depth -= 1;
+                    let popped = open_at.pop();
+                    if matches!(s.as_str(), "}") && popped == Some(0) {
+                        closed_depth0_brace = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if closed_depth0_brace {
+            consumed_close = true;
+        }
+        let is_boundary = depth == 0
+            && matches!(a, Atom::Ident(x) if STMT_BEGIN.contains(&x.as_str()));
+        if is_boundary && !cur.is_empty() {
+            outv.push(std::mem::take(&mut cur));
+        }
+        cur.push(a.clone());
+    }
+    if !cur.is_empty() {
+        outv.push(cur);
+    }
+    outv
+}
+
+/// `var/const/let/volatile x[: T] = e` mini-lowering for inline runs
+fn stmt_decl_js(p: &[Atom]) -> Option<String> {
+    let mut i = 1usize;
+    // optional type words (`const var`, `volatile var`, `mut`)
+    let mut mutable = false;
+    if matches!(p.get(i), Some(Atom::Ident(x)) if x == "var") {
+        i += 1;
+    }
+    if matches!(p.get(i), Some(Atom::Ident(x)) if x == "mut" || x == "volatile") {
+        mutable = true;
+        i += 1;
+        if matches!(p.get(i), Some(Atom::Ident(x)) if x == "var") {
+            i += 1;
+        }
+    }
+    let name = match p.get(i) {
+        Some(Atom::Ident(n)) => n.trim_end_matches('?').to_string(),
+        _ => return None,
+    };
+    i += 1;
+    if matches!(p.get(i), Some(Atom::Sym(s)) if s == ":") {
+        i += 1 + skip_type(&p[i..]);
+        if !matches!(p.get(i), Some(Atom::Sym(s)) if s == "=") {
+            return Some(format!("{} {};", if mutable { "let" } else { "const" }, name));
+        }
+    }
+    match p.get(i) {
+        Some(Atom::Sym(s)) if s == "=" => Some(format!(
+            "{} {} = {};",
+            if mutable { "let" } else { "const" },
+            name,
+            expr(&p[i + 1..])
+        )),
+        _ => Some(format!("{} {};", if mutable { "let" } else { "const" }, name)),
+    }
+}
+
+/// render ONE statement run as JS; None = not a statement (falls back)
+fn stmtify_piece(p: &[Atom], terminal: bool) -> Option<String> {
+    let kw0 = match p.first().map(|a| match a {
+        Atom::Ident(x) => x.as_str(),
+        _ => "",
+    }) {
+        Some(k) if !k.is_empty() => k,
+        _ => {
+            return if terminal && !p.is_empty() {
+                Some(format!("return {};", expr(p)))
+            } else {
+                None
+            }
+        }
+    };
+    match kw0 {
+        "var" | "const" | "let" | "volatile" => stmt_decl_js(p),
+        "return" | "throw" => Some(format!("{} {};", kw0, expr(&p[1..]))),
+        "if" if p.len() >= 3 => {
+            // `if COND {B} [else {B2} | else EXPR]` — brace bodies nest via
+            // split_stmt_runs recursion
+            let mut d = 0i32;
+            let mut bo = None;
+            for (k, a) in p.iter().enumerate().skip(1) {
+                if let Atom::Sym(sx) = a {
+                    match sx.as_str() {
+                        "(" | "[" => d += 1,
+                        ")" | "]" => d -= 1,
+                        "{" if d == 0 => {
+                            bo = Some(k);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let bo = bo?;
+            let cond = expr(&p[1..bo]);
+            let close = {
+                // bracket_slice starts PAST the opener (its sentinel pops on
+                // the matching closer); j ends ON the `}`
+                let mut j = bo + 1;
+                let _ = bracket_slice(p, &mut j, '}');
+                if j < p.len() {
+                    Some(j)
+                } else {
+                    None
+                }
+            }?;
+            let then_txt = brace_block_js(&p[bo + 1..close])?;
+            let mut s = format!("if ({cond}) {then_txt}");
+            let rest = &p[close + 1..];
+            if rest.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false) {
+                let r2 = &rest[1..];
+                if r2.first().map(|a| matches!(a, Atom::Ident(x) if x == "if")).unwrap_or(false) {
+                    // else-if → recurse as a statement (piece = r2)
+                    let inner = stmtify_piece(r2, false)?;
+                    s.push_str(&format!(" else {inner}"));
+                } else {
+                    let (bo2, c2) = {
+                        let mut bo2 = None;
+                        for (k, a) in r2.iter().enumerate() {
+                            if let Atom::Sym(sx) = a {
+                                if sx == "{" && bo2.is_none() {
+                                    bo2 = Some(k);
+                                    break;
+                                }
+                            }
+                        }
+                        match bo2 {
+                            None => return None,
+                            Some(bo2) => {
+                                let mut j2 = bo2 + 1;
+                                bracket_slice(r2, &mut j2, '}');
+                                if j2 >= r2.len() {
+                                    return None;
+                                }
+                                (bo2, j2)
+                            }
+                        }
+                    };
+                    let then_txt2 = brace_block_js(&r2[bo2 + 1..c2])?;
+                    s.push_str(&format!(" else {then_txt2}"));
+                }
+            }
+            Some(s)
+        }
+        _ => None,
+    }
+}
+
+/// brace-block content `{ … }` from inner atoms: statements compact-joined
+fn brace_block_js(inner: &[Atom]) -> Option<String> {
+    if inner.is_empty() {
+        return Some("{}".to_string());
+    }
+    let pieces = split_stmt_runs(inner);
+    let mut stmts: Vec<String> = Vec::new();
+    let n = pieces.len();
+    for (pi, p2) in pieces.iter().enumerate() {
+        let terminal = pi + 1 == n;
+        if let Some(t) = stmtify_piece(p2, terminal) {
+            stmts.push(t);
+        } else if let Some(t) = stmt_expr_piece(p2) {
+            stmts.push(t);
+        } else {
+            return None;
+        }
+    }
+    if stmts.is_empty() {
+        return None;
+    }
+    Some(format!("{{ {} }}", stmts.join(" ")))
+}
+
+/// non-keyword statement run: expr-statement, or a bare run that is only
+/// statement-like when it ends the block (value) — handled by caller passing
+/// terminal=true into stmtify_piece; here only plain exprs pass
+fn stmt_expr_piece(p: &[Atom]) -> Option<String> {
+    let has_kw = p.first().map(|a| matches!(a, Atom::Ident(x) if STMT_BEGIN.contains(&x.as_str()))).unwrap_or(false);
+    if has_kw {
+        return None;
+    }
+    Some(format!("{};", expr(p)))
+}
+
+/// arrow-with-block body `=> {…}` from statement runs; None → not statements
+fn arrow_body_js(pieces: &[Vec<Atom>]) -> Option<String> {
+    if pieces.is_empty() {
+        return Some("{}".to_string());
+    }
+    let n = pieces.len();
+    let mut stmts: Vec<String> = Vec::new();
+    for (pi, p) in pieces.iter().enumerate() {
+        let terminal = pi + 1 == n;
+        if let Some(t) = stmtify_piece(p, terminal) {
+            stmts.push(t);
+            continue;
+        }
+        if terminal {
+            // bare terminal run = the arrow's value
+            stmts.push(format!("return {};", expr(p)));
+            continue;
+        }
+        // interior non-keyword run: assignment/exObj — emit as expr-stmt
+        // ONLY when it can't be an object literal (no top-level `:`-pairs
+        // after a bare `{`); conservative: treat as expression
+        if p.first().map(|a| matches!(a, Atom::Sym(s) if s == "{")).unwrap_or(false) && pi == 0 && n == 1 {
+            return None; // single object-literal piece — plain literal path
+        }
+        stmts.push(stmt_expr_piece(p)?);
+    }
+    Some(format!("{{ {} }}", stmts.join(" ")))
+}
+
 /// type surface → erased/JS-shaped (generics dropped; `?` dropped)
 fn js_type(t: &str) -> String {
     t.trim_end_matches('?').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Atom;
+
+    /// "ab"→Ident, "123"→Number, symbols/ops → Sym, `"x"`→Str
+    fn a(atoms: &[&str]) -> Vec<Atom> {
+        atoms.iter().map(|x| {
+            if x.starts_with('"') && x.ends_with('"') {
+                Atom::Str(x[1..x.len() - 1].to_string())
+            } else if x.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                Atom::Number(x.to_string())
+            } else if x.chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                && x.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+            {
+                Atom::Ident(x.to_string())
+            } else {
+                Atom::Sym(x.to_string())
+            }
+        }).collect()
+    }
+
+    #[test]
+    fn arrow_body_stmtify() {
+        // `(el) => { if isTag(el){setCss(el, v)} }` — the corpus js_05 shape
+        let run = a(&["xs", ".", "map", "(", "el", "=>", "{", "if", "isTag", "(", "el", ")", "{", "setCss", "(", "el", ",", "v", ")", "}", "}", ")"]);
+        assert_eq!(
+            expr(&run),
+            "xs.map(el=>{ if (isTag(el)) { setCss(el, v); } })"
+        );
+    }
+
+    #[test]
+    fn arrow_body_var_then_tail() {
+        // corpus js_04 shape: var-decl + if + bare tail (the callback value)
+        let run = a(&["this", ".", "map", "(", "(", "_", ",", "elem", ")", "=>", "{", "var", "$elem", "=", "this", ".", "_make", "(", "elem", ")", "if", "isTag", "(", "elem", ")", "{", "return", "$elem", ".", "toArray", "(", ")", "}", "$elem", ".", "ok", "(", ")", "}", ")", ".", "toArray", "(", ")"]);
+        let out = expr(&run);
+        assert!(out.contains("const $elem = this ._make(elem);"), "{out}");
+        assert!(out.contains("if (isTag(elem)) { return $elem.toArray(); }"), "{out}");
+        assert!(out.contains("return $elem.ok();"), "{out}");
+    }
 }

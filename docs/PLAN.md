@@ -109,8 +109,8 @@ pipeline token number measured.
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
 | J1 | Behavior harness: emitted js_* vs original sources, same inputs → same outputs (leaf modules; sibling deps stubbed/executed) | behavior report | ☑ — `bench/scripts/behavior/runner.py`: emit vs tsc-transformed originals, 3-way deep compare; js_01 (22 cases + side-effect identity) and js_08 (8 cases) **BEHAVIOR-MATCH**; NOTE rows caught harness-side expectation drift while emit==orig held; js_03/04/05/06 excluded (need J4 named imports / DOM context), js_02 type-only. Obj-lit initializers died on every path — fixed additively (R3 inline-pair hijack re-wraps value; objlit arm ordering) + regression test |
-| J2 | Inline atom runs: statement-ify lambda bodies / if-expressions (emitter + expander classification; surface text unchanged ⇒ bench-neutral) | tsc failures js_04/js_05 closed | ☐ |
-| J3 | Gap rows: `export {…} from`/`export type *` re-exports, generics-in-expr erasure, value-match arms (bool/ident-literal) | tsc 7/7 on TS corpus | ☐ |
+| J2 | Inline atom runs: statement-ify lambda bodies / if-expressions (emitter + expander classification; surface text unchanged ⇒ bench-neutral) | tsc failures js_04/js_05 closed | ☑ — glued `if c{a}else{b}` chains split (split_glued_if chain-aware; then-arm consumption in printer+emitter; `}else{…}` close-line brace-glue stabilized in R8); dot-chain continuation absorption (reader R2 at child level, R1-rules while unbalanced); arrow-block statement-ification at emit (`split_stmt_runs`/`stmtify_piece` + terminal-expr→return); callee-generics erasure; bare-`let`→`var mut` canon re-stabilization. Tests split/stmtify with constructed atoms |
+| J3 | Gap rows: `export {…} from`/`export type *` re-exports, generics-in-expr erasure, value-match arms (bool/ident-literal) | tsc 7/7 on TS corpus | ☑ **tsc 7/7** — `Core::Reexport` additive core form (canon prints the line; JS drops `type`); callee-generics erased at emit; typed-var `=`-consumption bug + empty-objlit + fused-`>=` tolerance fixed; bool/null literal arms split. Still accepted-v0: value-position match arms stay statement-shaped (guide teaches explicit `return`); non-keyword-led inline statement pieces (see js-target.md §7) |
 | J4 | Real module imports: `@use` with named imports (usage-inferred) so multi-file features transpile + run | rig over 2 linked feature files | ☐ |
 | J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ☐ |
 | J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ☐ |
@@ -284,6 +284,16 @@ Each phase exit is a verification act, not a checklist:
   initializer loss fixed additively en route (R3 pair-hijack value recovery +
   objlit arm order; regression test). **Next session: J2 inline atom runs
   (statement-ify lambda bodies / if-expressions) → J3 gap rows.**
+- **v4.2 (2026-10-09, later)** — **J2 + J3 done: tsc 7/7 on the TS corpus**
+  (from 3/7). Glued-if chains split (js_03:21); dot-chain lines absorb
+  (reader R2-in-block, R1-continuation rules while unbalanced); arrow-block
+  statement-ification at emit; `Core::Reexport` row; callee-generics
+  erasure; bool/null match arms; and five latent emitter truths fixed
+  (typed-var `=` consumption, `={}` empty inits, fused-`>=`,
+  bare-`let` canon, `else{…}` brace-glue reparse). Canonical print→print
+  identity holds on all 26; 26/26 node --check; behavior gate green.
+  **Next session: J4 real import names → J5 loop depth → J6 whole-pipeline
+  tokens.**
 - **v3.2 amendment note (2026-10-09 early):** unfamiliar-syntax risk means
   loop-clumsiness could consume the savings — 2.7 is the real go/no-go
   (risk register). Only after 2.7 passes: tsc gate + diff-vs-hand-renditions

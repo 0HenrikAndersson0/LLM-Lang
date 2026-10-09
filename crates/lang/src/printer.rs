@@ -67,6 +67,21 @@ fn print_core(c: &Core, level: usize) -> String {
         Core::Var(v) => print_var(v, level),
         Core::Expr(atoms, _) => format!("{}{}", indent(level), render_atoms(atoms)),
         Core::Stmt { head, body, arms, .. } => print_stmt(head, body, arms, level),
+        Core::Reexport { star, is_type, names, from, .. } => {
+            let mut s = String::from("export ");
+            if *is_type {
+                s.push_str("type ");
+            }
+            if *star {
+                s.push_str("* from ");
+            } else {
+                s.push('{');
+                s.push_str(&names.join(", "));
+                s.push_str("} from ");
+            }
+            s.push_str(&format!("'{from}'"));
+            s
+        }
         Core::Clause(..) => String::new(), // associated into the owner pre-print
     }
 }
@@ -221,6 +236,17 @@ fn print_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> String 
         (Body::Inline(b), true) if !b.is_empty() => s.push_str(&render_body_inline(b)),
         (Body::Inline(_), true) => {}
         (b, _) => {
+            // then-arm re-fuse (split_glued_if convention: arms[0] with an
+            // empty pattern IS the then-block; the stmt body is empty-inline)
+            let (b, arms): (&Body, &[Arm]) =
+                if matches!(body, Body::Inline(x) if x.is_empty())
+                    && !arms.is_empty()
+                    && arms[0].pattern.is_empty()
+                {
+                    (&arms[0].body, &arms[1..])
+                } else {
+                    (b, arms)
+                };
             s.push('{');
             match b {
                 Body::Inline(x) if !x.is_empty() => {
@@ -436,6 +462,10 @@ fn print_member(c: &Core, level: usize) -> String {
                 s.push_str(" => ");
                 s.push_str(&render_atoms(val));
             } else {
+                // `>={` lexes `>=`: space after a generics-carrying ty
+                if v.ty.as_ref().map(|t| t.ends_with('>')).unwrap_or(false) {
+                    s.push(' ');
+                }
                 s.push('=');
                 s.push_str(&render_atoms(val));
             }
@@ -476,6 +506,11 @@ fn print_var(v: &VarDecl, level: usize) -> String {
         s.push_str(t);
     }
     if let Some(val) = &v.value {
+        // a generic-close glued to `=` (`>={`) lexes as `>=` — canon keeps
+        // one space after a generics-carrying ty so reparse is stable
+        if v.ty.as_ref().map(|t| t.ends_with('>')).unwrap_or(false) {
+            s.push(' ');
+        }
         s.push('=');
         s.push_str(&render_atoms(val));
     }
@@ -568,6 +603,20 @@ fn debug_core(c: &Core, level: usize) -> String {
                 s.push_str(&format!(" (arm {} {})", debug_atoms(&a.pattern), debug_body_short(&a.body)));
             }
             s.push(')');
+            s
+        }
+        Core::Reexport { star, is_type, names, from, .. } => {
+            let mut s = format!("{ind}(reexport");
+            if *is_type {
+                s.push_str(" type");
+            }
+            if *star {
+                s.push_str(" *");
+            }
+            if !names.is_empty() {
+                s.push_str(&format!(" ({})", names.join(", ")));
+            }
+            s.push_str(&format!(" (from {from}))"));
             s
         }
         Core::Clause(a, _) => format!("{ind}(clause {})", debug_atoms(a)),

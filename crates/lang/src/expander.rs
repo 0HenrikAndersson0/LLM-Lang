@@ -22,6 +22,9 @@ pub enum Core {
     /// head atoms (e.g. `for x in xs`, `if p`); `else`/`elseif`/`catch`
     /// fragments carry their keyword as head[0].
     Stmt { head: Vec<Atom>, body: Body, arms: Vec<Arm>, span: Span },
+    /// `export {A, B} from mod` / `export type {…} from mod` / `export type * from mod`
+    /// — ESM re-exports (additive core form, v4 J3; canon prints the line)
+    Reexport { star: bool, is_type: bool, names: Vec<String>, from: String, span: Span },
     /// sibling association marker (internal: consumed pre-print)
     #[doc(hidden)]
     Clause(Vec<Atom>, Span),
@@ -105,6 +108,7 @@ pub fn kind(c: &Core) -> &'static str {
         Core::Var(_) => "var",
         Core::Expr(..) => "expr",
         Core::Stmt { .. } => "stmt",
+        Core::Reexport { .. } => "reexport",
         Core::Clause(..) => "clause",
     }
 }
@@ -114,7 +118,7 @@ pub fn is_closed(forms: &[Core]) -> bool {
     forms.iter().all(|f| CORE_KINDS.contains(&kind(f)))
 }
 
-pub const CORE_KINDS: &[&str] = &["header", "fn", "type", "var", "expr", "stmt", "clause"];
+pub const CORE_KINDS: &[&str] = &["header", "fn", "type", "var", "expr", "stmt", "reexport", "clause"];
 
 #[derive(Debug, Clone)]
 pub struct ExpandError {
@@ -197,8 +201,12 @@ pub fn associate(core: Vec<Core>) -> Vec<Core> {
 }
 
 fn split_match_arm(a: &[Atom], span: Span) -> Option<Arm> {
-    // corpus arm shapes: `"LIT" stmt…` (pattern = leading literal run)
+    // corpus arm shapes: `"LIT" stmt…` (pattern = leading literal run); bool/
+    // null literal patterns lowercase ident-led (J3: `match ok{ true x false y }`)
     if matches!(&a[0], Atom::Str(_) | Atom::Number(_)) {
+        return Some(Arm { pattern: a[..1].to_vec(), body: Body::Inline(a[1..].to_vec()), span });
+    }
+    if matches!(&a[0], Atom::Ident(x) if matches!(x.as_str(), "true" | "false" | "null")) {
         return Some(Arm { pattern: a[..1].to_vec(), body: Body::Inline(a[1..].to_vec()), span });
     }
     None
@@ -423,6 +431,47 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
         other => return Ok(Core::Expr({ let _ = other; atoms }, span)),
     };
     match kw.as_str() {
+        "export"
+            if atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "from"))
+                && matches!(atoms.get(1), Some(Atom::Ident(k)) if k == "type")
+                    || matches!(atoms.get(1), Some(Atom::Sym(s)) if s == "{" || s == "*") =>
+        {
+            // re-export line: `export {A, B} from mod` / `export type {…} from mod` /
+            // `export type * from mod` (grammar-v1.1 corpus shape; J3 row)
+            let mut i = 1usize;
+            let is_type = matches!(atoms.get(i), Some(Atom::Ident(k)) if k == "type");
+            if is_type {
+                i += 1;
+            }
+            let star = matches!(atoms.get(i), Some(Atom::Sym(s)) if s == "*");
+            let fi = match atoms.iter().position(|a| matches!(a, Atom::Ident(x) if x == "from")) {
+                Some(fi) => fi,
+                None => return Err(ExpandError { msg: "reexport missing from".into() }),
+            };
+            let mut names = Vec::new();
+            if !star {
+                if matches!(atoms.get(i), Some(Atom::Sym(s)) if s == "{") {
+                    if let Some(ci) = atoms[i..].iter().position(|a| matches!(a, Atom::Sym(s) if s == "}")) {
+                        for g in split_commas(&atoms[i + 1..i + ci]) {
+                            let n = dotted(&g);
+                            if !n.is_empty() {
+                                names.push(n);
+                            }
+                        }
+                    }
+                } else {
+                    // single-name re-export: `export type Cheerio from 'cheerio'`
+                    for g in split_commas(&atoms[i..fi]) {
+                        let n = dotted(&g);
+                        if !n.is_empty() {
+                            names.push(n);
+                        }
+                    }
+                }
+            }
+            let from = dotted(&atoms[fi + 1..]);
+            Ok(Core::Reexport { star, is_type, names, from, span })
+        }
         "fn" | "async" | "export"
             if !(kw == "export"
                 && !matches!(atoms.get(1), Some(Atom::Ident(k)) if k == "fn" || k == "async")) =>
@@ -588,7 +637,7 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             }
             Ok(Core::Type(TypeDecl { name, kind, primary, bases, modifiers, members, span }))
         }
-        "var" | "const" | "volatile" | "export" => {
+        "var" | "const" | "volatile" | "let" | "export" => {
             let mut mods = Vec::new();
             let mut i = if kw == "export" {
                 mods.push("export".into());
@@ -609,8 +658,12 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                     _ => return Ok(Core::Expr(atoms, span)),
                 }
             } else {
-                if kw != "var" {
-                    mods.push(kw.clone());
+                match kw.as_str() {
+                    // `let` (rendition drift outside grammar v1.1, J3) canon-
+                    // stabilizes to the mut modifier: print `var mut …`
+                    "let" => mods.push("mut".into()),
+                    "const" | "volatile" => mods.push(kw.clone()),
+                    _ => {}
                 }
                 1
             };
@@ -632,6 +685,7 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             } else {
                 return Err(ExpandError { msg: "var missing name".into() });
             }
+            let mut value_opt: Option<Vec<Atom>> = None;
             let mut ty = None;
             if !matches!(atoms.get(i), Some(Atom::Sym(s)) if s == "=") {
                 if matches!(atoms.get(i), Some(Atom::Sym(s)) if s == ":") {
@@ -639,21 +693,34 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                     match atoms[ts..].iter().position(|a| matches!(a, Atom::Sym(x) if x == "=")) {
                         Some(end) => {
                             ty = Some(dotted(&atoms[ts..ts + end]));
-                            i = ts + end + 1;
+                            i = ts + end; // POINT at the `=` — the value-match below needs it
                         }
-                        None => ty = Some(dotted(&atoms[ts..])),
+                        None => {
+                            // `>={` lexes as `>=` (generic close + init fused):
+                            // tolerate — ty closes with the `>`, init follows
+                            if let Some(end) = atoms[ts..].iter().position(|a| matches!(a, Atom::Sym(x) if x == ">=")) {
+                                ty = Some(format!("{}>", dotted(&atoms[ts..ts + end])));
+                                value_opt = Some(atoms[ts + end + 1..].to_vec());
+                            } else {
+                                ty = Some(dotted(&atoms[ts..]));
+                            }
+                        }
                     }
                 }
             }
-            let value = match atoms.get(i) {
-                Some(Atom::Sym(s)) if s == "=" => Some(atoms[i + 1..].to_vec()),
-                _ => None,
+            let value = match value_opt {
+                Some(v) => Some(v),
+                None => match atoms.get(i) {
+                    Some(Atom::Sym(s)) if s == "=" => Some(atoms[i + 1..].to_vec()),
+                    _ => None,
+                },
             };
-            // R3 inline-pair hijack: single-line `var x = {…}` / `var x: T = {…}`
-            // — the reader models the `{...}` pair as `inline_body`, leaving
-            // value = Some([]). The pair IS the initializer: re-wrap it.
+            // R3 inline-pair hijack: `var x = {…}` / `var x: T = {…}` — the
+            // reader models the `{...}` pair as `inline_body`, leaving
+            // value = Some([]). The pair IS the initializer: re-wrap it (an
+            // EMPTY pair = `{}`).
             let value = match (&value, &inline) {
-                (Some(v2), Some(inl)) if v2.is_empty() && !inl.is_empty() => {
+                (Some(v2), Some(inl)) if v2.is_empty() => {
                     let mut wrapped = vec![Atom::Sym("{".into())];
                     wrapped.extend(inl.iter().cloned());
                     wrapped.push(Atom::Sym("}".into()));
@@ -796,6 +863,14 @@ fn expand_stmt(
         let arms = vec![Arm { pattern: pat, body, span }];
         return Ok(Core::Stmt { head: head_atoms, body: Body::Inline(Vec::new()), arms, span });
     }
+    // brace-glued `if c{a}else{b}` shapes (incl. chains): the reader leaves
+    // the else runs inside the atom run / run-end inline — split first,
+    // before the plain-body path below
+    if atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "else")) {
+        if let Some(st) = split_glued_if(atoms, inline.clone(), children.clone(), span)? {
+            return Ok(st);
+        }
+    }
     let body = match (&inline, &children) {
         (Some(b), c) if c.is_empty() => Body::Inline(b.clone()),
         (None, c) if !c.is_empty() => Body::Bare(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?),
@@ -844,7 +919,9 @@ fn expand_stmt(
 }
 
 /// Canon shape `if c{then…}else{…}` — reader keeps `{then}` + `else` fused in
-/// the atom run with the else body as `inline`.
+/// the atom run with the run-end `{…}` pair as `inline`. Chain-aware:
+/// `if c{a}else if c2{b}else{c}`; the terminal link's body (or a bare
+/// trailing `else`) lives in `inline`.
 fn split_glued_if(
     atoms: &[Atom],
     inline: Option<Vec<Atom>>,
@@ -860,7 +937,7 @@ fn split_glued_if(
                 "(" | "[" => paren += 1,
                 ")" | "]" => paren -= 1,
                 "{" if paren == 0 && open.is_none() => open = Some(k),
-                "}" if paren == 0 => close = Some(k),
+                "}" if paren == 0 && open.is_some() && close.is_none() => close = Some(k),
                 _ => {}
             }
         }
@@ -872,9 +949,89 @@ fn split_glued_if(
     let then_body = Body::Inline(atoms[oi + 1..ci].to_vec());
     let after = &atoms[ci + 1..];
     let mut arms = vec![Arm { pattern: Vec::new(), body: then_body, span }];
-    if after.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false) {
-        let pat = after[1..].to_vec();
-        arms.push(Arm { pattern: pat, body: Body::Inline(inline.unwrap_or_default()), span });
+    // else links: cut AFTER at top-level `else` atoms (an else inside any
+    // bracket pair is depth-shielded); `pending_inline` is consumed once —
+    // by the first link whose body isn't present in the atom run
+    let mut pending_inline = inline;
+    let mut rest: Vec<Atom> = after.to_vec();
+    while rest.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false) {
+        rest = rest[1..].to_vec();
+        let mut depth = 0i32;
+        let mut cut = rest.len();
+        for (k, a) in rest.iter().enumerate() {
+            if let Atom::Sym(s) = a {
+                match s.as_str() {
+                    "(" | "[" | "{" => depth += 1,
+                    ")" | "]" | "}" => depth -= 1,
+                    _ => {}
+                }
+            }
+            if matches!(a, Atom::Ident(x) if x == "else") && depth == 0 {
+                cut = k;
+                break;
+            }
+        }
+        let link: Vec<Atom> = rest[..cut].to_vec();
+        rest = rest[cut..].to_vec();
+        if link.is_empty() {
+            // terminal bare `else`: its body is the run-end inline pair
+            if let Some(inl) = pending_inline.take().filter(|b| !b.is_empty()) {
+                arms.push(Arm { pattern: vec![Atom::Ident("else".into())], body: Body::Inline(inl), span });
+            }
+            continue;
+        }
+        // link shapes: `if c{b}` / `if c` (body = terminal inline) / `{b}` / `b`
+        let (pat, body) = if matches!(link.first(), Some(Atom::Ident(x)) if x == "if") {
+            let mut end = link.len();
+            let mut brace_open = None;
+            let mut d = 0i32;
+            for (k, a) in link.iter().enumerate().skip(1) {
+                if let Atom::Sym(sx) = a {
+                    match sx.as_str() {
+                        "{" if d == 0 => {
+                            end = k;
+                            brace_open = Some(k);
+                            break;
+                        }
+                        "(" | "[" => d += 1,
+                        ")" | "]" => d -= 1,
+                        _ => {}
+                    }
+                }
+            }
+            match brace_open {
+                Some(bo) if matches!(link.last(), Some(Atom::Sym(sx)) if sx == "}") => {
+                    (link[1..end].to_vec(), Body::Inline(link[bo + 1..link.len() - 1].to_vec()))
+                }
+                None if rest.is_empty() => {
+                    // terminal `else if c{…}`: the pair was the run-end inline
+                    let b = pending_inline.take().unwrap_or_default();
+                    (link[1..].to_vec(), Body::Inline(b))
+                }
+                _ => (link[1..end].to_vec(), Body::Inline(Vec::new())),
+            }
+        } else if matches!(link.first(), Some(Atom::Sym(sx)) if sx == "{")
+            && matches!(link.last(), Some(Atom::Sym(sx)) if sx == "}")
+        {
+            // `else{…}` brace-glued, keyword-only pattern
+            (Vec::new(), Body::Inline(link[1..link.len() - 1].to_vec()))
+        } else {
+            // `else <expr>` — whole link becomes the arm body
+            (Vec::new(), Body::Inline(link.clone()))
+        };
+        let mut p = vec![Atom::Ident("else".into())];
+        p.extend(pat);
+        arms.push(Arm { pattern: p, body, span });
+    }
+    if arms.len() == 1 {
+        // no else links — restore then-body onto the stmt (fused `if c{a}`
+        // literal-pair shape stays a plain stmt)
+        return Ok(Some(Core::Stmt {
+            head: [vec![Atom::Ident("if".into())], cond].concat(),
+            body: arms.remove(0).body,
+            arms: Vec::new(),
+            span,
+        }));
     }
     Ok(Some(Core::Stmt { head: [vec![Atom::Ident("if".into())], cond].concat(), body: Body::Inline(Vec::new()), arms, span }))
 }
