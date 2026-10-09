@@ -83,10 +83,10 @@ shows the model repairs its own IR from JS runtime errors.
 | 2.1 | JS AST + printer design (estree-style, canonical layout) | design note | ☑ — docs/js-target.md: minimal AST (exprs stay verbatim atom runs), atom→JS mapping (§3), canonical layout (§5) |
 | 2.2 | Core-form → JS lowering table (design doc §2 semantics) | lowering-table doc | ☑ — js-target.md §4; expander gained structured `Core::Stmt{head,body,arms}` (additive; surface text unchanged — identity re-verified on all 26) |
 | 2.3 | JS printer | emits golden corpus | ☑ — crates/lang/src/js.rs: recursive-descent expr rewriter (calls, casts, templates, `is`-patterns, hat-index, throw-ternaries); all 10 golden + 16 real corpus files emit |
-| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ◐ — **30/30 emitted files pass `node --check`**; tsc + diff-vs-hand-renditions pending |
+| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ◐ — **26/26 emitted files pass `node --check`** (re-verified 2026-10-09 after 2.6 layout fixes; cs_02 restored: C-style-for + `[.. x]` spread lowering rows); tsc + diff-vs-hand-renditions pending (deferred until after 2.7 by design) |
 | 2.5 | `ir --expand` / `--ir` debug flags (§6 readability floor) | CLI flags | ☑ — `--expand` shipped in 1.5 (`irc expand` = same view) |
-| 2.6 | Error localization: printer carries source spans so IR ↔ JS line mapping is recoverable | span tracking | ☐ |
-| 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ☐ |
+| 2.6 | Error localization: printer carries source spans so IR ↔ JS line mapping is recoverable | span tracking | ☑ — line spans threaded reader→Core→`js::emit_with_map` (marker post-pass); `SourceMap.js_to_ir/ir_to_js/to_json`; lower errors carry `IR line N`; `irc to-js --map` writes `.js`+`.map.json`; corpus gate: every non-blank JS line maps, output byte-identical with/without map (js-target.md §7) |
+| 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ☐ **— next session starts here** |
 
 > [2] **Diff-against-hand-written:** Phase 0 hand renditions (0.5) are ground
 > truth for printer quality when transpiler output doesn't compile — it
@@ -208,6 +208,14 @@ Each phase exit is a verification act, not a checklist:
   (additive core form; surface text unchanged, identity held), reader R1b
   logical-continuation + `}else{` chain links fixed, JS emitter (2.3)
   emits 30/30 files passing `node --check`.
+- **v3.2** — 2.6 span tracking: `Span{lo,hi}` threaded reader→Core (additive
+  fields; surface text + print identity unchanged, all 41 tests green);
+  JS emitter marker post-pass → `SourceMap` (js↔ir line lookups both ways,
+  arms included; lower errors name their IR line; `to-js --map` sidecar).
+  Corpus emission layout fixed while mapping (first-body-stmt newline was
+  fused pre-2.6); C-style-for + `[.. x]` spread rows restored cs_02 —
+  corpus re-verified 26/26 `node --check`. **Next: 2.7 LLM loop test —
+  the product's central unverified claim.**
 - **Next session (Phase 2 close):** 2.6 span tracking FIRST, then 2.7 LLM
   loop test — the product's central unverified claim is *can the model
   write + repair IR in a loop*, not the one-shot token number. Agreed

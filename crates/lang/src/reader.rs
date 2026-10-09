@@ -10,7 +10,7 @@
 //! - `(`…`)` argument lists nest inside headers/expressions by bracket
 //!   matching within the token run.
 
-use crate::ast::{Atom, Form};
+use crate::ast::{Atom, Form, Span};
 use crate::lexer::{lex, Tok};
 
 #[derive(Debug, Clone)]
@@ -120,6 +120,7 @@ impl Parser {
     #[allow(unused_assignments)]
     fn parse_construct(&mut self, hdr_indent: usize) -> Result<Form, ReadError> {
         let toks: Vec<TokPos> = self.lines[self.pos].toks.clone();
+        let lo = self.lines[self.pos].line_no;
                 let mut inline_body: Option<Vec<Atom>> = None;
         let mut atoms: Vec<Atom> = Vec::new();
         let mut block_children: Option<Vec<Form>> = None;
@@ -127,7 +128,7 @@ impl Parser {
         if toks[0].tok == Tok::Sym("@".into()) {
             let a: Vec<Atom> = toks[1..].iter().cloned().map(to_atom).collect();
             self.pos += 1;
-            return Ok(Form::Directive(a));
+            return Ok(Form::Directive(a, Span::point(lo)));
         }
 
         let mut opaque_cont: Vec<Vec<TokPos>> = Vec::new();
@@ -220,6 +221,11 @@ impl Parser {
             self.pos += 1;
         }
 
+        // header-run extent (last physical line folded into the header);
+        // may span R1 param continuations and R1b infix continuations
+        let hdr_hi = self.lines[self.pos - 1].line_no;
+        let span = Span { lo, hi: hdr_hi };
+
         // ---- R3: brace handling on the gathered header run ----
         // Algorithm (shape-only):
         //   walk top-level (paren==0) `{`…`}` pairs;
@@ -298,6 +304,7 @@ impl Parser {
                     atoms,
                     inline_body: None,
                     children: block_children.unwrap_or_default(),
+                    span,
                 });
             }
         }
@@ -310,7 +317,7 @@ impl Parser {
             }
         }
 
-        Ok(Form::Line { atoms, inline_body, children: block_children.unwrap_or_default() })
+        Ok(Form::Line { atoms, inline_body, children: block_children.unwrap_or_default(), span })
     }
 
     /// children of a construct: lines with indent > hdr_indent; R2 infix-start
@@ -353,11 +360,13 @@ impl Parser {
                     }
                 } else {
                     // infix-start with no sibling and no braces: standalone leaf
+                    let leaf_line = self.lines[self.pos].line_no;
                     self.pos += 1;
                     kids.push(Form::Line {
                         atoms: self.lines[self.pos - 1].toks.iter().cloned().map(to_atom).collect(),
                         inline_body: None,
                         children: Vec::new(),
+                        span: Span::point(leaf_line),
                     });
                 }
                 continue;
@@ -396,6 +405,8 @@ impl Parser {
                 self.pos += 1;
                 consumed += 1;
                 closed = true;
+                let close_line_no = self.lines[self.pos - 1].line_no;
+                let close_span = Span::point(close_line_no);
                 // trailing atoms after the close (`else{`, `as const`,
                 // `.ToFrozenDictionary()`) may REOPEN blocks:
                 // - `else{...}` → else fragment w/ its own block body
@@ -462,10 +473,10 @@ impl Parser {
                                         Some(Atom::Sym(sx)) if sx == "{" && lk + 1 == nlinks => {
                                             let hdr2 = link[..link.len() - 1].to_vec();
                                             let kids2 = self.parse_block_body(hdr_indent, open_line)?.0;
-                                            ekids.push(Form::Line { atoms: hdr2, inline_body: None, children: kids2 });
+                                            ekids.push(Form::Line { atoms: hdr2, inline_body: None, children: kids2, span: close_span });
                                         }
                                         _ => {
-                                            ekids.push(Form::Line { atoms: link, inline_body: None, children: Vec::new() });
+                                            ekids.push(Form::Line { atoms: link, inline_body: None, children: Vec::new(), span: close_span });
                                         }
                                     }
                                 }
@@ -478,6 +489,7 @@ impl Parser {
                                     atoms: trailing.iter().cloned().map(to_atom).collect(),
                                     inline_body: None,
                                     children: Vec::new(),
+                                    span: close_span,
                                 });
                             }
                         }
@@ -520,6 +532,7 @@ impl Parser {
     /// inline body (verbatim); trailing atoms after close stay on the line.
     fn parse_opaque_body(&mut self, toks: Vec<TokPos>, oi: usize) -> Result<Form, ReadError> {
         // balance over header run; may span lines
+        let lo = toks[0].line;
         let mut depth = 0i32;
         for (k, t) in toks.iter().enumerate().skip(oi) {
             match t.sym() {
@@ -535,7 +548,9 @@ impl Parser {
                                 atoms: vec![a],
                                 inline_body: None,
                                 children: vec![],
+                                span: Span::point(t.line),
                             }).collect(),
+                            span: Span { lo, hi: t.line },
                         });
                     }
                 }
@@ -574,7 +589,7 @@ impl Parser {
                 })
             }
         }
-        Ok(Form::Line { atoms, inline_body: None, children: Vec::new() })
+        Ok(Form::Line { atoms, inline_body: None, children: Vec::new(), span: Span { lo, hi: closed.unwrap_or(lo) } })
     }
 }
 
@@ -599,14 +614,14 @@ mod tests {
     fn atoms(f: &Form) -> Vec<Atom> {
         match f {
             Form::Line { atoms, .. } => atoms.clone(),
-            Form::Directive(a) => a.clone(),
+            Form::Directive(a, _) => a.clone(),
         }
     }
 
     fn children(f: &Form) -> Vec<Form> {
         match f {
             Form::Line { children, .. } => children.clone(),
-            Form::Directive(_) => Vec::new(),
+            Form::Directive(..) => Vec::new(),
         }
     }
 
@@ -750,10 +765,13 @@ fn close_like_line(toks: &[TokPos]) -> bool {
 
 fn extends_last_child(last: &mut Form, cont: &[TokPos]) -> bool {
     // R2: infix continuation lines are extra atoms of the previous statement
-    if let Form::Line { atoms, .. } = last {
+    if let Form::Line { atoms, span, .. } = last {
         atoms.extend(cont.iter().cloned().map(to_atom));
+        if let Some(last_tok) = cont.last() {
+            span.hi = span.hi.max(last_tok.line);
+        }
         true
-    } else if let Form::Directive(a) = last {
+    } else if let Form::Directive(a, _) = last {
         // directives don't have infix continuations... except multi-clause
         let _ = a;
         false
@@ -767,6 +785,7 @@ impl Parser {
     /// `{`/`[`-blob opener through its close line into one Str marker atom.
     fn parse_opaque_blob(&mut self) -> Result<Form, ReadError> {
         let toks: Vec<TokPos> = self.lines[self.pos].toks.clone();
+        let lo = toks[0].line;
         // first top-level opener in the header run
         let mut opener = None;
         let mut i = 0;
@@ -801,6 +820,7 @@ impl Parser {
                 }
                 self.pos += 1;
                 let mut atoms: Vec<Atom> = toks[..oi].iter().cloned().map(to_atom).collect();
+                let mut close_line: Option<usize> = None;
                 match inline_close {
                     Some(ci) => {
                         // inline blob: raw = the payload atoms' text
@@ -809,10 +829,13 @@ impl Parser {
                         atoms.extend(toks[ci + 1..].iter().cloned().map(to_atom));
                         // `|`-leader continuation lines (TS union decls) glue
                         // onto the same opaque decl
+                        let mut cont_hi = toks[ci + 1..].last().map(|t| t.line).unwrap_or(lo);
                         while self.pos < self.lines.len() && self.lines[self.pos].toks.first().map(|t| t.sym()).is_some_and(|sy| sy == Some("|")) {
                             atoms.extend(self.lines[self.pos].toks.iter().cloned().map(to_atom));
+                            cont_hi = self.lines[self.pos].line_no;
                             self.pos += 1;
                         }
+                        return Ok(Form::Line { atoms, inline_body: None, children: Vec::new(), span: Span { lo, hi: cont_hi } });
                     }
                     None => {
                         // spans lines: close = first bracket-line at/below hdr
@@ -822,7 +845,6 @@ impl Parser {
                             _ => "}",
                         };
                         let hdr_indent = self.lines[self.pos - 1].indent;
-                        let mut close_line = None;
                         while self.pos < self.lines.len() {
                             let cand = &self.lines[self.pos];
                             let is_close = cand.toks.iter().all(|t| t.sym() == Some(closer_c));
@@ -855,13 +877,13 @@ impl Parser {
                         }
                     }
                 }
-                Ok(Form::Line { atoms, inline_body: None, children: Vec::new() })
+                Ok(Form::Line { atoms, inline_body: None, children: Vec::new(), span: Span { lo, hi: close_line.unwrap_or(lo) } })
             }
             None => {
                 // `opaque` on a line without opener blobs: plain construct
                 let atoms: Vec<Atom> = toks.iter().cloned().map(to_atom).collect();
                 self.pos += 1;
-                Ok(Form::Line { atoms, inline_body: None, children: Vec::new() })
+                Ok(Form::Line { atoms, inline_body: None, children: Vec::new(), span: Span::point(lo) })
             }
         }
     }

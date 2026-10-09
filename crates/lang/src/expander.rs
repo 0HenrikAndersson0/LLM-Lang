@@ -4,12 +4,12 @@
 //! `expander::expand` returns `Err` if a construct classifies to nothing —
 // the expander never emits a non-core form.
 
-use crate::ast::{Atom, Form};
+use crate::ast::{Atom, Form, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Core {
     /// file header: version, ns path, uses
-    Header { version: String, ns: Option<String>, uses: Vec<String> },
+    Header { version: String, ns: Option<String>, uses: Vec<String>, span: Span },
     /// fn or async fn decl
     Fn(FnDecl),
     /// type/class/interface/record/struct decl
@@ -17,14 +17,14 @@ pub enum Core {
     /// top-level or member `var name=expr` / `const var …` / `volatile var …`
     Var(VarDecl),
     /// a plain expression statement
-    Expr(Vec<Atom>),
+    Expr(Vec<Atom>, Span),
     /// structured statement: control-flow head + body and/or arms.
     /// head atoms (e.g. `for x in xs`, `if p`); `else`/`elseif`/`catch`
     /// fragments carry their keyword as head[0].
-    Stmt { head: Vec<Atom>, body: Body, arms: Vec<Arm> },
+    Stmt { head: Vec<Atom>, body: Body, arms: Vec<Arm>, span: Span },
     /// sibling association marker (internal: consumed pre-print)
     #[doc(hidden)]
-    Clause(Vec<Atom>),
+    Clause(Vec<Atom>, Span),
 }
 
 /// one control-flow arm: pattern atoms (`"GET"`, `NotFound`, `Error e`,
@@ -33,6 +33,7 @@ pub enum Core {
 pub struct Arm {
     pub pattern: Vec<Atom>,
     pub body: Body,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +45,8 @@ pub struct FnDecl {
     pub modifiers: Vec<String>, // async, export, ctor
     pub base: Option<String>,   // ctor delegating base call
     pub body: Body,
+    /// header-run span (decl line, incl. param continuations)
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,6 +69,8 @@ pub struct TypeDecl {
     pub bases: Vec<String>,
     pub modifiers: Vec<String>, // export, sealed, abstract
     pub members: Vec<Core>,
+    /// header-run span (decl line)
+    pub span: Span,
 }
 
 impl TypeDecl {
@@ -83,7 +88,13 @@ pub struct VarDecl {
     /// obj-literal body: `var x: T = {` members `}` — the reader models the
     /// `{`…`}` span as block children; empty value + children ⇒ obj-lit
     pub objlit: Option<Vec<Core>>,
+    /// header-run span (decl line)
+    pub span: Span,
 }
+
+/// zero span (synthetic form) — printers ignore spans; the map only needs
+/// spans read off source
+pub const SPAN_SYNTH: Span = Span { lo: 0, hi: 0 };
 
 /// Core-form classification table (the closed set).
 pub fn kind(c: &Core) -> &'static str {
@@ -92,9 +103,9 @@ pub fn kind(c: &Core) -> &'static str {
         Core::Fn(_) => "fn",
         Core::Type(_) => "type",
         Core::Var(_) => "var",
-        Core::Expr(_) => "expr",
+        Core::Expr(..) => "expr",
         Core::Stmt { .. } => "stmt",
-        Core::Clause(_) => "clause",
+        Core::Clause(..) => "clause",
     }
 }
 
@@ -128,47 +139,47 @@ pub fn associate(core: Vec<Core>) -> Vec<Core> {
     let mut out: Vec<Core> = Vec::with_capacity(core.len());
     for c in core {
         match c {
-            Core::Stmt { head, body, arms } => {
+            Core::Stmt { head, body, arms, span } => {
                 let kw = head.first().map(|a| match a {
                     Atom::Ident(x) => x.clone(),
                     _ => String::new(),
                 }).unwrap_or_default();
                 let body = assoc_body(body);
                 if kw == "try" {
-                    out.push(Core::Stmt { head, body, arms });
+                    out.push(Core::Stmt { head, body, arms, span });
                 } else if kw == "match" {
                     let stmts = match &body {
                         Body::Bare(v) | Body::Block(v) => v.clone(),
-                        Body::Inline(v) if !v.is_empty() => vec![Core::Expr(v.clone())],
+                        Body::Inline(v) if !v.is_empty() => vec![Core::Expr(v.clone(), span)],
                         _ => vec![],
                     };
                     let mut all: Vec<Arm> = arms;
                     for st in stmts {
                         match st {
-                            Core::Expr(a) => {
-                                if let Some(arm) = split_match_arm(&a) {
+                            Core::Expr(a, sp) => {
+                                if let Some(arm) = split_match_arm(&a, sp) {
                                     all.push(arm);
                                     continue;
                                 }
-                                all.push(Arm { pattern: Vec::new(), body: Body::Inline(a) });
+                                all.push(Arm { pattern: Vec::new(), body: Body::Inline(a), span: sp });
                             }
-                            Core::Stmt { head: h2, body: b2, arms: a2 } => {
+                            Core::Stmt { head: h2, body: b2, arms: a2, span: sp } => {
                                 if matches!(&h2[0], Atom::Ident(x) if x == "else") {
                                     if let Some(a3) = a2.first() {
-                                        all.push(Arm { pattern: a3.pattern.clone(), body: a3.body.clone() });
+                                        all.push(Arm { pattern: a3.pattern.clone(), body: a3.body.clone(), span: sp });
                                     } else {
-                                        all.push(Arm { pattern: h2[1..].to_vec(), body: b2 });
+                                        all.push(Arm { pattern: h2[1..].to_vec(), body: b2, span: sp });
                                     }
                                 } else {
-                                    all.push(Arm { pattern: Vec::new(), body: Body::Inline(h2) });
+                                    all.push(Arm { pattern: Vec::new(), body: Body::Inline(h2), span: sp });
                                 }
                             }
                             _ => {}
                         }
                     }
-                    out.push(Core::Stmt { head, body: Body::Inline(Vec::new()), arms: all });
+                    out.push(Core::Stmt { head, body: Body::Inline(Vec::new()), arms: all, span });
                 } else {
-                    out.push(Core::Stmt { head, body, arms });
+                    out.push(Core::Stmt { head, body, arms, span });
                 }
             }
             Core::Fn(mut f) => {
@@ -185,10 +196,10 @@ pub fn associate(core: Vec<Core>) -> Vec<Core> {
     fold_clauses(&out)
 }
 
-fn split_match_arm(a: &[Atom]) -> Option<Arm> {
+fn split_match_arm(a: &[Atom], span: Span) -> Option<Arm> {
     // corpus arm shapes: `"LIT" stmt…` (pattern = leading literal run)
     if matches!(&a[0], Atom::Str(_) | Atom::Number(_)) {
-        return Some(Arm { pattern: a[..1].to_vec(), body: Body::Inline(a[1..].to_vec()) });
+        return Some(Arm { pattern: a[..1].to_vec(), body: Body::Inline(a[1..].to_vec()), span });
     }
     None
 }
@@ -224,7 +235,11 @@ fn assoc_list(core: Vec<Core>) -> Vec<Core> {
                     };
                     let mut p = vec![Atom::Ident("else".into())];
                     p.extend(pat);
-                    if_arms.push(Arm { pattern: p, body });
+                    let fspan = match &c {
+                        Core::Stmt { span, .. } => *span,
+                        _ => SPAN_SYNTH,
+                    };
+                    if_arms.push(Arm { pattern: p, body, span: fspan });
                 }
                 continue;
             }
@@ -240,7 +255,7 @@ fn fold_clauses(core: &[Core]) -> Vec<Core> {
     let mut i = 0usize;
     while i < core.len() {
         let c = &core[i];
-        if let Core::Stmt { head, body, arms } = c {
+        if let Core::Stmt { head, body, arms, span } = c {
             let is_try = head.first().map(|a| matches!(a, Atom::Ident(x) if x == "try")).unwrap_or(false);
             if is_try {
                 let mut all: Vec<Arm> = arms.clone();
@@ -254,11 +269,11 @@ fn fold_clauses(core: &[Core]) -> Vec<Core> {
                         _ => String::new(),
                     };
                     if matches!(frag_kw.as_str(), "catch" | "finally") {
-                        if let Core::Stmt { head: h2, body: b2, arms: a2 } = &core[j] {
+                        if let Core::Stmt { head: h2, body: b2, arms: a2, span: fspan } = &core[j] {
                             // keep the clause keyword as pattern head so the
                             // printers can re-emit `catch P` / `finally`
                             if a2.is_empty() {
-                                all.push(Arm { pattern: h2.clone(), body: b2.clone() });
+                                all.push(Arm { pattern: h2.clone(), body: b2.clone(), span: *fspan });
                             } else {
                                 for mut arm in a2.iter().cloned() {
                                     let mut pat = h2.clone();
@@ -273,7 +288,7 @@ fn fold_clauses(core: &[Core]) -> Vec<Core> {
                     }
                     break;
                 }
-                out.push(Core::Stmt { head: head.clone(), body: body.clone(), arms: all });
+                out.push(Core::Stmt { head: head.clone(), body: body.clone(), arms: all, span: *span });
                 i = j;
                 continue;
             }
@@ -286,19 +301,23 @@ fn fold_clauses(core: &[Core]) -> Vec<Core> {
 
 fn expand_form(f: &Form) -> Result<Core, ExpandError> {
     match f {
-        Form::Directive(_) => {
+        Form::Directive(..) => {
             let atoms = match f {
-                Form::Directive(a) => a.clone(),
+                Form::Directive(a, _) => a.clone(),
                 _ => unreachable!(),
             };
-            Ok(expand_directives(&atoms)?)
+            let span = match f {
+                Form::Directive(_, sp) => *sp,
+                _ => unreachable!(),
+            };
+            Ok(expand_directives(&atoms, span)?)
         }
         Form::Line { .. } => expand_line(f),
     }
 }
 
 /// Split a directive atom run: `1 @ ns X [ @ use Y ]`
-fn expand_directives(atoms: &[Atom]) -> Result<Core, ExpandError> {
+fn expand_directives(atoms: &[Atom], span: Span) -> Result<Core, ExpandError> {
     let mut version = String::new();
     let mut ns = None;
     let mut uses = Vec::new();
@@ -333,7 +352,7 @@ fn expand_directives(atoms: &[Atom]) -> Result<Core, ExpandError> {
             }
         }
     }
-    Ok(Core::Header { version, ns, uses })
+    Ok(Core::Header { version, ns, uses, span })
 }
 
 fn dotted(atoms: &[Atom]) -> String {
@@ -377,17 +396,18 @@ pub fn spaced(atoms: &[Atom]) -> String {
 }
 
 fn expand_line(f: &Form) -> Result<Core, ExpandError> {
-    let (atoms, inline, children) = match f {
-        Form::Line { atoms, inline_body, children } => (atoms.clone(), inline_body.clone(), children.clone()),
+    let (atoms, inline, children, span) = match f {
+        Form::Line { atoms, inline_body, children, span } =>
+            (atoms.clone(), inline_body.clone(), children.clone(), *span),
         _ => unreachable!(),
     };
     if atoms.is_empty() {
-        return Ok(Core::Expr(Vec::new()));
+        return Ok(Core::Expr(Vec::new(), span));
     }
     let kw = match &atoms[0] {
         Atom::Ident(id) => id.clone(),
         Atom::Sym(s) if s == "@" => {
-            return Ok(expand_directives(&atoms)?);
+            return Ok(expand_directives(&atoms, span)?);
         }
         // `}else…` close-line: strip the leading `}` and classify the rest
         // as the else fragment (the reader linked close+else on one canon
@@ -396,11 +416,11 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             let rest = &atoms[1..];
             if rest.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false) {
                 let inner_atoms: Vec<Atom> = rest.to_vec();
-                return expand_stmt(&inner_atoms, inline, children);
+                return expand_stmt(&inner_atoms, inline, children, span);
             }
-            return Ok(Core::Expr(atoms));
+            return Ok(Core::Expr(atoms, span));
         }
-        other => return Ok(Core::Expr({ let _ = other; atoms })),
+        other => return Ok(Core::Expr({ let _ = other; atoms }, span)),
     };
     match kw.as_str() {
         "fn" | "async" => {
@@ -477,7 +497,7 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 if let Some(raw) = raw {
                     return Ok(Core::Fn(FnDecl {
                         name, receiver, params: params_v, ret, modifiers: mods,
-                        base: None, body: Body::Opaque(raw),
+                        base: None, body: Body::Opaque(raw), span,
                     }));
                 }
             }
@@ -486,12 +506,12 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 (None, c) if !c.is_empty() => Body::Bare(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?),
                 (None, _) => Body::Inline(Vec::new()),
                 (Some(b), c) => {
-                    let mut v = vec![Core::Expr(b.clone())];
+                    let mut v = vec![Core::Expr(b.clone(), span)];
                     v.extend(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?);
                     Body::Block(v)
                 }
             };
-            Ok(Core::Fn(FnDecl { name, receiver, params: params_v, ret, modifiers: mods, base: None, body }))
+            Ok(Core::Fn(FnDecl { name, receiver, params: params_v, ret, modifiers: mods, base: None, body, span }))
         }
         "type" => {
             let mut i = 1usize;
@@ -552,7 +572,7 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 let mc = expand_member(c)?;
                 members.push(mc);
             }
-            Ok(Core::Type(TypeDecl { name, kind, primary, bases, modifiers, members }))
+            Ok(Core::Type(TypeDecl { name, kind, primary, bases, modifiers, members, span }))
         }
         "var" | "const" | "volatile" | "export" => {
             let mut mods = Vec::new();
@@ -567,12 +587,12 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                             2
                         } else {
                             if atoms.len() > 1 && matches!(atoms.get(1), Some(Atom::Sym(_))) {
-                                return Ok(Core::Expr(atoms));
+                                return Ok(Core::Expr(atoms, span));
                             }
                             1
                         }
                     }
-                    _ => return Ok(Core::Expr(atoms)),
+                    _ => return Ok(Core::Expr(atoms, span)),
                 }
             } else {
                 if kw != "var" {
@@ -616,17 +636,17 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             } else {
                 None
             };
-            Ok(Core::Var(VarDecl { name, ty, value, modifiers: mods, objlit }))
+            Ok(Core::Var(VarDecl { name, ty, value, modifiers: mods, objlit, span }))
         }
         _ => {
             let is_flow = matches!(kw.as_str(), "if" | "for" | "while" | "lock" | "match" | "try" | "else" | "catch" | "finally");
             let has_else = atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "else"));
             if is_flow {
-                return expand_stmt(&atoms, inline, children);
+                return expand_stmt(&atoms, inline, children, span);
             }
             if has_else {
                 // brace-glued compound head from canon: `if p{a=1}else …`
-                let st = split_glued_if(&atoms, inline.clone(), children.clone())?;
+                let st = split_glued_if(&atoms, inline.clone(), children.clone(), span)?;
                 if let Some(st) = st {
                     return Ok(st);
                 }
@@ -637,9 +657,9 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             {
                 let head_atoms = atoms.clone();
                 let arms = split_switch_arms(&children)?;
-                return Ok(Core::Stmt { head: head_atoms, body: Body::Inline(Vec::new()), arms });
+                return Ok(Core::Stmt { head: head_atoms, body: Body::Inline(Vec::new()), arms, span });
             }
-            Ok(Core::Expr(atoms))
+            Ok(Core::Expr(atoms, span))
         }
     }
 }
@@ -650,10 +670,11 @@ fn expand_stmt(
     atoms: &[Atom],
     inline: Option<Vec<Atom>>,
     children: Vec<Form>,
+    span: Span,
 ) -> Result<Core, ExpandError> {
     let kw = match &atoms[0] {
         Atom::Ident(id) => id.clone(),
-        _ => return Ok(Core::Expr(atoms.to_vec())),
+        _ => return Ok(Core::Expr(atoms.to_vec(), span)),
     };
     if matches!(kw.as_str(), "try" | "catch" | "finally" | "else") {
         let mut body_atoms: Vec<Atom> = Vec::new();
@@ -729,7 +750,7 @@ fn expand_stmt(
             (Some(b), c) if c.is_empty() => Body::Inline(b.clone()),
             (None, c) if !c.is_empty() => Body::Bare(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?),
             (Some(b), c) => {
-                let mut v = vec![Core::Expr(b.clone())];
+                let mut v = vec![Core::Expr(b.clone(), span)];
                 v.extend(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?);
                 Body::Block(v)
             }
@@ -738,16 +759,16 @@ fn expand_stmt(
         let head_atoms = vec![Atom::Ident(kw)];
         // normalize: an empty-pattern arm IS the clause body (try/finally)
         if pat.is_empty() {
-            return Ok(Core::Stmt { head: head_atoms, body, arms: Vec::new() });
+            return Ok(Core::Stmt { head: head_atoms, body, arms: Vec::new(), span });
         }
-        let arms = vec![Arm { pattern: pat, body }];
-        return Ok(Core::Stmt { head: head_atoms, body: Body::Inline(Vec::new()), arms });
+        let arms = vec![Arm { pattern: pat, body, span }];
+        return Ok(Core::Stmt { head: head_atoms, body: Body::Inline(Vec::new()), arms, span });
     }
     let body = match (&inline, &children) {
         (Some(b), c) if c.is_empty() => Body::Inline(b.clone()),
         (None, c) if !c.is_empty() => Body::Bare(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?),
         (Some(b), c) => {
-            let mut v = vec![Core::Expr(b.clone())];
+            let mut v = vec![Core::Expr(b.clone(), span)];
             v.extend(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?);
             Body::Block(v)
         }
@@ -760,7 +781,7 @@ fn expand_stmt(
         Body::Bare(v) | Body::Block(v) => {
             let mut kept: Vec<Core> = Vec::new();
             for st in v.drain(..) {
-                if let Core::Stmt { head: h2, body: b2, arms: a2 } = st {
+                if let Core::Stmt { head: h2, body: b2, arms: a2, span: fspan } = st {
                     let h0 = h2.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false);
                     if h0 {
                         let (pat, bod) = match a2.first() {
@@ -769,10 +790,10 @@ fn expand_stmt(
                         };
                         let mut p = vec![Atom::Ident("else".into())];
                         p.extend(pat);
-                        arms.push(Arm { pattern: p, body: bod });
+                        arms.push(Arm { pattern: p, body: bod, span: fspan });
                         continue;
                     }
-                    kept.push(Core::Stmt { head: h2, body: b2, arms: a2 });
+                    kept.push(Core::Stmt { head: h2, body: b2, arms: a2, span: fspan });
                 } else {
                     kept.push(st);
                 }
@@ -781,7 +802,7 @@ fn expand_stmt(
         }
         _ => {}
     }
-    Ok(Core::Stmt { head: atoms.to_vec(), body, arms })
+    Ok(Core::Stmt { head: atoms.to_vec(), body, arms, span })
 }
 
 /// Canon shape `if c{then…}else{…}` — reader keeps `{then}` + `else` fused in
@@ -790,6 +811,7 @@ fn split_glued_if(
     atoms: &[Atom],
     inline: Option<Vec<Atom>>,
     _children: Vec<Form>,
+    span: Span,
 ) -> Result<Option<Core>, ExpandError> {
     let mut paren = 0i32;
     let mut open = None;
@@ -811,26 +833,26 @@ fn split_glued_if(
     let cond = atoms[1..oi].to_vec();
     let then_body = Body::Inline(atoms[oi + 1..ci].to_vec());
     let after = &atoms[ci + 1..];
-    let mut arms = vec![Arm { pattern: Vec::new(), body: then_body }];
+    let mut arms = vec![Arm { pattern: Vec::new(), body: then_body, span }];
     if after.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false) {
         let pat = after[1..].to_vec();
-        arms.push(Arm { pattern: pat, body: Body::Inline(inline.unwrap_or_default()) });
+        arms.push(Arm { pattern: pat, body: Body::Inline(inline.unwrap_or_default()), span });
     }
-    Ok(Some(Core::Stmt { head: [vec![Atom::Ident("if".into())], cond].concat(), body: Body::Inline(Vec::new()), arms }))
+    Ok(Some(Core::Stmt { head: [vec![Atom::Ident("if".into())], cond].concat(), body: Body::Inline(Vec::new()), arms, span }))
 }
 
 /// `X switch{}` arms (`ICollection<T> items new(items.Count)` / `_ x` / `+1 f()`)
 fn split_switch_arms(children: &[Form]) -> Result<Vec<Arm>, ExpandError> {
     let mut arms = Vec::new();
     for c in children {
-        let atoms = match c {
-            Form::Line { atoms, inline_body, .. } => {
+        let (atoms, child_span) = match c {
+            Form::Line { atoms, inline_body, span, .. } => {
                 match inline_body {
                     Some(b) if !b.is_empty() => {
                         let _ = (atoms, b);
                         continue;
                     }
-                    _ => atoms.clone(),
+                    _ => (atoms.clone(), *span),
                 }
             }
             _ => continue,
@@ -840,7 +862,7 @@ fn split_switch_arms(children: &[Form]) -> Result<Vec<Arm>, ExpandError> {
         }
         // `_ …` / `else …` default arm
         if matches!(&atoms[0], Atom::Ident(x) if x == "_" || x == "else") {
-            arms.push(Arm { pattern: vec![Atom::Sym("else".into())], body: Body::Inline(atoms[1..].to_vec()) });
+            arms.push(Arm { pattern: vec![Atom::Sym("else".into())], body: Body::Inline(atoms[1..].to_vec()), span: child_span });
             continue;
         }
         // pattern = dotted/type/member run (`ICollection<T>`, `PP.BeforeForm`,
@@ -897,18 +919,19 @@ fn split_switch_arms(children: &[Form]) -> Result<Vec<Arm>, ExpandError> {
         } else {
             (atoms[..k.min(atoms.len())].to_vec(), Body::Inline(Vec::new()))
         };
-        arms.push(Arm { pattern: pat, body });
+        arms.push(Arm { pattern: pat, body, span: child_span });
     }
     Ok(arms)
 }
 
 fn expand_member(f: &Form) -> Result<Core, ExpandError> {
-    let (atoms, inline, children) = match f {
-        Form::Line { atoms, inline_body, children } => (atoms.clone(), inline_body.clone(), children.clone()),
+    let (atoms, inline, children, span) = match f {
+        Form::Line { atoms, inline_body, children, span } =>
+            (atoms.clone(), inline_body.clone(), children.clone(), *span),
         _ => unreachable!(),
     };
     if atoms.is_empty() {
-        return Ok(Core::Expr(Vec::new()));
+        return Ok(Core::Expr(Vec::new(), span));
     }
     let kw = match &atoms[0] {
         Atom::Ident(id) => id.clone(),
@@ -923,9 +946,9 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
             };
             let mut members: Vec<Core> = Vec::new();
             for c in &children {
-                let (ca, _, _) = match c {
-                    crate::ast::Form::Line { atoms, inline_body, children } =>
-                        (atoms.clone(), inline_body.clone(), children.clone()),
+                let (ca, cspan) = match c {
+                    crate::ast::Form::Line { atoms, span, .. } =>
+                        (atoms.clone(), *span),
                     _ => continue,
                 };
                 if ca.is_empty() {
@@ -949,6 +972,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                     value: None,
                     modifiers: vec![],
                     objlit: None,
+                    span: cspan,
                 }));
             }
             Ok(Core::Type(TypeDecl {
@@ -958,6 +982,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 bases: vec![],
                 modifiers: vec![],
                 members,
+                span,
             }))
         }
         "ctor" => {
@@ -988,6 +1013,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 modifiers: vec!["ctor".into()],
                 base,
                 body,
+                span,
             }))
         }
         "opaque" if matches!(atoms.get(1), Some(Atom::Ident(k)) if matches!(k.as_str(), "var" | "const")) => {
@@ -1015,7 +1041,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 Some(Atom::Sym(s)) if s == "=" => Some(atoms[i + 1..].to_vec()),
                 _ => None,
             };
-            Ok(Core::Var(VarDecl { name, ty, value, modifiers: vec!["opaque".into()], objlit: None }))
+            Ok(Core::Var(VarDecl { name, ty, value, modifiers: vec!["opaque".into()], objlit: None, span }))
         }
         "opaque" if matches!(atoms.get(1), Some(Atom::Ident(k)) if matches!(k.as_str(), "struct" | "record" | "interface" | "type")) => {
             let name = match atoms.get(2) {
@@ -1035,10 +1061,11 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                     value: None,
                     modifiers: vec![],
                     objlit: None,
+                    span: SPAN_SYNTH, // synthesized from param list, not source lines
                 }));
             }
             let _ = off;
-            Ok(Core::Type(TypeDecl { name, kind, primary: None, bases: vec![], modifiers: vec![], members }))
+            Ok(Core::Type(TypeDecl { name, kind, primary: None, bases: vec![], modifiers: vec![], members, span }))
         }
         _ => {
             // field `Type name[= x]` / property `Type name => expr`
@@ -1061,7 +1088,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 Some(Atom::Sym(s)) if s == "=>" => (Some(atoms[split + 1..].to_vec()), true),
                 _ => (None, false),
             };
-            Ok(Core::Var(VarDecl { name, ty: ty_str, value, modifiers: if is_prop { vec!["computed".into()] } else { vec![] }, objlit: None }))
+            Ok(Core::Var(VarDecl { name, ty: ty_str, value, modifiers: if is_prop { vec!["computed".into()] } else { vec![] }, objlit: None, span }))
         }
     }
 }

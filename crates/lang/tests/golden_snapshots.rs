@@ -3,26 +3,13 @@
 //! core forms, and print back to a stable canonical tree (print→print is
 //! identity). File-not-in-tree runs are tolerated as skipped.
 
+mod common;
+
 use ir_lang::expander;
 use ir_lang::printer;
 
 fn corpus_files() -> Vec<(std::path::PathBuf, String)> {
-    // integration tests run from crate dir; corpus is 2 levels up
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench");
-    let mut out = Vec::new();
-    for root in [base.join("variants/d"), base.join("corpus/real/ir")] {
-        let Ok(entries) = std::fs::read_dir(&root) else {
-            continue;
-        };
-        for e in entries.flatten() {
-            let p = e.path();
-            if p.extension().map(|x| x == "ir").unwrap_or(false) {
-                let src = std::fs::read_to_string(&p).unwrap();
-                out.push((p, src));
-            }
-        }
-    }
-    out
+    common::corpus_files()
 }
 
 #[test]

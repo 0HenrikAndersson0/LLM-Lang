@@ -7,14 +7,14 @@
 //! 4. Single-expression bodies fuse onto the header line.
 
 use crate::ast::Atom;
-use crate::expander::{Arm, Body, Core, FnDecl, TypeDecl, VarDecl};
+use crate::expander::{Arm, Body, Core, FnDecl, TypeDecl, VarDecl, SPAN_SYNTH};
 
 pub fn print(core: &[Core]) -> String {
     let mut out = String::new();
     // header first (canon: directives one per line)
     let mut seen_header = false;
     for c in core {
-        if let Core::Header { version, ns, uses } = c {
+        if let Core::Header { version, ns, uses, .. } = c {
             out.push_str(&print_header(version, ns.clone(), uses.clone()));
             out.push('\n');
             seen_header = true;
@@ -65,9 +65,9 @@ fn print_core(c: &Core, level: usize) -> String {
         Core::Fn(f) => print_fn(f, level),
         Core::Type(t) => print_type(t, level),
         Core::Var(v) => print_var(v, level),
-        Core::Expr(atoms) => format!("{}{}", indent(level), render_atoms(atoms)),
-        Core::Stmt { head, body, arms } => print_stmt(head, body, arms, level),
-        Core::Clause(_) => String::new(), // associated into the owner pre-print
+        Core::Expr(atoms, _) => format!("{}{}", indent(level), render_atoms(atoms)),
+        Core::Stmt { head, body, arms, .. } => print_stmt(head, body, arms, level),
+        Core::Clause(..) => String::new(), // associated into the owner pre-print
     }
 }
 
@@ -85,7 +85,7 @@ fn print_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> String 
             && (arms.len() == 1 || (arms.is_empty() && !matches!(body, Body::Inline(b) if b.is_empty())))
         {
             // normalized clause: body lives in `body`, pattern empty-or-arms[0]
-            let synthesized = Arm { pattern: Vec::new(), body: body.clone() };
+            let synthesized = Arm { pattern: Vec::new(), body: body.clone(), span: SPAN_SYNTH };
             let a: &Arm = if arms.len() == 1 { &arms[0] } else { &synthesized };
             match &a.body {
                 Body::Inline(b) if !b.is_empty() => {
@@ -225,7 +225,7 @@ fn print_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> String 
             match b {
                 Body::Inline(x) if !x.is_empty() => {
                     s.push('\n');
-                    s.push_str(&print_core(&Core::Expr(x.clone()), level + 1));
+                    s.push_str(&print_core(&Core::Expr(x.clone(), SPAN_SYNTH), level + 1));
                     s.push('\n');
                     s.push_str(&ind);
                 }
@@ -533,7 +533,7 @@ pub fn print_debug(core: &[Core]) -> String {
 fn debug_core(c: &Core, level: usize) -> String {
     let ind = indent(level);
     match c {
-        Core::Header { version, ns, uses } => {
+        Core::Header { version, ns, uses, .. } => {
             let mut s = format!("{ind}(header");
             if !version.is_empty() {
                 s.push_str(&format!(" @{version}"));
@@ -550,9 +550,9 @@ fn debug_core(c: &Core, level: usize) -> String {
         Core::Fn(f) => debug_fn(f, level),
         Core::Type(t) => debug_type(t, level),
         Core::Var(v) => debug_var(v, level),
-        Core::Expr(atoms) if atoms.is_empty() => format!("{ind}(expr)"),
-        Core::Expr(atoms) => format!("{ind}(expr {})", debug_atoms(atoms)),
-        Core::Stmt { head, body, arms } => {
+        Core::Expr(atoms, _) if atoms.is_empty() => format!("{ind}(expr)"),
+        Core::Expr(atoms, _) => format!("{ind}(expr {})", debug_atoms(atoms)),
+        Core::Stmt { head, body, arms, .. } => {
             let mut s = format!("{ind}(stmt {} (body {})", debug_atoms(head), debug_body_short(body));
             for a in arms {
                 s.push_str(&format!(" (arm {} {})", debug_atoms(&a.pattern), debug_body_short(&a.body)));
@@ -560,7 +560,7 @@ fn debug_core(c: &Core, level: usize) -> String {
             s.push(')');
             s
         }
-        Core::Clause(a) => format!("{ind}(clause {})", debug_atoms(a)),
+        Core::Clause(a, _) => format!("{ind}(clause {})", debug_atoms(a)),
     }
 }
 

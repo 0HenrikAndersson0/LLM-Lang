@@ -1,35 +1,264 @@
 //! JS emitter (Phase 2): core forms → modern ES modules.
 //! Design: docs/js-target.md §4 lowering table. Expressions stay verbatim
 //! atom runs (Route 1 infix ≈ JS infix); structure lives in Core/Stmt.
+//!
+//! Span tracking (2.6): every emitted core form is wrapped in invisible
+//! `M~irLo..irHiM … M` markers (2.6 span threads); `extract_map` walks the
+//! marked text once, strips the markers, and produces an IR↔JS line map
+//! (js-target.md §7). `emit` output is byte-identical with or without map.
 
-use crate::ast::Atom;
+use crate::ast::{Atom, Span};
 use crate::expander::{Arm, Body, Core, FnDecl, TypeDecl, VarDecl};
 
+#[derive(Debug)]
 pub struct JsLowerError {
     pub msg: String,
+    /// IR line the failed form came from (None = synthetic/dispatch-level)
+    pub ir_line: Option<usize>,
+}
+
+impl JsLowerError {
+    fn if_no_ir(mut self, line: usize) -> JsLowerError {
+        if self.ir_line.is_none() && line > 0 {
+            self.ir_line = Some(line);
+        }
+        self
+    }
 }
 
 impl std::fmt::Display for JsLowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "js: {}", self.msg)
+        match self.ir_line {
+            Some(l) => write!(f, "js: {} (IR line {l})", self.msg),
+            None => write!(f, "js: {}", self.msg),
+        }
     }
 }
 
+// ---- span tracking (PLAN 2.6) ----
+
+/// open marker: `\u{1}~irLo..irHi\u{1}`; close marker: `\u{2}` (distinct
+/// control chars — no ambiguity between the span-header close and a region
+/// close; IR atom text is never control-char-bearing)
+const MARK: char = '\u{1}';
+const MARK2: char = '\u{2}';
+
+fn mark(seg: &str, span: Span) -> String {
+    let mut s = format!("{M}~{lo}..{hi}{M}", M = MARK, lo = span.lo, hi = span.hi);
+    if let Some(core) = seg.strip_suffix('\n') {
+        // close the region on its last CONTENT line, not the next line start
+        s.push_str(core);
+        s.push(MARK2);
+        s.push('\n');
+    } else {
+        s.push_str(seg);
+        s.push(MARK2);
+    }
+    s
+}
+
+/// every emitted Core form carries its IR span — single dispatch point
+fn core_span(c: &Core) -> Span {
+    match c {
+        Core::Header { span, .. }
+        | Core::Stmt { span, .. }
+        | Core::Expr(_, span)
+        | Core::Clause(_, span) => *span,
+        Core::Fn(f) => f.span,
+        Core::Type(t) => t.span,
+        Core::Var(v) => v.span,
+    }
+}
+
+/// one mapping: emitted JS lines [js_lo..js_hi] ↔ IR lines [ir_lo..ir_hi]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapEntry {
+    pub js_lo: usize,
+    pub js_hi: usize,
+    pub ir_lo: usize,
+    pub ir_hi: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SourceMap {
+    pub entries: Vec<MapEntry>,
+}
+
+impl SourceMap {
+    /// JS line → IR span. Innermost (latest-starting) entry containing the
+    /// line wins; unmapped lines (blank, `}`-only) fall back to the nearest
+    /// preceding entry — stack traces anchor to the IR statement above them.
+    pub fn js_to_ir(&self, js_line: usize) -> Option<Span> {
+        let mut best: Option<&MapEntry> = None;
+        for e in &self.entries {
+            if e.js_lo <= js_line && js_line <= e.js_hi {
+                if best.map(|b| e.js_lo > b.js_lo).unwrap_or(true) {
+                    best = Some(e);
+                }
+            }
+        }
+        if let Some(e) = best {
+            return Some(Span { lo: e.ir_lo, hi: e.ir_hi });
+        }
+        self.entries
+            .iter()
+            .rev()
+            .find(|e| e.js_lo <= js_line)
+            .map(|e| Span { lo: e.ir_lo, hi: e.ir_hi })
+    }
+
+    /// IR line → emitted JS line range (first innermost entry covering it)
+    pub fn ir_to_js(&self, ir_line: usize) -> Option<(usize, usize)> {
+        let mut best: Option<&MapEntry> = None;
+        for e in &self.entries {
+            if e.ir_lo <= ir_line && ir_line <= e.ir_hi {
+                if best.map(|b| e.ir_lo > b.ir_lo).unwrap_or(true) {
+                    best = Some(e);
+                }
+            }
+        }
+        best.map(|e| (e.js_lo, e.js_hi))
+    }
+
+    /// sidecar JSON (js-target.md §7): `{"source":…,"mappings":[[jsLo,jsHi,irLo,irHi],…]}`
+    pub fn to_json(&self, source: &str) -> String {
+        let mut s = String::from("{\"source\":");
+        s.push_str(&serde_json_string(source));
+        s.push_str(",\"mappings\":[");
+        let mut sorted = self.entries.clone();
+        sorted.sort_by_key(|e| (e.js_lo, e.js_hi));
+        for (i, e) in sorted.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            s.push_str(&format!(
+                "[{},{},{},{}]",
+                e.js_lo, e.js_hi, e.ir_lo, e.ir_hi
+            ));
+        }
+        s.push_str("]}");
+        s
+    }
+}
+
+fn serde_json_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' | '\\' => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// walk marked text once: strip markers, emit entries with JS line numbers
+fn extract_map(src: &str) -> (String, SourceMap) {
+    let chars: Vec<char> = src.chars().collect();
+    let mut out = String::with_capacity(src.len());
+    let mut entries: Vec<MapEntry> = Vec::new();
+    let mut stack: Vec<(Span, usize)> = Vec::new();
+    let mut line = 1usize;
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == MARK {
+            if chars.get(i + 1) == Some(&'~') {
+                if let Some((sp, ni)) = parse_marker_span(&chars, i + 2) {
+                    stack.push((sp, line));
+                    i = ni + 2; // past the trailing MARK
+                    continue;
+                }
+            }
+            // stray/malformed marker: passthrough (defensive)
+            out.push(chars[i]);
+            i += 1;
+        } else if chars[i] == MARK2 {
+            if let Some((sp, open_line)) = stack.pop() {
+                entries.push(MapEntry {
+                    js_lo: open_line,
+                    js_hi: line,
+                    ir_lo: sp.lo,
+                    ir_hi: sp.hi,
+                });
+            }
+            i += 1;
+            continue;
+        } else {
+            if chars[i] == '\n' {
+                line += 1;
+            }
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    // unclosed regions (emitter bug guard): flush at the last line
+    while let Some((sp, open_line)) = stack.pop() {
+        entries.push(MapEntry {
+            js_lo: open_line,
+            js_hi: line.saturating_sub(1).max(open_line),
+            ir_lo: sp.lo,
+            ir_hi: sp.hi,
+        });
+    }
+    (out, SourceMap { entries })
+}
+
+/// parse `<digits>..<digits>` starting at j; returns (Span, index of last digit)
+fn parse_marker_span(chars: &[char], j: usize) -> Option<(Span, usize)> {
+    let (lo, a) = parse_usize(chars, j)?;
+    if !chars.get(a).is_some_and(|c| *c == '.') || !chars.get(a + 1).is_some_and(|c| *c == '.') {
+        return None;
+    }
+    let (hi, b) = parse_usize(chars, a + 2)?;
+    Some((Span { lo, hi }, b - 1))
+}
+
+/// parse digits at j → (value, index AFTER the digits)
+fn parse_usize(chars: &[char], j: usize) -> Option<(usize, usize)> {
+    let mut k = j;
+    let mut v = 0usize;
+    while k < chars.len() && chars[k].is_ascii_digit() {
+        v = v * 10 + (chars[k] as usize - '0' as usize);
+        k += 1;
+    }
+    if k == j {
+        return None;
+    }
+    Some((v, k))
+}
+
 pub fn emit(core: &[Core]) -> Result<String, JsLowerError> {
+    emit_with_map(core).map(|(s, _)| s)
+}
+
+/// emit + span map (PLAN 2.6): output text is identical to `emit`
+pub fn emit_with_map(core: &[Core]) -> Result<(String, SourceMap), JsLowerError> {
+    let marked = emit_marked(core)?;
+    Ok(extract_map(&marked))
+}
+
+fn emit_marked(core: &[Core]) -> Result<String, JsLowerError> {
     let mut out = String::new();
     let mut first_item = true;
     for c in core {
         match c {
-            Core::Header { ns, uses, .. } => {
+            Core::Header { ns, uses, span, .. } => {
                 // @ns → dropped; @use → side-effect import (names unknown in v0)
                 let _ = ns;
                 if !uses.is_empty() && !first_item {
                     out.push('\n');
                 }
+                let mut block = String::new();
                 for u in uses {
-                    out.push_str(&format!("import \"./{}.js\";\n", u_to_path(u)));
+                    block.push_str(&format!("import \"./{}.js\";\n", u_to_path(u)));
                 }
                 if !uses.is_empty() {
+                    out.push_str(&mark(&block, *span));
                     out.push('\n');
                 }
             }
@@ -51,12 +280,20 @@ fn u_to_path(u: &str) -> String {
 }
 
 fn emit_core(c: &Core, level: usize) -> Result<String, JsLowerError> {
+    let span = core_span(c);
+    match emit_core_raw(c, level) {
+        Ok(s) => Ok(mark(&s, span)),
+        Err(e) => Err(e.if_no_ir(span.lo)),
+    }
+}
+
+fn emit_core_raw(c: &Core, level: usize) -> Result<String, JsLowerError> {
     match c {
-        Core::Header { .. } => Ok(String::new()), // handled in emit()
+        Core::Header { .. } => Ok(String::new()), // handled in emit_marked()
         Core::Fn(f) => emit_fn(f, level, false),
         Core::Type(t) => emit_type(t, level),
         Core::Var(v) => emit_var(v, level, false),
-        Core::Expr(atoms) => {
+        Core::Expr(atoms, _) => {
             // `opaque type …` = TS-only surface (fidelity §6.6): drop in JS
             if atoms.first().map(|a| matches!(a, Atom::Ident(x) if x == "opaque")).unwrap_or(false)
                 && atoms.get(1).map(|a| matches!(a, Atom::Ident(x) if x == "type")).unwrap_or(false)
@@ -70,8 +307,8 @@ fn emit_core(c: &Core, level: usize) -> Result<String, JsLowerError> {
             }
             Ok(format!("{}{};", indent(level), txt))
         }
-        Core::Stmt { head, body, arms } => emit_stmt(head, body, arms, level),
-        Core::Clause(_) => Ok(String::new()), // associated into owner
+        Core::Stmt { head, body, arms, .. } => emit_stmt(head, body, arms, level),
+        Core::Clause(..) => Ok(String::new()), // associated into owner
     }
 }
 
@@ -128,7 +365,7 @@ fn fn_awaits(b: &Body) -> bool {
     match b {
         Body::Inline(a) => a.iter().any(|x| matches!(x, Atom::Ident(i) if i == "await")),
         Body::Bare(v) | Body::Block(v) => v.iter().any(|c| match c {
-            Core::Expr(a) => a.iter().any(|x| matches!(x, Atom::Ident(i) if i == "await")),
+            Core::Expr(a, _) => a.iter().any(|x| matches!(x, Atom::Ident(i) if i == "await")),
             Core::Stmt { head, body, .. } => {
                 head.iter().any(|x| matches!(x, Atom::Ident(i) if i == "await")) || fn_awaits(body)
             }
@@ -147,7 +384,7 @@ fn emit_body(b: &Body, level: usize) -> Result<String, JsLowerError> {
             Ok(format!("{{ return {}; }}", expr(atoms)))
         }
         Body::Bare(stmts) | Body::Block(stmts) => {
-            let mut s = String::from("{");
+            let mut s = String::from("{\n");
             for st in stmts {
                 s.push_str(&emit_core(st, level + 1)?);
                 s.push('\n');
@@ -198,6 +435,14 @@ fn emit_type(t: &TypeDecl, level: usize) -> Result<String, JsLowerError> {
 }
 
 fn emit_member(c: &Core, level: usize) -> Result<String, JsLowerError> {
+    let span = core_span(c);
+    match emit_member_raw(c, level) {
+        Ok(s) => Ok(mark(&s, span)),
+        Err(e) => Err(e.if_no_ir(span.lo)),
+    }
+}
+
+fn emit_member_raw(c: &Core, level: usize) -> Result<String, JsLowerError> {
     match c {
         Core::Var(v) if v.modifiers.iter().any(|m| m == "computed") => {
             // `Type name => expr` — getter
@@ -264,7 +509,7 @@ fn emit_var(v: &VarDecl, level: usize, _member: bool) -> Result<String, JsLowerE
             let mut s = format!("{}{} {} = {{", ind, kw, v.name);
             let mut first = true;
             for it in items {
-                if let Core::Expr(atoms) = it {
+                if let Core::Expr(atoms, _) = it {
                     if atoms.is_empty() {
                         continue;
                     }
@@ -291,9 +536,9 @@ fn emit_body_ctor(b: &Body, level: usize, is_ctor: bool, base: &Option<String>) 
     if !is_ctor {
         return emit_body(b, level);
     }
-    let mut s = String::from("{");
+    let mut s = String::from("{\n");
     if let Some(base) = base {
-        s.push_str(&format!("\n{}super({});", indent(level + 1), base));
+        s.push_str(&format!("{}super({});\n", indent(level + 1), base));
     }
     match b {
         Body::Inline(atoms) if !atoms.is_empty() => {
@@ -383,7 +628,7 @@ fn emit_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<S
         "catch" | "finally" | "else" => {
             // orphan fragment — the emitter flattens try/catch chains; a
             // fragment arriving here means its parent didn't claim it
-            Err(JsLowerError { msg: format!("orphan {kw} fragment") })
+            Err(JsLowerError { msg: format!("orphan {kw} fragment"), ir_line: None })
         }
         _ => Ok(format!("{ind}{} {};", expr(head), "")),
     }
@@ -394,7 +639,7 @@ fn emit_stmt_body_js(b: &Body, level: usize) -> Result<String, JsLowerError> {
         Body::Inline(a) if a.is_empty() => Ok("{}".to_string()),
         Body::Inline(a) => Ok(format!("{{ {}; }}", expr(a))),
         Body::Bare(stmts) | Body::Block(stmts) => {
-            let mut s = String::from("{");
+            let mut s = String::from("{\n");
             for st in stmts {
                 s.push_str(&emit_core(st, level + 1)?);
                 s.push('\n');
@@ -425,7 +670,7 @@ fn emit_stmt_body_open(b: &Body, level: usize) -> Result<String, JsLowerError> {
 
 fn emit_for(head: &[Atom], body: &Body, _arms: &[Arm], level: usize) -> Result<String, JsLowerError> {
     let ind = indent(level);
-    // shapes: `for x in xs` | `for i in 0..len`
+    // shapes: `for x in xs` | `for i in 0..len` | C-style `for init; cond; step`
     if head.len() >= 4 && head[2] == Atom::Ident("in".into()) {
         let var = match &head[1] {
             Atom::Ident(v) => v.clone(),
@@ -447,7 +692,30 @@ fn emit_for(head: &[Atom], body: &Body, _arms: &[Arm], level: usize) -> Result<S
             emit_stmt_body_js(body, level)?
         ));
     }
-    Err(JsLowerError { msg: "for: unsupported shape".into() })
+    // C-style: init; cond; step segments at top level (parens nest in head) —
+    // verbatim segments (js-target §4 lowering row; additive case)
+    let rest = &head[1..];
+    if let Some(s1) = rest.iter().position(|a| matches!(a, Atom::Sym(s) if s == ";")) {
+        let (init_a, after1) = (&rest[..s1], &rest[s1 + 1..]);
+        if let Some(s2) = after1.iter().position(|a| matches!(a, Atom::Sym(s) if s == ";")) {
+            let (cond_a, step_a) = (&after1[..s2], &after1[s2 + 1..]);
+            // `x = e` init needs a binder in ESM strict mode
+            let init = match init_a {
+                [Atom::Ident(v), Atom::Sym(s), ..] if s == "=" => {
+                    format!("let {v} = {}", expr(&init_a[2..]))
+                }
+                other => expr(other),
+            };
+            return Ok(format!(
+                "{ind}for ({}; {}; {}) {}",
+                init,
+                expr(cond_a),
+                expr(step_a),
+                emit_stmt_body_js(body, level)?
+            ));
+        }
+    }
+    Err(JsLowerError { msg: "for: unsupported shape".into(), ir_line: None })
 }
 
 fn emit_if(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<String, JsLowerError> {
@@ -456,13 +724,16 @@ fn emit_if(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<Str
     let mut s = format!("{}if ({}) {}", ind, cond, emit_stmt_body_js(body, level)?);
     for a in arms {
         let p_txt = expr(&a.pattern);
-        if p_txt.is_empty() {
-            s.push_str(&format!(" else {}", emit_stmt_body_js(&a.body, level)?));
-        } else if p_txt == "else" {
-            s.push_str(&format!(" else {}", emit_stmt_body_js(&a.body, level)?));
+        let arm_txt = if p_txt.is_empty() || p_txt == "else" {
+            Some(format!(" else {}", emit_stmt_body_js(&a.body, level)?))
         } else if let Some(rest) = p_txt.strip_prefix("else") {
             let cond2 = rest.trim_start().strip_prefix("if").map(|x| x.trim()).unwrap_or(rest.trim());
-            s.push_str(&format!(" else if ({}) {}", cond2, emit_stmt_body_js(&a.body, level)?));
+            Some(format!(" else if ({}) {}", cond2, emit_stmt_body_js(&a.body, level)?))
+        } else {
+            None // non-else resid (pre-2.6 behavior): nothing emitted
+        };
+        if let Some(arm_txt) = arm_txt {
+            s.push_str(&mark(&arm_txt, a.span));
         }
     }
     Ok(s)
@@ -477,32 +748,35 @@ fn emit_match(head: &[Atom], _body: &Body, arms: &[Arm], level: usize) -> Result
         if p_txt.is_empty() {
             continue;
         }
-        if p_txt == "else" {
+        let arm_seg = if p_txt == "else" {
             match &a.body {
                 Body::Inline(bs) if !bs.is_empty() => {
-                    s.push_str(&format!("{0}  default:\n{0}  {1};\n{0}  break;\n", ind, expr(bs)));
+                    Some(format!("{0}  default:\n{0}  {1};\n{0}  break;\n", ind, expr(bs)))
                 }
-                Body::Inline(_) => s.push_str(&format!("{ind}  default:\n")),
+                Body::Inline(_) => Some(format!("{ind}  default:\n")),
                 b => {
-                    s.push_str(&format!("{ind}  default: {{\n"));
-                    s.push_str(&emit_stmt_body_block(b, level + 1)?);
-                    s.push_str(&format!("{ind}  break;\n{ind}  }}\n"));
+                    let mut seg = format!("{ind}  default: {{\n");
+                    seg.push_str(&emit_stmt_body_block(b, level + 1)?);
+                    seg.push_str(&format!("{ind}  break;\n{ind}  }}\n"));
+                    Some(seg)
                 }
             }
-            continue;
-        }
-        match &a.body {
-            Body::Inline(bs) if !bs.is_empty() => {
-                s.push_str(&format!("{0}  case {1}:\n{0}  {2};\n{0}  break;\n", ind, p_txt, expr(bs)));
+        } else {
+            match &a.body {
+                Body::Inline(bs) if !bs.is_empty() => {
+                    Some(format!("{0}  case {1}:\n{0}  {2};\n{0}  break;\n", ind, p_txt, expr(bs)))
+                }
+                Body::Inline(_) => Some(format!("{ind}  case {p_txt}:\n{ind}  break;\n")),
+                b => {
+                    let mut seg = format!("{ind}  case {p_txt}: {{\n");
+                    seg.push_str(&emit_stmt_body_block(b, level + 1)?);
+                    seg.push_str(&format!("{ind}  break;\n{ind}  }}\n"));
+                    Some(seg)
+                }
             }
-            Body::Inline(_) => {
-                s.push_str(&format!("{ind}  case {p_txt}:\n{ind}  break;\n"));
-            }
-            b => {
-                s.push_str(&format!("{ind}  case {p_txt}: {{\n"));
-                s.push_str(&emit_stmt_body_block(b, level + 1)?);
-                s.push_str(&format!("{ind}  break;\n{ind}  }}\n"));
-            }
+        };
+        if let Some(seg) = arm_seg {
+            s.push_str(&mark(&seg, a.span));
         }
     }
     s.push_str(&format!("{ind}}}"));
@@ -890,6 +1164,19 @@ fn expr_at(atoms: &[Atom]) -> String {
                         out.push_str(&format!(".at(-{})", idx_txt));
                         i += 1; // consume the `]` closer
                         continue;
+                    }
+                    // array spread: `[...x]` / corpus hand-form `[.. x]`
+                    if c == ']' {
+                        if let Some(s3) = inner.first().map(|a| match a {
+                            Atom::Sym(s3) => s3.as_str(),
+                            _ => "",
+                        }) {
+                            if s3 == "..." || s3 == ".." {
+                                out.push_str(&format!("[...{}]", expr(&inner[1..])));
+                                i += 1; // consume the `]` closer
+                                continue;
+                            }
+                        }
                     }
                     let _ = is_hat;
                     out.push_str(&format!(

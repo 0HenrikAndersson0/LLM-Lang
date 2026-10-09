@@ -119,6 +119,8 @@ valid JS).
 | `.toList()` | `[...receiver]`; `.map/.filter/.sort/.reduce` | native, verbatim |
 | `.sum()` | expansion: `.reduce((a,b)=>a+b,0)` |
 | `List<T> Map<K,V> Set<T> Array<T>` | erased (no type surface); `Array<T>` fields in JS corpus are plain arrays |
+| `for init;cond;step{…}` (C-style) | `for (init; cond; step) {…}` verbatim; bare `x = e` init upgraded to `let x = e` (ESM strict mode) — additive row, added with 2.6 to restore cs_02 emission |
+| `[.. x]` array spread | `[...x]` (corpus hand-form `..` tolerated; grammar `...` preferred) |
 
 ## 5. Canonical JS layout (printer, 2.3)
 
@@ -136,7 +138,38 @@ valid JS).
 
 ## 6. Verification for this phase
 
-- Every golden fixture → JS → `node --check` (2.3/2.4).
+- Every golden fixture → JS → `node --check` (2.3/2.4). Re-verified 26/26
+  after the 2.6 layout fixes (`node --check` gate re-run over corpus).
 - `js_*` real corpus → JS → `tsc --noEmit` with `allowJs` (2.4).
 - Lowering notes recorded per gap (receiver fns, lock, imports) — these
   feed the diff-vs-hand-renditions report (PLAN 2.4 footnote [2]).
+
+## 7. Span tracking (PLAN 2.6) — IR ↔ JS line mapping
+
+Every core form carries a line-granular `Span{lo,hi}` (1-based, inclusive;
+`lo` = header line, the stack-trace anchor; `0` = synthetic, e.g. primary-
+ctor assignments). Thread: reader forms → expander `Core` (Header/Fn/Type/
+Var/Expr/Stmt/Clause + `Arm`) → emitter.
+
+Emission is marker-based and side-effect-free: each emitted form's text is
+wrapped in invisible control-char markers (`\u{1}~irLo..irHi\u{1}` …
+`\u{2}`), stripped by a single post-pass that also records nesting-accurate
+JS line ranges. Result:
+
+- `js::emit` — plain JS, **byte-identical** to pre-span output.
+- `js::emit_with_map` — `(String, js::SourceMap)`; same text, plus:
+- `SourceMap.js_to_ir(js_line) -> Option<Span>` — innermost entry wins;
+  unmapped lines (`}`-only, blank) fall back to the nearest preceding
+  entry (stack-trace anchors). `ir_to_js(ir_line) -> Option<(js_lo,js_hi)>`
+  covers arms too (each if/match arm is marked with its `Arm.span`).
+- `SourceMap.to_json(source)` — `{"source":…,"mappings":[[jsLo,jsHi,irLo,irHi],…]}`.
+
+CLI: `irc to-js --map f.ir` writes `f.js` + `f.map.json` (harness interface
+for 2.7). Lowering failures carry their IR line: `js: <msg> (IR line N)`.
+
+Known limits (accepted for v0): line-level only (columns not tracked —
+stack traces carry columns but line fidelity is what the repair loop
+needs); catch-guard inline bodies map to the try line, not each catch arm;
+synthetic emission (primary-ctor field assigns) maps to `0`. The corpus
+gate (`tests/spans.rs`) asserts every non-blank JS line maps and no
+markers leak.

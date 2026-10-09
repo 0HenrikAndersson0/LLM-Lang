@@ -3,14 +3,16 @@ fn main() {
     // `--expand` before the subcommand = debug view on parse (task 1.5);
     // `irc expand <files>` = expanded-core debug view directly (task 2.5 alias)
     let debug = args.iter().position(|a| a == "--expand").map(|i| args.remove(i)).is_some();
+    // `--map` on to-js: write <file>.js + <file>.map.json sidecar (task 2.6)
+    let map = args.iter().position(|a| a == "--map").map(|i| args.remove(i)).is_some();
     match args.first().map(|s| s.as_str()) {
         Some("lex") => lex_files(&args[1..]),
         Some("parse") => parse_files(&args[1..], debug),
         Some("expand") => expand_files(&args[1..]),
-        Some("to-js") => to_js_files(&args[1..]),
+        Some("to-js") => to_js_files(&args[1..], map),
         _ => {
             eprintln!(
-                "usage: irc [--expand] lex|parse|expand|to-js <files...>\n       --expand  show macro-expanded core forms instead of the canonical print"
+                "usage: irc [--expand] lex|parse|expand|to-js <files...>\n       irc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       --expand  show macro-expanded core forms instead of the canonical print"
             );
             std::process::exit(2);
         }
@@ -57,12 +59,28 @@ fn expand_files(paths: &[String]) {
     }
 }
 
-fn to_js_files(paths: &[String]) {
+fn to_js_files(paths: &[String], map: bool) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
         match ir_lang::expander::expand(&src) {
-            Ok(core) => match ir_lang::js::emit(&core) {
-                Ok(js) => print!("{js}"),
+            Ok(core) => match ir_lang::js::emit_with_map(&core) {
+                Ok((js, sm)) => {
+                    if map {
+                        let stem = std::path::Path::new(path).with_extension("");
+                        let js_path = format!("{}.js", stem.display());
+                        let map_path = format!("{}.map.json", stem.display());
+                        std::fs::write(&js_path, &js).unwrap_or_else(|e| panic!("write {js_path}: {e}"));
+                        std::fs::write(&map_path, sm.to_json(path))
+                            .unwrap_or_else(|e| panic!("write {map_path}: {e}"));
+                        println!(
+                            "{path}: wrote {js_path} ({} lines, {} map entries)",
+                            js.lines().count(),
+                            sm.entries.len()
+                        );
+                    } else {
+                        print!("{js}");
+                    }
+                }
                 Err(e) => println!("// {path}: LOWER-ERR {e}"),
             },
             Err(e) => println!("// {path}: ERROR {e}"),
@@ -75,7 +93,7 @@ fn count(forms: &[ir_lang::ast::Form]) -> (usize, usize) {
     let mut dirs = 0;
     for f in forms {
         match f {
-            ir_lang::ast::Form::Directive(_) => dirs += 1,
+            ir_lang::ast::Form::Directive(..) => dirs += 1,
             ir_lang::ast::Form::Line { children, .. } => {
                 lines += 1;
                 let (l, d) = count(children);
