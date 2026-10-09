@@ -1,0 +1,18 @@
+{
+  "id": "task_01_stringops",
+  "title": "CompactLabel — trim/split/initials string ops",
+  "guide": "teach.md",
+  "requires": ["CompactLabel"],
+  "spec": "# Task: CompactLabel\n\nWrite the complete .ir file (one fenced ir block) implementing exactly:\n\n```\nexport fn CompactLabel(String s) String\n```\n\nSemantics:\n1. trim surrounding whitespace from `s`\n2. if the result is empty, return `-`\n3. split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. take the first character of each word, uppercased\n5. concatenate those characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nFollow the guide: real JS runtime (ESM), no C#-isms, explicit `return` inside try/branches is safest.",
+  "cases": [
+    ["CompactLabel", ["hello world"], "HW"],
+    ["CompactLabel", ["hello brave new world"], "HBNW"],
+    ["CompactLabel", [""], "-"],
+    ["CompactLabel", ["   "], "-"],
+    ["CompactLabel", ["Hello world"], "HW"],
+    ["CompactLabel", ["a b c d e f g h i"], "ABCDEF"],
+    ["CompactLabel", ["  Multiple   Spaces   Here  "], "MSH"]
+  ],
+  "echo_draft": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w.toFirstUpper()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n",
+  "echo_fix": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w[0].toUpperCase()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n"
+}

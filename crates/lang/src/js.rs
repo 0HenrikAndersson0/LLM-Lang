@@ -339,7 +339,7 @@ fn emit_fn(f: &FnDecl, level: usize, in_class: bool) -> Result<String, JsLowerEr
     s.push_str(&f.name);
     s.push_str(&params_js(&f.params, is_ctor));
     s.push(' ');
-    s.push_str(&emit_body(&f.body, level)?);
+    s.push_str(&emit_body(&f.body, level, f.ret.is_some())?);
     if in_class {
         // methods print without `function` keyword — handled by emit_type
     }
@@ -376,7 +376,7 @@ fn fn_awaits(b: &Body) -> bool {
     }
 }
 
-fn emit_body(b: &Body, level: usize) -> Result<String, JsLowerError> {
+fn emit_body(b: &Body, level: usize, ret_tail: bool) -> Result<String, JsLowerError> {
     match b {
         Body::Inline(atoms) if atoms.is_empty() => Ok("{}".to_string()),
         Body::Inline(atoms) => {
@@ -385,7 +385,28 @@ fn emit_body(b: &Body, level: usize) -> Result<String, JsLowerError> {
         }
         Body::Bare(stmts) | Body::Block(stmts) => {
             let mut s = String::from("{\n");
-            for st in stmts {
+            let last_i = stmts.len().saturating_sub(1);
+            for (si, st) in stmts.iter().enumerate() {
+                // IR value semantics: a ret-typed fn whose body ends in a bare
+                // expression returns that value (corpus: `for…; acc`).
+                // Statement-valued tails (if/match/try) are the author's job.
+                if ret_tail && si == last_i {
+                    if let Core::Expr(atoms, _) = st {
+                        let is_opaque_blob = atoms.len() == 1
+                            && matches!(atoms[0], Atom::Str(ref x) if x.starts_with("opaque:"));
+                        if !atoms.is_empty()
+                            && !is_opaque_blob
+                            && !atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "return" || x == "throw"))
+                        {
+                            let txt = expr(atoms);
+                            if !txt.contains("rest-omitted") {
+                                s.push_str(&indent(level + 1));
+                                s.push_str(&format!("return {};\n", txt));
+                                continue;
+                            }
+                        }
+                    }
+                }
                 s.push_str(&emit_core(st, level + 1)?);
                 s.push('\n');
             }
@@ -481,7 +502,7 @@ fn emit_member_fnlike(c: &Core, level: usize) -> Result<String, JsLowerError> {
             s.push_str(&name);
             s.push_str(&params_js(&f.params, is_ctor));
             s.push(' ');
-            s.push_str(&emit_body_ctor(&f.body, level, is_ctor, &f.base)?);
+            s.push_str(&emit_body_ctor(&f.body, level, is_ctor, &f.base, f.ret.is_some())?);
             Ok(s)
         }
         Core::Type(t) => emit_type(t, level),
@@ -532,9 +553,9 @@ fn emit_var(v: &VarDecl, level: usize, _member: bool) -> Result<String, JsLowerE
     }
 }
 
-fn emit_body_ctor(b: &Body, level: usize, is_ctor: bool, base: &Option<String>) -> Result<String, JsLowerError> {
+fn emit_body_ctor(b: &Body, level: usize, is_ctor: bool, base: &Option<String>, ret_tail: bool) -> Result<String, JsLowerError> {
     if !is_ctor {
-        return emit_body(b, level);
+        return emit_body(b, level, ret_tail);
     }
     let mut s = String::from("{\n");
     if let Some(base) = base {

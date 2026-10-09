@@ -86,7 +86,7 @@ shows the model repairs its own IR from JS runtime errors.
 | 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ◐ — **26/26 emitted files pass `node --check`** (re-verified 2026-10-09 after 2.6 layout fixes; cs_02 restored: C-style-for + `[.. x]` spread lowering rows); tsc + diff-vs-hand-renditions pending (deferred until after 2.7 by design) |
 | 2.5 | `ir --expand` / `--ir` debug flags (§6 readability floor) | CLI flags | ☑ — `--expand` shipped in 1.5 (`irc expand` = same view) |
 | 2.6 | Error localization: printer carries source spans so IR ↔ JS line mapping is recoverable | span tracking | ☑ — line spans threaded reader→Core→`js::emit_with_map` (marker post-pass); `SourceMap.js_to_ir/ir_to_js/to_json`; lower errors carry `IR line N`; `irc to-js --map` writes `.js`+`.map.json`; corpus gate: every non-blank JS line maps, output byte-identical with/without map (js-target.md §7) |
-| 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ☐ **— next session starts here** |
+| 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ◐ — **harness built** (`bench/scripts/loop/`, adapters echo/file/openai; guide `teach.md` is emit-verified); deterministic mechanics proven by echo selftest (`runs/selftest-echo/report.md`: seeded runtime bug → mapped feedback → repaired → ALL PASS); **real-model run pending — the go/no-go itself** |
 
 > [2] **Diff-against-hand-written:** Phase 0 hand renditions (0.5) are ground
 > truth for printer quality when transpiler output doesn't compile — it
@@ -208,14 +208,18 @@ Each phase exit is a verification act, not a checklist:
   (additive core form; surface text unchanged, identity held), reader R1b
   logical-continuation + `}else{` chain links fixed, JS emitter (2.3)
   emits 30/30 files passing `node --check`.
-- **v3.2** — 2.6 span tracking: `Span{lo,hi}` threaded reader→Core (additive
-  fields; surface text + print identity unchanged, all 41 tests green);
-  JS emitter marker post-pass → `SourceMap` (js↔ir line lookups both ways,
-  arms included; lower errors name their IR line; `to-js --map` sidecar).
-  Corpus emission layout fixed while mapping (first-body-stmt newline was
-  fused pre-2.6); C-style-for + `[.. x]` spread rows restored cs_02 —
-  corpus re-verified 26/26 `node --check`. **Next: 2.7 LLM loop test —
-  the product's central unverified claim.**
+- **v3.2 (amended 2026-10-09)** — 2.6 span tracking: `Span{lo,hi}` threaded
+  reader→Core (additive fields; surface text + print identity unchanged);
+  JS emitter marker post-pass → `SourceMap` (js↔ir lookups both ways, arms
+  included; lower errors name their IR line; `to-js --map` sidecar). Corpus
+  emission-layout fixes required by line fidelity: first body statement no
+  longer fuses onto `{`; fn-tail bare expressions now return (IR value
+  semantics, ret-gated); pre-existing expander bugs hit by the loop fixed:
+  `export fn` (classified as `var fn`) and `var mut` (canon order fixed —
+  grammar `var [mut] ident`). **Corpus re-verified 26/26 node --check.**
+  2.7 harness: `bench/scripts/loop/` (llm_loop.py; echo/file/openai
+  adapters; emit-verified teach.md; selftest green). **Next: real-model
+  loop run (2.7 go/no-go), then 2.4 exit (tsc + diff-vs-hand-renditions).**
 - **Next session (Phase 2 close):** 2.6 span tracking FIRST, then 2.7 LLM
   loop test — the product's central unverified claim is *can the model
   write + repair IR in a loop*, not the one-shot token number. Agreed

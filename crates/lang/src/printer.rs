@@ -450,7 +450,14 @@ fn print_var(v: &VarDecl, level: usize) -> String {
     let mut s = String::new();
     s.push_str(&indent(level));
     let mut want_var_word = true;
+    let mut post_mut = false;
     for m in &v.modifiers {
+        if m == "mut" {
+            // grammar order: `["const"|"volatile"] "var" ["mut"] ident` —
+            // mut prints AFTER the var word so canon re-parses stable
+            post_mut = true;
+            continue;
+        }
         s.push_str(m);
         s.push(' ');
         if m == "var" {
@@ -459,6 +466,9 @@ fn print_var(v: &VarDecl, level: usize) -> String {
     }
     if want_var_word {
         s.push_str("var ");
+    }
+    if post_mut {
+        s.push_str("mut ");
     }
     s.push_str(&v.name);
     if let Some(t) = &v.ty {

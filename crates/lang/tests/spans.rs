@@ -112,6 +112,19 @@ fn expander_threads_spans_into_core() {
 }
 
 #[test]
+fn export_fn_expands_to_fn() {
+    // regression: canon `export fn …` classified as `var fn` (expander
+    // dispatch); blocks the 2.7 loop (`const fn;` is invalid JS)
+    let src = "@1\n\nexport fn Cap(String s) String{\"ok\"}\nexport async fn Load(Int id) User?{await Repo.Get id}\n";
+    let core = expander::expand(src).unwrap();
+    assert!(matches!(core[1], Core::Fn(_)));
+    assert!(matches!(core[2], Core::Fn(_)));
+    let (js, _) = js::emit_with_map(&core).unwrap();
+    assert!(js.contains("export function Cap"));
+    assert!(js.contains("export async function Load"));
+}
+
+#[test]
 fn emit_map_lookups() {
     let core = expander::expand(SNIPPET).unwrap();
     let (js, map) = js::emit_with_map(&core).unwrap();

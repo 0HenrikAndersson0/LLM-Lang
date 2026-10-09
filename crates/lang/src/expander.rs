@@ -423,15 +423,29 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
         other => return Ok(Core::Expr({ let _ = other; atoms }, span)),
     };
     match kw.as_str() {
-        "fn" | "async" => {
+        "fn" | "async" | "export"
+            if !(kw == "export"
+                && !matches!(atoms.get(1), Some(Atom::Ident(k)) if k == "fn" || k == "async")) =>
+        {
+            // `fn …` / `async fn …` / canon `export fn …` (+ `export async fn`)
+            // `export <other>` stays in the var branch (export type/const/…)
             let mut mods = Vec::new();
             let mut i = 0usize;
+            if kw == "export" {
+                mods.push("export".into());
+                i += 1;
+                if matches!(atoms.get(i), Some(Atom::Ident(k)) if k == "async") {
+                    mods.push("async".into());
+                    i += 1;
+                }
+            }
+            // `async fn` (async-led) — handled above only via kw==async
             if kw == "async" {
                 mods.push("async".into());
                 i += 1;
             }
             if !matches!(atoms.get(i), Some(Atom::Ident(id)) if id == "fn") {
-                return Err(ExpandError { msg: "async without fn".into() });
+                return Err(ExpandError { msg: format!("fn missing fn token {i}") });
             }
             i += 1;
             let mut name = match atoms.get(i) {
@@ -601,6 +615,12 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 1
             };
             if atoms.get(i).map(|a| matches!(a, Atom::Ident(x) if x == "var")).unwrap_or(false) {
+                i += 1;
+            }
+            // grammar: `["const"|"volatile"] "var" ["mut"] ident` — `mut` sits
+            // after the var word (canon); drives the emitter's `let` choice
+            if atoms.get(i).map(|a| matches!(a, Atom::Ident(x) if x == "mut")).unwrap_or(false) {
+                mods.push("mut".into());
                 i += 1;
             }
             #[allow(unused_assignments)]
