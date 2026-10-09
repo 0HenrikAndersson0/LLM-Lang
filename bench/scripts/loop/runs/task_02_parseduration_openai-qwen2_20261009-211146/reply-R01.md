@@ -1,0 +1,34 @@
+```
+@1 @ns Demo.ParseDuration
+
+export fn ParseDuration(String s) Int{
+  if s.length == 0 { return 0 }
+
+  var mut total = 0
+  var mut i = 0
+
+  while i < s.length {
+    var mut digits = ""
+    while i < s.length && s[i] >= '0' && s[i] <= '9' {
+      digits += s[i]
+      i += 1
+    }
+
+    if digits.length == 0 { return 0 }
+
+    var unit = s[i]
+    i += 1
+
+    if unit != 'h' && unit != 'm' && unit != 's' { return 0 }
+
+    var value = parseInt(digits)
+    if unit == 'h' { total += value * 3600 }
+    else if unit == 'm' { total += value * 60 }
+    else if unit == 's' { total += value }
+
+    if i >= s.length { break }
+  }
+
+  return total
+}
+```

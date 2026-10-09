@@ -794,33 +794,39 @@ fn expand_stmt(
         }
         (None, _) => Body::Inline(Vec::new()),
     };
-    // else-if/else fragments among the CHILDREN = arms of this stmt
+    // else-if/else fragments among the CHILDREN = arms of this stmt — but
+    // only where an `else` can genuinely belong to THIS construct (`if`/`match`
+    // bodies); for other kw the fragments are siblings that belong to the
+    // preceding `if` (assoc_list folds them — e.g. `while …{ if a{…}
+    // else if b{…} }` must attach to the NESTED if, not the while)
     let mut arms: Vec<Arm> = Vec::new();
     let mut body = body;
-    match &mut body {
-        Body::Bare(v) | Body::Block(v) => {
-            let mut kept: Vec<Core> = Vec::new();
-            for st in v.drain(..) {
-                if let Core::Stmt { head: h2, body: b2, arms: a2, span: fspan } = st {
-                    let h0 = h2.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false);
-                    if h0 {
-                        let (pat, bod) = match a2.first() {
-                            Some(a3) if !a3.pattern.is_empty() => (a3.pattern.clone(), a3.body.clone()),
-                            _ => (Vec::new(), b2),
-                        };
-                        let mut p = vec![Atom::Ident("else".into())];
-                        p.extend(pat);
-                        arms.push(Arm { pattern: p, body: bod, span: fspan });
-                        continue;
+    if matches!(kw.as_str(), "if" | "match") {
+        match &mut body {
+            Body::Bare(v) | Body::Block(v) => {
+                let mut kept: Vec<Core> = Vec::new();
+                for st in v.drain(..) {
+                    if let Core::Stmt { head: h2, body: b2, arms: a2, span: fspan } = st {
+                        let h0 = h2.first().map(|a| matches!(a, Atom::Ident(x) if x == "else")).unwrap_or(false);
+                        if h0 {
+                            let (pat, bod) = match a2.first() {
+                                Some(a3) if !a3.pattern.is_empty() => (a3.pattern.clone(), a3.body.clone()),
+                                _ => (Vec::new(), b2),
+                            };
+                            let mut p = vec![Atom::Ident("else".into())];
+                            p.extend(pat);
+                            arms.push(Arm { pattern: p, body: bod, span: fspan });
+                            continue;
+                        }
+                        kept.push(Core::Stmt { head: h2, body: b2, arms: a2, span: fspan });
+                    } else {
+                        kept.push(st);
                     }
-                    kept.push(Core::Stmt { head: h2, body: b2, arms: a2, span: fspan });
-                } else {
-                    kept.push(st);
                 }
+                *v = kept;
             }
-            *v = kept;
+            _ => {}
         }
-        _ => {}
     }
     Ok(Core::Stmt { head: atoms.to_vec(), body, arms, span })
 }
@@ -1343,6 +1349,24 @@ type Order export{
         assert_eq!(stmts.len(), 1, "catch/finally siblings fold into the try");
         match &stmts[0] {
             Core::Stmt { arms, .. } => assert_eq!(arms.len(), 3),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn else_chain_attaches_to_nested_if_not_enclosing_loop() {
+        // loop-test finding (qwen draft): `if a{…}` inline-closed + deep-indented
+        // `else if` lines must fold into the nested if, NOT the enclosing while
+        let core = expand(
+            "fn F(String u) Int{\n  var mut x=0\n  while u.length>0{\n    if u == 'h' { x=1 }\n    else if u == 'm' { x=2 }\n    else if u == 's' { x=3 }\n  }\n  return x\n}\n",
+        ).unwrap();
+        let Core::Fn(f) = &core[0] else { panic!() };
+        let Body::Bare(stmts) = &f.body else { panic!() };
+        let Core::Stmt { arms, body, .. } = &stmts[1] else { panic!() };
+        assert!(arms.is_empty(), "while must not swallow else frags: {} arms", arms.len());
+        let Body::Bare(inner) = body else { panic!() };
+        match &inner[0] {
+            Core::Stmt { arms: if_arms, .. } => assert_eq!(if_arms.len(), 2, "else-ifs belong to the nested if"),
             _ => panic!(),
         }
     }

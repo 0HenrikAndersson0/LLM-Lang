@@ -229,8 +229,12 @@ def numbered_excerpt(lines, focus):
 
 def setup_run(cfg: dict, args) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    adapter = args.adapter + ("-" + (args.model or "drive") if args.adapter == "openai" else "")
-    workdir = Path(args.workdir) if args.workdir else HERE / "runs" / f"{cfg['id']}_{adapter}_{stamp}"
+    if args.adapter == "openai":
+        tag = "openai-" + os.path.splitext((args.model or os.environ.get("LLM_MODEL") or "drive")
+                                          .replace("/", "-"))[0]
+    else:
+        tag = args.adapter
+    workdir = Path(args.workdir) if args.workdir else HERE / "runs" / f"{cfg['id']}_{tag}_{stamp}"
     if workdir.exists() and any(workdir.iterdir()):
         sys.exit(f"workdir not empty: {workdir}")
     workdir.mkdir(parents=True, exist_ok=True)
@@ -249,15 +253,21 @@ def cmd_run(args):
     verdict = f"FAIL: {rounds_max} rounds exhausted"
     round_log = []
 
-    # optional pre-made IR (debug: skip round 1 drafting)
+    # optional pre-made IR (repair-phase experiment: a realistic draft error
+    # the model must repair from mapped runtime errors)
     if args.seed_ir:
         text = Path(args.seed_ir).read_text()
         messages.append({"role": "assistant", "content": f"```ir\n{text}\n```"})
-        ok, errs, _ = irc_emit(workdir, text)
-        if ok:
+        ok, errs, js_path = irc_emit(workdir, text)
+        if not ok:
+            messages.append({"role": "user", "content": "The draft IR failed to transpile:\n" + "\n".join(f"- {e}" for e in errs)})
+        else:
             passed, out = run_rig(workdir, cfg)
             print(out, flush=True)
-        messages.append({"role": "user", "content": "seed accepted: start the loop from here" if ok else "seed IR failed: " + "; ".join(errs)})
+            if passed:
+                sys.exit("seed already passes — nothing to repair; remove --seed-ir")
+            fb = feedback_text(out, text, js_path.with_suffix("").with_name(js_path.name[:-3] + ".map.json"))
+            messages.append({"role": "user", "content": fb})
 
     for r in range(1, rounds_max + 1):
         t0 = time.time()
