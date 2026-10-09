@@ -173,3 +173,15 @@ needs); catch-guard inline bodies map to the try line, not each catch arm;
 synthetic emission (primary-ctor field assigns) maps to `0`. The corpus
 gate (`tests/spans.rs`) asserts every non-blank JS line maps and no
 markers leak.
+
+Emitter gaps recorded at the 2.4 gate (bench/results-js-diff.md), all
+additive-fixable later: no `export type {…}/export {…} from` re-export row
+(v0 declassifies them to `const type;` — deferred to Phase 4's target
+reader); inline atom runs lower verbatim, so statement-shaped content
+inside single-line lambdas/exprs (if-expressions, multi-stmt arrow bodies,
+generics in expr runs) stays unlowered — the guide teaches around it and
+Phase 4's tree-sitter parse reclassifies properly. Hand-rendition drift
+outside grammar v1.1 (bare `let`, inline if-expressions, `= {}` obj-lit
+initializers) passes through verbatim by the opaque/verbatim rule — 0.8
+token counts include it; a grammar-drift cleanup pass would be bench-visible
+and needs a re-run per working agreements.

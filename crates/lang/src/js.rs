@@ -350,11 +350,13 @@ fn emit_fn(f: &FnDecl, level: usize, in_class: bool) -> Result<String, JsLowerEr
 fn params_js(params: &[(String, String)], _is_ctor: bool) -> String {
     let mut s = String::from("(");
     for (i, (n, _t)) in params.iter().enumerate() {
-        // type half is ERASED (js-target §1); bare name
+        // type half is ERASED (js-target §1); bare name — TS optional `?`
+        // and any annotation residue are not valid JS surface
+        let name = n.trim_end_matches('?');
         if i > 0 {
             s.push_str(", ");
         }
-        s.push_str(n);
+        s.push_str(name);
     }
     s.push(')');
     s
@@ -522,6 +524,7 @@ fn emit_var(v: &VarDecl, level: usize, _member: bool) -> Result<String, JsLowerE
         return Ok(String::new());
     }
     let kw = if v.modifiers.iter().any(|m| m == "mut") { "let" } else { "const" };
+    // `: ty` never materializes (js-target §1: locals untyped, no TS surface)
     match (&v.value, &v.objlit) {
         (Some(a), _) if !a.is_empty() => Ok(format!("{}{} {} = {};", ind, kw, v.name, expr(a))),
         (None, _) => Ok(format!("{}{} {};", ind, kw, v.name)),

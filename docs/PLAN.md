@@ -83,7 +83,7 @@ shows the model repairs its own IR from JS runtime errors.
 | 2.1 | JS AST + printer design (estree-style, canonical layout) | design note | ☑ — docs/js-target.md: minimal AST (exprs stay verbatim atom runs), atom→JS mapping (§3), canonical layout (§5) |
 | 2.2 | Core-form → JS lowering table (design doc §2 semantics) | lowering-table doc | ☑ — js-target.md §4; expander gained structured `Core::Stmt{head,body,arms}` (additive; surface text unchanged — identity re-verified on all 26) |
 | 2.3 | JS printer | emits golden corpus | ☑ — crates/lang/src/js.rs: recursive-descent expr rewriter (calls, casts, templates, `is`-patterns, hat-index, throw-ternaries); all 10 golden + 16 real corpus files emit |
-| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ◐ — **26/26 emitted files pass `node --check`** (re-verified 2026-10-09 after 2.6 layout fixes; cs_02 restored: C-style-for + `[.. x]` spread lowering rows); tsc + diff-vs-hand-renditions pending (deferred until after 2.7 by design) |
+| 2.4 | Real-corpus IR→JS output runs under node/tsc; diff against hand written renditions [2] | report | ☑ — **node `--check` 26/26**; tsc stricter gate on the TS corpus 3/7 with every failure root-caused (bench/results-js-diff.md): 2 C#-only files (by design), inline-atom-run/lambda statement bodies + generics-in-expr (design limit), export-re-export row missing (Phase 4), one grammar-drift line (bare `let`); param-`?` erasure fixed with the gate |
 | 2.5 | `ir --expand` / `--ir` debug flags (§6 readability floor) | CLI flags | ☑ — `--expand` shipped in 1.5 (`irc expand` = same view) |
 | 2.6 | Error localization: printer carries source spans so IR ↔ JS line mapping is recoverable | span tracking | ☑ — line spans threaded reader→Core→`js::emit_with_map` (marker post-pass); `SourceMap.js_to_ir/ir_to_js/to_json`; lower errors carry `IR line N`; `irc to-js --map` writes `.js`+`.map.json`; corpus gate: every non-blank JS line maps, output byte-identical with/without map (js-target.md §7) |
 | 2.7 | LLM loop test harness: model writes a feature in IR → transpile → run → feed errors back → repair | loop harness + report | ☑ — **GO (local-model gate):** harness `bench/scripts/loop/` (adapters echo/file/openai); guide emit-verified; runs in `runs/` — qwen2.5-coder 7b **and** 1.5b one-shot task_01 cold; 7b one-shot task_02 (loops/parseInt/if-chains); seeded repair from mapped runtime errors repaired in 1 round (`report_2p7.md`). Caveats: 7b/1.5b scale only; repair seeded (cold drafts one-shotted); value-match gap taught-around. The loop test also functioned as QA: 5 emitter truths fixed (see report §2) |
@@ -228,6 +228,13 @@ Each phase exit is a verification act, not a checklist:
   if/match, sibling-else folding belongs to assoc_list. Report:
   `bench/scripts/loop/report_2p7.md`. **Next session: 2.4 exit (tsc gate +
   diff-vs-hand-renditions), then Phase 3 design.**
+- **v3.4 (2026-10-09, later)** — **2.4 exit:** node `--check` 26/26 (Phase-2
+  gate met); tsc 7.0.2 gate recorded — TS corpus 3/7, every failure
+  root-caused in `bench/results-js-diff.md` (C#-only files by design,
+  inline-atom-run design limits, missing re-export row → Phase 4, one
+  rendition-drift line), param-`?` erasure fixed with the gate. Emitter-gap
+  list appended to js-target.md §7. **Next session: Phase 3 open (3.1 C#
+  target design note); dotnet 10 available locally.**
 - **v3.2 amendment note (2026-10-09 early):** unfamiliar-syntax risk means
   loop-clumsiness could consume the savings — 2.7 is the real go/no-go
   (risk register). Only after 2.7 passes: tsc gate + diff-vs-hand-renditions
