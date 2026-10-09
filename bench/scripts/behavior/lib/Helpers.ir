@@ -1,0 +1,4 @@
+@1 @ns Fixtures.Helpers
+
+export fn Double(Int x) Int{x*2}
+export fn Trip(Int x) Int{x*3}

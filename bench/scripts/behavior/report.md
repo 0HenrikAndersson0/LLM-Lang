@@ -40,3 +40,13 @@ PASS flattenOptions({"xmlMode":false}, null) -> {"_useHtmlParser2":false,"xmlMod
 PASS flattenOptions(null, null) -> {"_useHtmlParser2":false}
 RESULTS: ALL MATCH
 ```
+## linked_modules — **BEHAVIOR-MATCH**
+
+```
+PASS Report(3) -> 15
+PASS Report(0) -> 0
+PASS Report(10) -> 50
+PASS ReportMany([1,2,4]) -> [2,4,8]
+PASS ReportMany([]) -> []
+RESULTS: ALL MATCH
+```

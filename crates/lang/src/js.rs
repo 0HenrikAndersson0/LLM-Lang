@@ -243,20 +243,79 @@ pub fn emit_with_map(core: &[Core]) -> Result<(String, SourceMap), JsLowerError>
     Ok(extract_map(&marked))
 }
 
+/// all atom runs in the tree (J4 use-inference walk)
+fn atom_runs<'a>(core: &'a [Core], out: &mut Vec<&'a [Atom]>) {
+    for c in core {
+        match c {
+            Core::Expr(a, _) => out.push(a),
+            Core::Stmt { head, body, arms, .. } => {
+                out.push(head);
+                atom_runs_body(body, out);
+                for a2 in arms {
+                    out.push(&a2.pattern);
+                    atom_runs_body(&a2.body, out);
+                }
+            }
+            Core::Var(v) => {
+                if let Some(a) = &v.value {
+                    out.push(a);
+                }
+            }
+            Core::Fn(f) => atom_runs_body(&f.body, out),
+            Core::Type(t) => atom_runs(&t.members, out),
+            _ => {}
+        }
+    }
+}
+
+fn atom_runs_body<'a>(b: &'a Body, out: &mut Vec<&'a [Atom]>) {
+    match b {
+        Body::Inline(a) => out.push(a),
+        Body::Bare(v) | Body::Block(v) => atom_runs(v, out),
+        Body::Opaque(_) => {}
+    }
+}
+
+/// does the module dotted-REFERENCE the use's alias (`Helpers.Double(…)`)? The
+/// alias is the use path's last segment — the qualifier IS a module object in
+/// ESM, so `import * as <alias> from "./P.js"` makes dotted calls verbatim (J4).
+fn dotted_usage(core: &[Core], u: &str) -> bool {
+    let alias = u.rsplit('.').next().unwrap_or(u);
+    let mut runs: Vec<&[Atom]> = Vec::new();
+    atom_runs(core, &mut runs);
+    for atoms in &runs {
+        for i in 2..atoms.len() {
+            if matches!(atoms.get(i - 2), Some(Atom::Ident(x)) if x == alias)
+                && matches!(&atoms[i - 1], Atom::Sym(s) if s == ".")
+                && matches!(&atoms[i], Atom::Ident(_))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn emit_marked(core: &[Core]) -> Result<String, JsLowerError> {
     let mut out = String::new();
     let mut first_item = true;
     for c in core {
         match c {
             Core::Header { ns, uses, span, .. } => {
-                // @ns → dropped; @use → side-effect import (names unknown in v0)
+                // @ns → dropped; @use: dotted usage (`Helpers.Double`) →
+                // namespace import — the qualifier is a module object in ESM
+                // (J4); bare usage stays side-effect (unattributable in v1)
                 let _ = ns;
                 if !uses.is_empty() && !first_item {
                     out.push('\n');
                 }
                 let mut block = String::new();
                 for u in uses {
-                    block.push_str(&format!("import \"./{}.js\";\n", u_to_path(u)));
+                    if !dotted_usage(core, u) {
+                        block.push_str(&format!("import \"./{}.js\";\n", u_to_path(u)));
+                    } else {
+                        block.push_str(&format!("import * as {last} from \"./{}.js\";\n", u_to_path(u), last = u.rsplit('.').next().unwrap_or(u)));
+                    }
                 }
                 if !uses.is_empty() {
                     out.push_str(&mark(&block, *span));
@@ -1532,15 +1591,25 @@ pub fn split_stmt_runs(atoms: &[Atom]) -> Vec<Vec<Atom>> {
     let mut cur: Vec<Atom> = Vec::new();
     let mut depth = 0i32;
     let mut open_at: Vec<i32> = Vec::new();
+    let mut prev_closed_brace = false;
     let mut consumed_close = false;
     for a in atoms {
-        // after a depth-0 brace-group closed, the next atom begins a new
-        // statement run (an `else` clause stays with its if)
-        if consumed_close && !matches!(a, Atom::Ident(x) if x == "else") && !cur.is_empty() {
+        // after a depth-0 group closed, the next IDENT begins a new statement
+        // run: brace-closes ALWAYS split (a body belongs to its statement —
+        // `if (C) {A}` then a tail ident is a NEW statement); paren/bracket
+        // splits only when the piece is not flow-headed (`if (C) A`'s then-arm
+        // continues the if); symbols always continue (`.` chains, operators)
+        if consumed_close
+            && matches!(a, Atom::Ident(x) if x != "else")
+            && !cur.is_empty()
+            && (prev_closed_brace
+                || !matches!(&cur[0], Atom::Ident(x) if matches!(x.as_str(), "if" | "while" | "for" | "match" | "try")))
+        {
             outv.push(std::mem::take(&mut cur));
         }
         consumed_close = false;
-        let mut closed_depth0_brace = false;
+        let mut closed_group0 = false;
+        let mut closed_group0_brace = false;
         if let Atom::Sym(s) = a {
             match s.as_str() {
                 "(" | "[" | "{" => {
@@ -1550,14 +1619,17 @@ pub fn split_stmt_runs(atoms: &[Atom]) -> Vec<Vec<Atom>> {
                 ")" | "]" | "}" => {
                     depth -= 1;
                     let popped = open_at.pop();
-                    if matches!(s.as_str(), "}") && popped == Some(0) {
-                        closed_depth0_brace = true;
-                    }
+                    closed_group0 = popped == Some(0);
+                    closed_group0_brace = closed_group0 && s == "}";
                 }
-                _ => {}
+                _ => {
+                    closed_group0 = false;
+                }
             }
+        } else {
+            closed_group0 = false;
         }
-        if closed_depth0_brace {
+        if closed_group0 {
             consumed_close = true;
         }
         let is_boundary = depth == 0
@@ -1566,6 +1638,10 @@ pub fn split_stmt_runs(atoms: &[Atom]) -> Vec<Vec<Atom>> {
             outv.push(std::mem::take(&mut cur));
         }
         cur.push(a.clone());
+        if closed_group0 {
+            // carry the close-kind to the next atom's split decision
+            prev_closed_brace = closed_group0_brace;
+        }
     }
     if !cur.is_empty() {
         outv.push(cur);
@@ -1629,24 +1705,76 @@ fn stmtify_piece(p: &[Atom], terminal: bool) -> Option<String> {
         "var" | "const" | "let" | "volatile" => stmt_decl_js(p),
         "return" | "throw" => Some(format!("{} {};", kw0, expr(&p[1..]))),
         "if" if p.len() >= 3 => {
-            // `if COND {B} [else {B2} | else EXPR]` — brace bodies nest via
-            // split_stmt_runs recursion
-            let mut d = 0i32;
-            let mut bo = None;
-            for (k, a) in p.iter().enumerate().skip(1) {
-                if let Atom::Sym(sx) = a {
-                    match sx.as_str() {
-                        "(" | "[" => d += 1,
-                        ")" | "]" => d -= 1,
-                        "{" if d == 0 => {
-                            bo = Some(k);
-                            break;
+            // braceless expression-if (`if (C) A else B` → ternary in value
+            // position; `if (C) A` → guarded statement; models write both)
+            let bo_scan = {
+                let mut d = 0i32;
+                let mut bo = None;
+                for (k, a) in p.iter().enumerate().skip(1) {
+                    if let Atom::Sym(sx) = a {
+                        match sx.as_str() {
+                            "(" | "[" => d += 1,
+                            ")" | "]" => d -= 1,
+                            "{" if d == 0 => {
+                                bo = Some(k);
+                                break;
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
+                bo
+            };
+            if bo_scan.is_none() {
+                let else_i = p.iter().position(|a| matches!(a, Atom::Ident(x) if x == "else"));
+                // cond = the first balanced bracket group (or a single atom);
+                // then-arm = up to `else`; else-arm = the rest
+                let cond_end: usize = if matches!(p.get(1), Some(Atom::Sym(s)) if s == "(" || s == "[") || matches!(p.get(1), Some(Atom::Sym(s)) if s == "{") {
+                    let mut d = 0i32;
+                    let mut end = 2usize;
+                    for k in 1..p.len() {
+                        if let Atom::Sym(s) = &p[k] {
+                            match s.as_str() {
+                                "(" | "[" | "{" => d += 1,
+                                ")" | "]" | "}" => {
+                                    d -= 1;
+                                    if d == 0 {
+                                        end = k + 1;
+                                        break;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    end
+                } else {
+                    2usize.min(p.len())
+                };
+                let cond_atoms: Vec<Atom> = p[1..cond_end].to_vec();
+                let cond = expr(&cond_atoms);
+                return match else_i {
+                    Some(e) if e > cond_end => {
+                        let the = expr(&p[cond_end..e]);
+                        let other = expr(&p[e + 1..]);
+                        if terminal {
+                            Some(format!("return ({cond} ? {the} : {other});"))
+                        } else {
+                            Some(format!("({cond} ? {the} : {other});"))
+                        }
+                    }
+                    Some(e) if e == cond_end => {
+                        // empty then-arm: `if C else B` → if-noop-else-B
+                        let other = expr(&p[e + 1..]);
+                        Some(format!("if ({cond}) {{ }} else {{ {other}; }}"))
+                    }
+                    _ => {
+                        let the = expr(&p[cond_end..]);
+                        Some(format!("if ({cond}) {{ {the}; }}"))
+                    }
+                };
             }
-            let bo = bo?;
+            let bo = bo_scan?;
             let cond = expr(&p[1..bo]);
             let close = {
                 // bracket_slice starts PAST the opener (its sentinel pops on
@@ -1790,6 +1918,26 @@ mod tests {
                 Atom::Sym(x.to_string())
             }
         }).collect()
+    }
+
+    #[test]
+    fn use_inference_dotted() {
+        // J4: dotted usage under the use's alias → namespace import (the
+        // qualifier is a module object in ESM, so dotted calls work verbatim)
+        let core = crate::expander::expand(
+            "@1 @use Helpers @use Utils\n\nfn Report(Int n) Int{Helpers.Double(n)}\nfn Other(Int n) Int{Utils.Trip(n)}\n",
+        ).unwrap();
+        let (js, _) = emit_with_map(&core).unwrap();
+        assert!(js.contains("import * as Helpers from \"./Helpers.js\";"), "{js}");
+        assert!(js.contains("import * as Utils from \"./Utils.js\";"), "{js}");
+        // dotted usage under the full path's suffix also namespaces
+        let core3 = crate::expander::expand("@1 @use Fixtures.Helpers\n\nfn R(Int n) Int{Helpers.Double(n)}\n").unwrap();
+        let (js3, _) = emit_with_map(&core3).unwrap();
+        assert!(js3.contains("import * as Helpers from \"./Fixtures/Helpers.js\";"), "{js3}");
+        // no dotted usage: side-effect fallback (corpus shape — unchanged)
+        let core2 = crate::expander::expand("@1 @use Helpers\n\nfn Report(Int n) Int{parse(\"1\")}\n").unwrap();
+        let (js2, _) = emit_with_map(&core2).unwrap();
+        assert!(js2.contains("import \"./Helpers.js\";"), "{js2}");
     }
 
     #[test]

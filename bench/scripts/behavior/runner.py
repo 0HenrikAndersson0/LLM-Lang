@@ -79,6 +79,20 @@ SUBJECTS = [
         ],
         "extra": "",
     },
+    {
+        "id": "linked_modules",
+        "tasks_lib": "lib",
+        "entry": "feature",
+        "helpers": [("Helpers", "Fixtures/Helpers.js")],
+        "cases": [
+            ["Report", [3], 15],
+            ["Report", [0], 0],
+            ["Report", [10], 50],
+            ["ReportMany", [[1, 2, 4]], [2, 4, 8]],
+            ["ReportMany", [[]], []],
+        ],
+        "extra": "",
+    },
 ]
 
 
@@ -92,22 +106,51 @@ def prepare(subject):
         shutil.rmtree(work)
     work.mkdir(parents=True)
     (work / "package.json").write_text('{"type":"module"}\n')
-    for stub in subject["stubs"]:
+    for stub in subject.get("stubs", []):
         sp = work / f"{stub}.js"
         sp.parent.mkdir(parents=True, exist_ok=True)
         sp.write_text("// behavior-harness stub: satisfies v0 side-effect import\n")
-    ir = REPO / "bench" / "corpus" / "real" / "ir" / f"{subject['id']}.ir"
-    proc = run([str(IRC), "to-js", "--map", str(ir)])
-    if not (ir.parents[0] / (ir.stem + ".js")).exists():
-        return None, (proc.stdout + proc.stderr).strip()[:200]
-    shutil.copy(ir.parent / f"{ir.stem}.js", work / "feature.js")
-    shutil.copy(ir.parent / f"{ir.stem}.map.json", work / "feature.map.json")
+
+    def ir_path(name):
+        if subject.get("tasks_lib"):
+            return HERE / subject["tasks_lib"] / f"{name}.ir"
+        return REPO / "bench" / "corpus" / "real" / "ir" / f"{name}.ir"
+
+    def emit(name):
+        src = ir_path(name)
+        proc = run([str(IRC), "to-js", "--map", str(src)])
+        out = src.parent / f"{name}.js"
+        if not out.exists():
+            return None, (proc.stdout + proc.stderr).strip()[:300]
+        return out.read_text(), (src.parent / f"{name}.map.json").read_text()
+
+    if subject.get("tasks_lib"):
+        for helper, dest in subject.get("helpers", []):
+            js, _ = emit(helper)
+            if js is None:
+                return None, f"helper {helper} emission failed"
+            dest_path = work / dest
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_text(js)
+        js, mp = emit(subject["entry"])
+        if js is None:
+            return None, "entry emission failed"
+        (work / "feature.js").write_text(js)
+        (work / "feature.map.json").write_text(mp)
+        return work, ""
+
+    ir = ir_path(subject["id"])
+    js, mp = emit(subject["id"])
+    if js is None or mp is None:
+        return None, "emission failed"
+    (work / "feature.js").write_text(js)
+    (work / "feature.map.json").write_text(mp)
     # original → standalone JS (tsc transform erases `import type`)
     src = REPO / "bench" / "corpus" / "real" / "src" / f"{subject['id']}.ts"
     t = run(["npx", "-y", "-p", "typescript", "tsc", "--target", "es2022",
              "--module", "esnext", "--outDir", str(work / "orig"),
              "--skipLibCheck", str(src)], cwd=str(REPO))
-    orig = work / "orig" / f"{ir.stem}.js"
+    orig = work / "orig" / f"{subject['id']}.js"
     if not orig.exists():
         return None, "tsc original transform produced no output: " + (t.stdout + t.stderr)[:300]
     shutil.copy(orig, work / "orig.js")
@@ -115,12 +158,39 @@ def prepare(subject):
 
 
 def rig_js(subject):
-    """The emitted module exposes no exports (renditions use bare `fn`), so
-    the E-side binds local decls by CONCATENATING feature.js with the runner —
-    the emitted artifact itself stays untouched."""
+    """The corpus-emitted modules expose no exports (renditions use bare
+    `fn`), so the E-side binds local decls by CONCATENATING feature.js with
+    the runner — the emitted artifact itself stays untouched. Linked-module
+    subjects (tasks_lib) emit real exports; import both sides."""
     extra = subject.get("extra", "")
     cases = json.dumps(subject["cases"], indent=1)
     bound = sorted({c[0] for c in subject["cases"]} | set(subject.get("bind_extra", [])))
+    if subject.get("tasks_lib"):
+        tpl = """import * as E from "./__MODULE__.js";
+const cases = __CASES__;
+let fail = 0;
+for (const [fn, args, expected] of cases) {
+  const shown = args.map(a => JSON.stringify(a)).join(", ");
+  let ge = "?", ere = null;
+  try { ge = JSON.stringify(E[fn](...args)); } catch (e) { ere = String(e); }
+  if (ere || ge === "?") {
+    fail++;
+    console.error(`THROW ${fn}(${shown}) emitted=${ere || ge}`);
+  } else if (ge !== JSON.stringify(expected)) {
+    fail++;
+    console.error(`DIFF ${fn}(${shown}) emitted=${ge} expected=${JSON.stringify(expected)}`);
+  } else {
+    console.log(`PASS ${fn}(${shown}) -> ${ge}`);
+  }
+}
+__EXTRA__
+if (fail > 0) { console.error(`RESULTS: ${fail} failures`); process.exit(1); }
+console.log("RESULTS: ALL MATCH");
+"""
+        module = subject.get("entry_module") or subject["entry"]
+        return (tpl.replace("__MODULE__", module)
+                   .replace("__CASES__", cases)
+                   .replace("__EXTRA__", extra))
     tpl = """import * as O from "./orig.js";
 const E = { __BINDS__ };
 const cases = __CASES__;

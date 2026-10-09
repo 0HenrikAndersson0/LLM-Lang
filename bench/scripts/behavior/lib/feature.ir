@@ -1,0 +1,4 @@
+@1 @ns Fixtures.Feature @use Fixtures.Helpers
+
+export fn Report(Int n) Int{Helpers.Double(n)+Helpers.Trip(n)}
+export fn ReportMany(List<Int> xs) List<Int>{xs.map(x=>Helpers.Double(x))}

@@ -47,10 +47,10 @@ export fn Guard(Int v) Int{
 2. `var name=expr` is immutable; `var mut name=expr` is reassignable.
 3. Control flow (`if`/`for`/`while`/`match`/`try`) is *statement* shaped.
    For values inside expressions use ternaries: `cond ? a : b`.
-4. `match` arms are literal patterns (`"A"`, `404`, `else`) whose bodies are
-   statements — inside a function, arm bodies `return` their value (switch
-   cases do not fall through and do not return implicitly). For inline
-   value choices use ternaries instead of match.
+4. `match` arms are literal patterns (`"A"`, `404`, `true`, `else`) whose
+   bodies are statements — inside a function, arm bodies `return` their
+   value (switch cases do not fall through and do not return implicitly).
+   For inline value choices use ternaries instead of match.
 5. Strings interpolate with braces: `"Hello, {name}!"` — a template literal.
 6. Method calls spell like the runtime library: `s.trim()`, `s.split(" ")`,
    `s.toUpperCase()`, `s.slice(0,n)`, `xs.filter(p)`, `xs.map(f)`,
@@ -61,3 +61,29 @@ export fn Guard(Int v) Int{
    never harm in explicit `return`.
 8. Null handling: `T?` (nullable type), `x ?? fallback`, `x?.method`.
    Boolean ops: `!x`, `&&`, `||` — there is no `and`/`not` keyword.
+9. Cross-module use: declare `@use Path.To.Module` (after the `@ns` line);
+   a module used with a qualified call (`Module.fn(...)`) lowers to a
+   namespace import — write calls qualified with the module's last path
+   segment:
+
+   ```
+   @1 @ns Acme.Report @use Acme.Helpers
+
+   export fn Total(Int n) Int{Helpers.Double(n)+1}
+   ```
+
+10. Pipelines chain on dots; a chained call may sit on the NEXT line and a
+    lambda may own a multi-statement block body — statements inside are
+    separated by keywords and a bare terminal expression is the lambda's
+    return value:
+
+    ```
+    export fn Tidy(List<String> xs) List<String>{
+      xs.filter(s=>{
+        var t=s.trim()
+        t.length>0
+      })
+      .map(s=>{s.toLowerCase()})
+      .slice(0, 3)
+    }
+    ```

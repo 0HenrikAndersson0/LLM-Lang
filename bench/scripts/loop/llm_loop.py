@@ -306,7 +306,7 @@ def cmd_run(args):
             verdict = "PASS"
             round_log.append({"round": r, "outcome": "ALL PASS", "detail": f"{len(out.splitlines())} rig lines", "ir_chars": len(ir), "elapsed": time.time() - t0})
             break
-        errs_lines = [l for l in out.splitlines() if l.startswith(("FAIL", "ERROR")) or ("Error" in l and ":" in l and "at " in l)]
+        errs_lines = [l for l in out.splitlines() if l.startswith(("FAIL", "ERROR")) or re.search(r"(SyntaxError|TypeError|ReferenceError|RangeError|Error:)", l)]
         detail = (errs_lines[0] if errs_lines else out.strip().splitlines()[-1] if out.strip() else "")[:300]
         fb = feedback_text(out, ir, js_path.with_suffix("").with_name(js_path.name[:-3] + ".map.json"))
         messages.append({"role": "user", "content": fb})
