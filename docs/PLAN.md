@@ -112,7 +112,7 @@ pipeline token number measured.
 | J2 | Inline atom runs: statement-ify lambda bodies / if-expressions (emitter + expander classification; surface text unchanged ⇒ bench-neutral) | tsc failures js_04/js_05 closed | ☑ — glued `if c{a}else{b}` chains split (split_glued_if chain-aware; then-arm consumption in printer+emitter; `}else{…}` close-line brace-glue stabilized in R8); dot-chain continuation absorption (reader R2 at child level, R1-rules while unbalanced); arrow-block statement-ification at emit (`split_stmt_runs`/`stmtify_piece` + terminal-expr→return); callee-generics erasure; bare-`let`→`var mut` canon re-stabilization. Tests split/stmtify with constructed atoms |
 | J3 | Gap rows: `export {…} from`/`export type *` re-exports, generics-in-expr erasure, value-match arms (bool/ident-literal) | tsc 7/7 on TS corpus | ☑ **tsc 7/7** — `Core::Reexport` additive core form (canon prints the line; JS drops `type`); callee-generics erased at emit; typed-var `=`-consumption bug + empty-objlit + fused-`>=` tolerance fixed; bool/null literal arms split. Still accepted-v0: value-position match arms stay statement-shaped (guide teaches explicit `return`); non-keyword-led inline statement pieces (see js-target.md §7) |
 | J4 | Real module imports: `@use` with named imports (usage-inferred) so multi-file features transpile + run | rig over 2 linked feature files | ☐ |
-| J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ☐ |
+| J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ◐ — task_03 (Tidy: chained pipelines + block lambdas + camelize) run on qwen2.5-coder:7b ×6 attempts (valid JS by round 1 after the braceless-ternary fix; 2 failures-to-repair classes: value-fail near-misses — first word not lowercased on untrimmed split / capitalization inverted; temp-0 verbatim-repeat pathology — adapter now samples repair rounds + sends a repetition nudge); qwen3.5:9b (thinking model: empty content without `think:false` — adapter handles; Pythonism drafts + unindented lines = structural failures); gemma4:12b — socket time-out at 300s/round, retry next session (timeout raised to 600s). Repair-loop harness hardening landed: value-fail feedback now includes the numbered IR + got/expected per case |
 | J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ☐ |
 
 > Bench discipline unchanged: J2/J3 touch no surface text (emission-side and
@@ -294,6 +294,18 @@ Each phase exit is a verification act, not a checklist:
   identity holds on all 26; 26/26 node --check; behavior gate green.
   **Next session: J4 real import names → J5 loop depth → J6 whole-pipeline
   tokens.**
+- **v4.3 (2026-10-09, later)** — **J4 done** (`8526982`): `@use` with dotted
+  usage lowers to a namespace import (`import * as Helpers …`) — the
+  qualifier is a module object in ESM, so cross-module calls work verbatim;
+  linked two-file behavior subject green (Fixtures.Helpers + feature,
+  5 cases). J5 in flight: harness hardened for real-model repair dynamics
+  (repair-round sampling, repetition nudge, `think:false` + `num_ctx` for
+  ollama, value-fail = numbered-IR feedback); task_03 runs recorded ×3
+  models — qwen2.5-coder:7b near-miss class (untrimmed split drops
+  camelize), qwen3.5:9b structural (Pythonisms/unindented), gemma4:12b
+  pending retry (600s). **Next session: gemma run → J5 verdict → J6
+  whole-pipeline measurement (tiktoken venv + `--lang js` baseline-mode +
+  pipeline_tokens.py).**
 - **v3.2 amendment note (2026-10-09 early):** unfamiliar-syntax risk means
   loop-clumsiness could consume the savings — 2.7 is the real go/no-go
   (risk register). Only after 2.7 passes: tsc gate + diff-vs-hand-renditions

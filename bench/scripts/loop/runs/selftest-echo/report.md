@@ -2,7 +2,7 @@
 
 - adapter: `echo`
 - task: CompactLabel — trim/split/initials string ops
-- rounds: 2 (cap 4); started 2026-10-09T21:51:53+00:00
+- rounds: 2 (cap 4); started 2026-10-09T22:44:22+00:00
 - verdict: **PASS**
 
 | round | outcome | detail | IR chars | s |

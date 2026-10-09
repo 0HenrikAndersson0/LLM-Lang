@@ -33,11 +33,39 @@ python3 llm_loop.py selftest
 LLM_API_KEY=sk-… LLM_MODEL=gpt-5.1 python3 llm_loop.py run \
   --task tasks/task_01_stringops.task.json --adapter openai --rounds 4
 
+# real run — ollama (LLM_NUM_CTX is required; also disables thinking)
+LLM_BASE_URL=http://localhost:11434/v1 LLM_API_KEY=ollama LLM_MODEL=qwen2.5-coder:7b \
+  LLM_NUM_CTX=16384 python3 llm_loop.py run \
+  --task tasks/task_01_stringops.task.json --adapter openai --rounds 6
+```
+
 # real run — driven by hand/agent (harness waits on the reply file)
 python3 llm_loop.py run --task tasks/task_01_stringops.task.json \
   --adapter file --reply-file /tmp/reply.md
 # → do the transcript at runs/<id>_file_<stamp>/prompt-R01.md, write answer to /tmp/reply.md
 ```
+
+## Real-run findings (2026-10-09, ollama models)
+
+Recorded in `runs/` per run; the operational findings so far:
+
+- **temp-0 repeats verbatim**: a small model (qwen2.5-coder:7b) resends the
+  same draft across repair rounds when temperature is 0. The adapter now
+  samples repair rounds (`temperature 0.6`) and appends a
+  byte-identical-repetition nudge when a reply matches the previous one.
+- **ollama context clipping**: the `/v1` endpoint defaults to a small
+  context and the transcript grows every round — replies went incoherent/
+  verbatim. Set `LLM_NUM_CTX=16384` (sent as `options.num_ctx`).
+- **thinking models**: ollama thinking models (qwen3.5) return EMPTY
+  `message.content` by default; setting `LLM_NUM_CTX` also sends
+  `think:false` so the final answer lands in content.
+- **value-failures have no stack trace** (expected-vs-got only), so the
+  span map can't localize; the feedback then includes the numbered IR +
+  per-case got/expected.
+- **task difficulty classes observed**: transpile-errors (repairable —
+  models fix these well), value-fail near-misses (model-dependent; 7b
+  iterated but didn't converge in 6 rounds on task_03), structural
+  (Pythonisms / unindented lines from general — not code-tuned — models).
 
 Each run gets `runs/<task>_<adapter>_<stamp>/` with per-round transcripts,
 IR, emitted JS, the span map, the rig, and `report.md` (round table +

@@ -1,0 +1,18 @@
+@1 @ns Tidy.Library
+
+export fn Tidy(List<String> xs) List<String>{
+  xs.filter(s=>{
+    var t=s.trim()
+    t.length>0
+  })
+  .map(s=>{
+    var words=s.split(" ")
+    var result=""
+    for i in 0..words.length{
+      if i==0{result+=words[i].toLowerCase()}
+      else{result+=words[i][0].toUpperCase()+words[i].slice(1)}
+    }
+    result
+  })
+  .slice(0,3)
+}

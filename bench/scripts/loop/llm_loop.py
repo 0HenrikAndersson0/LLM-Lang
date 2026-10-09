@@ -89,23 +89,36 @@ class OpenAICompatAdapter:
         self.base = opts.base_url or os.environ.get("LLM_BASE_URL") or "https://api.openai.com/v1"
         self.key = (os.environ.get(opts.api_key_env or "LLM_API_KEY") or "").strip()
         self.model = opts.model or os.environ.get("LLM_MODEL") or ""
+        # ollama's /v1 endpoint clips context at the server default (~4k) —
+        # the transcript grows across repair rounds; request more when told.
+        # LLM_NUM_CTX also disables thinking (omitted content = broken loop
+        # for ollama thinking models)
+        num_ctx = opts.num_ctx or os.environ.get("LLM_NUM_CTX")
+        self.extra_body = {}
+        if num_ctx:
+            self.extra_body = {"options": {"num_ctx": int(num_ctx)}, "think": False}
+        if not self.key:
+            self.key = "local" if os.environ.get("LLM_BASE_URL") else ""
         if not self.key:
             sys.exit("openai adapter: no API key (set --api-key-env target or LLM_API_KEY)")
         if not self.model:
             sys.exit("openai adapter: no model (set --model or LLM_MODEL)")
     def reply(self, workdir: Path, messages: list, round_no: int) -> str:
         import urllib.request
+        # round 1 determinism (clean baseline evidence); repair rounds sample
+        # (temp-0 small models repeat verbatim and never leave the loop)
         body = json.dumps({
             "model": self.model,
             "messages": [dict(m) for m in messages],
-            "temperature": 0,
+            "temperature": 0.0 if round_no == 1 else 0.6,
+            **self.extra_body,
         }).encode()
         req = urllib.request.Request(
             self.base.rstrip("/") + "/chat/completions",
             data=body,
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"},
         )
-        with urllib.request.urlopen(req, timeout=180) as resp:
+        with urllib.request.urlopen(req, timeout=600) as resp:
             data = json.loads(resp.read())
         try:
             return data["choices"][0]["message"]["content"]
@@ -191,7 +204,8 @@ def js_to_ir(entries, line):
     return (prev[-1][2], prev[-1][3]) if prev else None
 
 def feedback_text(node_out: str, ir_text: str, map_file: Path) -> str:
-    """Errors + the mapped IR lines (span map, innermost rule)."""
+    """Errors + the mapped IR lines (span map, innermost rule). For value
+    failures (no stack trace) include the numbered IR so the model can act."""
     parts = ["## Reported errors\n", "```\n" + node_out.strip()[:4000] + "\n```"]
     entries = json.loads(map_file.read_text())["mappings"] if map_file.exists() else []
     lines = ir_text.splitlines()
@@ -210,6 +224,16 @@ def feedback_text(node_out: str, ir_text: str, map_file: Path) -> str:
                 seen.add(ln)
                 parts.append(f"- IR line {ln}: `{lines[ln - 1]}`  (js line {js_line})")
         parts.append("\nContext:\n```\n" + numbered_excerpt(lines, sorted(seen)) + "\n```")
+    else:
+        # value-level failure (no exception): show the whole current IR with
+        # line numbers so the model can point at what to change
+        parts.append("\n## Your current IR (numbered)\n")
+        parts.append("```\n" + "\n".join(f"{n + 1:>3} {l}" for n, l in enumerate(lines)) + "\n```")
+        parts.append(
+            "\nCompare what your code does for each failing case above with the expected value. "
+            "Name the exact line to change, then re-emit the COMPLETE corrected .ir file in one fenced ir block."
+        )
+        return "\n".join(parts)
     parts.append(
         "\nFix the problem and re-emit the COMPLETE corrected .ir file in one fenced ir block."
     )
@@ -286,8 +310,14 @@ def cmd_run(args):
         except RuntimeError as e:
             round_log.append({"round": r, "outcome": "adapter-timeout", "detail": str(e), "ir_chars": 0, "elapsed": time.time() - t0})
             break
+        # repetition-breaker: an identical reply left the loop stuck (temp-0
+        # small models repeat verbatim); tell the model it must change tack
+        prev_reply = next((m["content"] for m in reversed(messages) if m["role"] == "assistant"), None)
+        identical = prev_reply is not None and reply.strip() == prev_reply.strip()
         (workdir / f"reply-R{r:02}.md").write_text(reply)
         messages.append({"role": "assistant", "content": reply})
+        if identical:
+            messages.append({"role": "user", "content": "Your reply this round is byte-identical to the previous round despite the reported error. Re-examine the failing line and change something concrete (a method name, a condition, a return)."})
         ir = extract_ir(reply)
         if ir is None:
             messages.append({"role": "user", "content": "Your reply contained no fenced ```ir block. Re-emit the complete .ir file in one fenced ir block."})
@@ -374,6 +404,7 @@ def main():
     p.add_argument("--base-url", help="openai adapter override")
     p.add_argument("--api-key-env", help="name of the env var holding the API key")
     p.add_argument("--model")
+    p.add_argument("--num-ctx", type=int, help="ollama-style options.num_ctx override")
     p.add_argument("--seed-ir", help="use this IR as the round-1 draft (debug)")
     p.add_argument("--workdir", help="explicit run directory")
     p.set_defaults(func=cmd_run)
