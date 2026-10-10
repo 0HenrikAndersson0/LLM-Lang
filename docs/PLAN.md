@@ -134,7 +134,7 @@ documented.
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
 | 4.1 | tree-sitter-javascript grammar for parsing JS targets | parser setup | ☑ — `js_read.rs`: tree-sitter + tree-sitter-typescript v0.23.2; CST parse over the js_*.ts corpus (TS grammar superset — types surface as `type_annotation` and get skipped by the JS-only mapping); 6/7 corpus files parse clean, **gap identified: `export type * from` unsupported by the grammar** (round-trip will treat it as opaque passthrough); node-kind histogram wired as `irc js-kinds <dir>` (4.2 groundwork, kind histogram incl. `program/file` roots) |
-| 4.2 | IR-form coverage audit on js corpus: % of constructs representable in core+ sugar | coverage report | ☐ |
+| 4.2 | IR-form coverage audit on js corpus: % of constructs representable in core+ sugar | coverage report | ☑ — `bench/results-coverage.md` + `bench/scripts/coverage_audit.py` (verdict table per kind, evidence rows via per-file histograms): **4398 nodes / 145 kinds over the 7 js_*.ts files; 2233 constructs the reader must map; 100.0% representable** — core 1576/51 kinds (direct core form or verbatim surface per hand renders: `new`, `typeof`, `delete`, `as`, `?.` all pass through), sugar 14/4 (templates→interpolation, `i++`→`+=`, fn-expr→arrow), signature 634/23 (types erased to signatures, §3/§6.6), `opaque type` capture 8/1 (js_02 union/template aliases, reconcile row 21 — bounded loss), grammar-gap 1 (ts grammar lacks `export type *`, construct = Core::Reexport). Comments dropped by design (§6.1). Reader (4.4) has no representability blockers |
 | 4.3 | Mapping table: JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☐ |
 | 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ☐ |
 | 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ☐ |
@@ -306,6 +306,17 @@ Each phase exit is a verification act, not a checklist:
   are conditional on the baseline class: met vs typed/documented sources,
   ~0% vs doc-free code. North-star framing re-scoped accordingly (J6 exit:
   scaffold-trimming sensitivity + one corpus-scale loop task).
+- **v4.7 (2026-10-10, later)** — **4.2 done: 100.0% representable.** `coverage_audit.py`
+  joins the `irc js-kinds` CST histogram (tree-sitter-typescript, 7 js_*.ts
+  files, 4398 nodes / 145 kinds) with a curated kind→IR verdict table; the
+  reader must map 2233 constructs: 1576 direct core/verbatim (hand renders
+  ground truth — `new`/`typeof`/`delete`/`as`/`?.` pass through verbatim),
+  14 canonicalizing sugar, 634 signature-erased, 8 `opaque type` captures
+  (js_02 union/template aliases), 1 grammar-gap (`export type *` → the
+  Core::Reexport row). No representability blockers for the reader.
+  Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
+  `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
+  JS reader.**
 - **v4.6 (2026-10-10, later)** — **J6 closed on the class model; Phase 4
   opens.** Corpus-scale loop tasks scoped and rejected with evidence
   (js_01's runtime = 4 short pure fns; JSON-case loop rigs cannot measure

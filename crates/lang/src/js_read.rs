@@ -59,16 +59,22 @@ pub fn kind_histogram(tree: &tree_sitter::Tree) -> BTreeMap<String, usize> {
     out
 }
 
-/// Parse every file in `dir` (rglob `.ts`/`.js`), histogram the kinds,
-/// report parse failures explicitly.
+/// Parse every file in `dir` (or each given `.ts`/`.js` file), histogram the
+/// kinds, report parse failures explicitly.
 pub fn corpus_kinds(dir: &Path) -> Result<(BTreeMap<String, usize>, Vec<String>), String> {
     let mut hist = BTreeMap::new();
     let mut failures = Vec::new();
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
-        let path = entry.map_err(|e| e.to_string())?.path();
-        if !path.is_file() {
-            continue;
-        }
+    let files: Vec<_> = if dir.is_file() {
+        vec![dir.to_path_buf()]
+    } else {
+        std::fs::read_dir(dir)
+            .map_err(|e| e.to_string())?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.is_file())
+            .collect()
+    };
+    for path in files {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         if ext != "ts" && ext != "js" {
             continue;
