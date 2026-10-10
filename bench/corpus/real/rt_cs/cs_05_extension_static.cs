@@ -5,7 +5,7 @@ public static class MetricNumeralExtensions
     static readonly int Limit = 27;
     static readonly double BigLimit = Math.Pow(10, Limit);
     static readonly double SmallLimit = Math.Pow(10, -Limit);
-    internal static bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
+    static internal bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
     {
         if (!decimals.HasValue||!formats.HasValue||!formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros))
         {
@@ -17,16 +17,16 @@ public static class MetricNumeralExtensions
         }
         return true ;
     }
-    internal static string FormatLongWithTrailingZeros(long input, int decimals, NumberFormatInfo nfi) =>
+    static internal string FormatLongWithTrailingZeros(long input, int decimals, NumberFormatInfo nfi) =>
         decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string('0', decimals): input.ToString(nfi);
     static readonly List<char>[] Symbols = [['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'], ['m', 'μ', 'n', 'p', 'f', 'a', 'z', 'y']];
     static readonly FrozenDictionary<char,UnitPrefix> UnitPrefixes = new Dictionary<Char, UnitPrefix>{{'Y', new ("yotta", "septillion", "quadrillion")}, {'Z', new ("zetta", "sextillion", "trilliard")}, {'E', new ("exa", "quintillion", "trillion")}, {'P', new ("peta", "quadrillion", "billiard")}, {'T', new ("tera", "trillion", "billion")}, {'G', new ("giga", "billion", "milliard")}, {'M', new ("mega", "million")}, {'k', new ("kilo", "thousand")}, {'m', new ("milli", "thousandth")}, {'μ', new ("micro", "millionth")}, {'n', new ("nano", "billionth", "milliardth")}, {'p', new ("pico", "trillionth", "billionth")}, {'f', new ("femto", "quadrillionth", "billiardth")}, {'a', new ("atto", "quintillionth", "trillionth")}, {'z', new ("zepto", "sextillionth", "trilliardth")}, {'y', new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary();
-    internal static double FromMetric(this string input)
+    public static double FromMetric(this string input)
     {
         input=CleanRepresentation(input);
         return BuildNumber(input, input[^1]);
     }
-    internal static string ToMetric(this int input, MetricNumeralFormats? formats = null , int? decimals = null )
+    public static string ToMetric(this int input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
         if (!formats.HasValue&&!decimals.HasValue)
         {
@@ -34,7 +34,7 @@ public static class MetricNumeralExtensions
         }
         return ((double)input).ToMetric(formats, decimals);
     }
-    internal static string BuildDefaultRepresentation(int input)
+    static internal string BuildDefaultRepresentation(int input)
     {
         if (input==0)
         {
@@ -56,7 +56,7 @@ public static class MetricNumeralExtensions
         }
         return (input/1_000_000_000d).ToString("G15", nfi)+"G";
     }
-    internal static string ToMetric(this long input, MetricNumeralFormats? formats = null , int? decimals = null )
+    public static string ToMetric(this long input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
         if (input.Equals(0))
         {
@@ -70,7 +70,7 @@ public static class MetricNumeralExtensions
         }
         return BuildRepresentation(input, formats, decimals);
     }
-    internal static string ToMetric(this double input, MetricNumeralFormats? formats = null , int? decimals = null )
+    public static string ToMetric(this double input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
         if (input.Equals(0))
         {
@@ -88,7 +88,7 @@ public static class MetricNumeralExtensions
         }
         return BuildRepresentation(input, formats, decimals);
     }
-    internal static string CleanRepresentation(string input)
+    static internal string CleanRepresentation(string input)
     {
         ArgumentNullException.ThrowIfNull(input);
         input=input.Trim();
@@ -99,9 +99,9 @@ public static class MetricNumeralExtensions
         }
         return input.Replace(" ", string.Empty);
     }
-    internal static double BuildNumber(string input, char last) =>
+    static internal double BuildNumber(string input, char last) =>
         char.IsLetter(last)?BuildMetricNumber(input, last): double.Parse(input);
-    internal static double BuildMetricNumber(string input, char last)
+    static internal double BuildMetricNumber(string input, char last)
     {
         var number = double.Parse(input[..^1]);
         var indexInPositive = Symbols[0].IndexOf(last);
@@ -117,9 +117,9 @@ public static class MetricNumeralExtensions
 
         }
     }
-    internal static string ReplaceNameBySymbol(string input) =>
+    static internal string ReplaceNameBySymbol(string input) =>
         UnitPrefixes.Aggregate(input, (current, unitPrefix) => current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()));
-    internal static string BuildRepresentation(long input, MetricNumeralFormats? formats, int? decimals)
+    static internal string BuildRepresentation(long input, MetricNumeralFormats? formats, int? decimals)
     {
         var number = Math.Abs(input/10);
         var exponent = 0;
@@ -138,7 +138,7 @@ public static class MetricNumeralExtensions
         var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?" ": string.Empty;
         return representation+space;
     }
-    internal static string BuildMetricRepresentation(long input, int scale, MetricNumeralFormats? formats, int? decimals)
+    static internal string BuildMetricRepresentation(long input, int scale, MetricNumeralFormats? formats, int? decimals)
     {
         var exponent = scale*3;
         var divisor = 1L;
@@ -237,7 +237,7 @@ public static class MetricNumeralExtensions
 
         }
     }
-    internal static string BuildRepresentation(double input, MetricNumeralFormats? formats, int? decimals)
+    static internal string BuildRepresentation(double input, MetricNumeralFormats? formats, int? decimals)
     {
         var exponent = (int)Math.Floor(Math.Log10(Math.Abs(input))/3);
         if (!exponent.Equals(0))
@@ -257,7 +257,7 @@ public static class MetricNumeralExtensions
         var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?" ": string.Empty;
         return representation+space;
     }
-    internal static string BuildMetricRepresentation(double input, int exponent, MetricNumeralFormats? formats, int? decimals)
+    static internal string BuildMetricRepresentation(double input, int exponent, MetricNumeralFormats? formats, int? decimals)
     {
         var number = input*Math.Pow(1000, -exponent);
         if (decimals.HasValue)
@@ -276,7 +276,7 @@ public static class MetricNumeralExtensions
         var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
         return representation+space+unitText;
     }
-    internal static string GetUnitText(int scale, MetricNumeralFormats? formats, decimal displayedNumber)
+    static internal string GetUnitText(int scale, MetricNumeralFormats? formats, decimal displayedNumber)
     {
         return Math.Sign(scale) switch
         {
@@ -285,7 +285,7 @@ public static class MetricNumeralExtensions
             _ => string.Empty
         };
     }
-    internal static string GetUnitText(char symbol, MetricNumeralFormats? formats, decimal displayedNumber)
+    static internal string GetUnitText(char symbol, MetricNumeralFormats? formats, decimal displayedNumber)
     {
         if (formats.HasValue)
         {
@@ -309,13 +309,13 @@ public static class MetricNumeralExtensions
         }
         return symbol.ToString();
     }
-    internal static bool IsOutOfRange(this double input)
+    static internal bool IsOutOfRange(this double input)
     {
         bool outside(double min, double max) =>
         !(max>input&&input>min);
         return (Math.Sign(input)==1&&outside(SmallLimit, BigLimit))||(Math.Sign(input)==-1&&outside(-BigLimit, -SmallLimit));
     }
-    internal static bool IsInvalidMetricNumeral(this string input)
+    static internal bool IsInvalidMetricNumeral(this string input)
     {
         var index = input.Length-1;
         var last = input[index];

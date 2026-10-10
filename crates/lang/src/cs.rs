@@ -901,7 +901,8 @@ fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
             mods.push("public".into());
         }
         for m in &f.modifiers {
-            if matches!(m.as_str(), "sealed" | "abstract" | "override" | "virtual" | "static" | "extern") {
+            if matches!(m.as_str(), "sealed" | "abstract" | "override" | "virtual" | "static" | "extern"
+                | "internal" | "protected" | "private") {
                 mods.push(m.clone());
             }
         }
@@ -918,10 +919,12 @@ fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
             mods.push("internal".into());
         }
         // C# static-class rule: every member of a static host is static
-        if in_static && !is_ctor {
+        // (canon rows may already carry `static` — dedupe)
+        if in_static && !is_ctor && !mods.iter().any(|m| m == "static") {
             mods.push("static".into());
         }
     }
+    mods.dedup();
     let mut s = String::new();
     for m in &mods {
         s.push_str(m);
@@ -932,7 +935,7 @@ fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
     } else if let Some(recv) = &f.receiver {
         // extension fn: `fn String.FromMetric() Float` → static, `this string input`
         // param 0 (static already in mods when the host type is a static class)
-        if !mods.iter().any(|m| m == "static") {
+        if !mods.iter().any(|m| m == "static") && !f.modifiers.iter().any(|m| m == "static") {
             s.push_str("static ");
         }
         if let Some(r) = &f.ret {

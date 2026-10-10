@@ -2,16 +2,16 @@
 
 type DefaultCollectionFormatter(defaultSeparator String){
   String DefaultSeparator=defaultSeparator
-  fn Humanize<T>(collection IEnumerable<T>) String{Humanize(collection, o=>o?.ToString(), DefaultSeparator)}
-  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
-  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
-  fn Humanize<T>(collection IEnumerable<T>, separator String) String{Humanize(collection, o=>o?.ToString(), separator)}
-  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
+  export virtual fn Humanize<T>(collection IEnumerable<T>) String{Humanize(collection, o=>o?.ToString(), DefaultSeparator)}
+  export virtual fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
+  export fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
+  export virtual fn Humanize<T>(collection IEnumerable<T>, separator String) String{Humanize(collection, o=>o?.ToString(), separator)}
+  export virtual fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
     ArgumentNullException.ThrowIfNull(collection)
     ArgumentNullException.ThrowIfNull(objectFormatter)
     return HumanizeDisplayStrings(collection, objectFormatter, separator)
   }
-  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
+  export fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
     ArgumentNullException.ThrowIfNull(collection)
     ArgumentNullException.ThrowIfNull(objectFormatter)
     return HumanizeDisplayObjects(collection, objectFormatter, separator)
@@ -30,14 +30,14 @@ type DefaultCollectionFormatter(defaultSeparator String){
     }
     return HumanizeDisplayItems(items, separator)
   }
-  fn CreateDisplayItems<T>(collection IEnumerable<T>) List<String>{
+  static fn CreateDisplayItems<T>(collection IEnumerable<T>) List<String>{
     collection switch{
       ICollection<T>items new (items.Count)
       IReadOnlyCollection<T>items new (items.Count)
       else []
     }
   }
-  fn AddDisplayString(items List<String>, item String?){
+  static fn AddDisplayString(items List<String>, item String?){
     if string.IsNullOrWhiteSpace(item){
       return
     }
@@ -57,7 +57,7 @@ type DefaultCollectionFormatter(defaultSeparator String){
     }
     return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1])
   }
-  fn JoinLeadingItems(items List<String>) String{
+  static fn JoinLeadingItems(items List<String>) String{
     var count=items.Count-1
     if count==1{
       return items[0]
@@ -70,5 +70,5 @@ type DefaultCollectionFormatter(defaultSeparator String){
     }
     return builder.ToString()
   }
-  fn GetConjunctionFormatString(itemCount Int) String{"{{0}} {{1}} {{2}}"}
+  protected virtual fn GetConjunctionFormatString(itemCount Int) String{"{{0}} {{1}} {{2}}"}
 }

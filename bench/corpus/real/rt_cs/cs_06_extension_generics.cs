@@ -2,159 +2,159 @@ namespace Humanizer;
 
 public static class ByteSizeExtensions
 {
-    internal static ByteSize Bits(this byte input) =>
+    public static ByteSize Bits(this byte input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this sbyte input) =>
+    public static ByteSize Bits(this sbyte input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this short input) =>
+    public static ByteSize Bits(this short input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this ushort input) =>
+    public static ByteSize Bits(this ushort input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this int input) =>
+    public static ByteSize Bits(this int input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this uint input) =>
+    public static ByteSize Bits(this uint input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this long input) =>
+    public static ByteSize Bits(this long input) =>
         ByteSize.FromBits(input);
-    internal static ByteSize Bits(this double input) =>
+    public static ByteSize Bits(this double input) =>
         ByteSize.FromBytes(input/ByteSize.BitsInByte);
-    internal static ByteSize Bytes(this byte input) =>
+    public static ByteSize Bytes(this byte input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this sbyte input) =>
+    public static ByteSize Bytes(this sbyte input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this short input) =>
+    public static ByteSize Bytes(this short input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this ushort input) =>
+    public static ByteSize Bytes(this ushort input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this int input) =>
+    public static ByteSize Bytes(this int input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this uint input) =>
+    public static ByteSize Bytes(this uint input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this double input) =>
+    public static ByteSize Bytes(this double input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Bytes(this long input) =>
+    public static ByteSize Bytes(this long input) =>
         ByteSize.FromBytes(input);
-    internal static ByteSize Kilobytes(this byte input) =>
+    public static ByteSize Kilobytes(this byte input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this sbyte input) =>
+    public static ByteSize Kilobytes(this sbyte input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this short input) =>
+    public static ByteSize Kilobytes(this short input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this ushort input) =>
+    public static ByteSize Kilobytes(this ushort input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this int input) =>
+    public static ByteSize Kilobytes(this int input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this uint input) =>
+    public static ByteSize Kilobytes(this uint input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this double input) =>
+    public static ByteSize Kilobytes(this double input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Kilobytes(this long input) =>
+    public static ByteSize Kilobytes(this long input) =>
         ByteSize.FromKilobytes(input);
-    internal static ByteSize Megabytes(this byte input) =>
+    public static ByteSize Megabytes(this byte input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this sbyte input) =>
+    public static ByteSize Megabytes(this sbyte input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this short input) =>
+    public static ByteSize Megabytes(this short input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this ushort input) =>
+    public static ByteSize Megabytes(this ushort input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this int input) =>
+    public static ByteSize Megabytes(this int input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this uint input) =>
+    public static ByteSize Megabytes(this uint input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this double input) =>
+    public static ByteSize Megabytes(this double input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Megabytes(this long input) =>
+    public static ByteSize Megabytes(this long input) =>
         ByteSize.FromMegabytes(input);
-    internal static ByteSize Gigabytes(this byte input) =>
+    public static ByteSize Gigabytes(this byte input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this sbyte input) =>
+    public static ByteSize Gigabytes(this sbyte input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this short input) =>
+    public static ByteSize Gigabytes(this short input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this ushort input) =>
+    public static ByteSize Gigabytes(this ushort input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this int input) =>
+    public static ByteSize Gigabytes(this int input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this uint input) =>
+    public static ByteSize Gigabytes(this uint input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this double input) =>
+    public static ByteSize Gigabytes(this double input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Gigabytes(this long input) =>
+    public static ByteSize Gigabytes(this long input) =>
         ByteSize.FromGigabytes(input);
-    internal static ByteSize Terabytes(this byte input) =>
+    public static ByteSize Terabytes(this byte input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this sbyte input) =>
+    public static ByteSize Terabytes(this sbyte input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this short input) =>
+    public static ByteSize Terabytes(this short input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this ushort input) =>
+    public static ByteSize Terabytes(this ushort input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this int input) =>
+    public static ByteSize Terabytes(this int input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this uint input) =>
+    public static ByteSize Terabytes(this uint input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this double input) =>
+    public static ByteSize Terabytes(this double input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Terabytes(this long input) =>
+    public static ByteSize Terabytes(this long input) =>
         ByteSize.FromTerabytes(input);
-    internal static ByteSize Petabytes(this byte input) =>
+    public static ByteSize Petabytes(this byte input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this sbyte input) =>
+    public static ByteSize Petabytes(this sbyte input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this short input) =>
+    public static ByteSize Petabytes(this short input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this ushort input) =>
+    public static ByteSize Petabytes(this ushort input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this int input) =>
+    public static ByteSize Petabytes(this int input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this uint input) =>
+    public static ByteSize Petabytes(this uint input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this double input) =>
+    public static ByteSize Petabytes(this double input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Petabytes(this long input) =>
+    public static ByteSize Petabytes(this long input) =>
         ByteSize.FromPetabytes(input);
-    internal static ByteSize Exabytes(this byte input) =>
+    public static ByteSize Exabytes(this byte input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this sbyte input) =>
+    public static ByteSize Exabytes(this sbyte input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this short input) =>
+    public static ByteSize Exabytes(this short input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this ushort input) =>
+    public static ByteSize Exabytes(this ushort input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this int input) =>
+    public static ByteSize Exabytes(this int input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this uint input) =>
+    public static ByteSize Exabytes(this uint input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this double input) =>
+    public static ByteSize Exabytes(this double input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Exabytes(this long input) =>
+    public static ByteSize Exabytes(this long input) =>
         ByteSize.FromExabytes(input);
-    internal static ByteSize Pebibytes(this byte input) =>
+    public static ByteSize Pebibytes(this byte input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this sbyte input) =>
+    public static ByteSize Pebibytes(this sbyte input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this short input) =>
+    public static ByteSize Pebibytes(this short input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this ushort input) =>
+    public static ByteSize Pebibytes(this ushort input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this int input) =>
+    public static ByteSize Pebibytes(this int input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this uint input) =>
+    public static ByteSize Pebibytes(this uint input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this double input) =>
+    public static ByteSize Pebibytes(this double input) =>
         ByteSize.FromPebibytes(input);
-    internal static ByteSize Pebibytes(this long input) =>
+    public static ByteSize Pebibytes(this long input) =>
         ByteSize.FromPebibytes(input);
-    internal static string Humanize(this ByteSize input, string? format = null ) =>
+    public static string Humanize(this ByteSize input, string? format = null ) =>
         string.IsNullOrWhiteSpace(format)?input.ToString(): input.ToString(format);
-    internal static string Humanize(this ByteSize input, IFormatProvider formatProvider) =>
+    public static string Humanize(this ByteSize input, IFormatProvider formatProvider) =>
         input.ToString(formatProvider);
-    internal static string Humanize(this ByteSize input, string? format, IFormatProvider? formatProvider) =>
+    public static string Humanize(this ByteSize input, string? format, IFormatProvider? formatProvider) =>
         string.IsNullOrWhiteSpace(format)?input.ToString(formatProvider): input.ToString(format, formatProvider);
-    internal static string HumanizeWithUnitSystem(this ByteSize input, ByteSizeUnitSystem unitSystem, string? format = null , IFormatProvider? formatProvider = null ) =>
+    public static string HumanizeWithUnitSystem(this ByteSize input, ByteSizeUnitSystem unitSystem, string? format = null , IFormatProvider? formatProvider = null ) =>
         unitSystem==ByteSizeUnitSystem.Legacy?input.Humanize(format, formatProvider): input.Format(unitSystem, format, formatProvider);
-    internal static string HumanizeComposite(this ByteSize input, int precision = 2, IFormatProvider? formatProvider = null , string separator = " ", bool toWords = false )
+    public static string HumanizeComposite(this ByteSize input, int precision = 2, IFormatProvider? formatProvider = null , string separator = " ", bool toWords = false )
     {
         if (precision<1)
         {
@@ -199,7 +199,7 @@ public static class ByteSizeExtensions
         addPart(1, DataUnit.Bit);
         return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign: null, string.Join(separator, parts));
     }
-    internal static string HumanizeCompositeWithUnitSystem(this ByteSize input, ByteSizeUnitSystem unitSystem, int precision = 2, IFormatProvider? formatProvider = null , string separator = " ", bool toWords = false )
+    public static string HumanizeCompositeWithUnitSystem(this ByteSize input, ByteSizeUnitSystem unitSystem, int precision = 2, IFormatProvider? formatProvider = null , string separator = " ", bool toWords = false )
     {
         if (unitSystem==ByteSizeUnitSystem.Legacy)
         {
@@ -275,6 +275,6 @@ public static class ByteSizeExtensions
     class CompositeUnit(long Bytes, string Symbol, DataUnit DataUnit)
     {
     }
-    internal static ByteRate Per(this ByteSize size, TimeSpan interval) =>
+    public static ByteRate Per(this ByteSize size, TimeSpan interval) =>
         new (size, interval);
 }

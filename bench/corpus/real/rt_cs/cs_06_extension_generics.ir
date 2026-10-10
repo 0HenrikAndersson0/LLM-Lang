@@ -1,83 +1,83 @@
 @1 @ns Humanizer
 
 type ByteSizeExtensions export static{
-  fn Byte.Bits(input: this Byte) ByteSize{ByteSize.FromBits(input)}
-  fn SByte.Bits(input: this SByte) ByteSize{ByteSize.FromBits(input)}
-  fn Short.Bits(input: this Short) ByteSize{ByteSize.FromBits(input)}
-  fn UShort.Bits(input: this UShort) ByteSize{ByteSize.FromBits(input)}
-  fn Int.Bits(input: this Int) ByteSize{ByteSize.FromBits(input)}
-  fn UInt.Bits(input: this UInt) ByteSize{ByteSize.FromBits(input)}
-  fn Int64.Bits(input: this Int64) ByteSize{ByteSize.FromBits(input)}
-  fn Float.Bits(input: this Float) ByteSize{ByteSize.FromBytes(input/ByteSize.BitsInByte)}
-  fn Byte.Bytes(input: this Byte) ByteSize{ByteSize.FromBytes(input)}
-  fn SByte.Bytes(input: this SByte) ByteSize{ByteSize.FromBytes(input)}
-  fn Short.Bytes(input: this Short) ByteSize{ByteSize.FromBytes(input)}
-  fn UShort.Bytes(input: this UShort) ByteSize{ByteSize.FromBytes(input)}
-  fn Int.Bytes(input: this Int) ByteSize{ByteSize.FromBytes(input)}
-  fn UInt.Bytes(input: this UInt) ByteSize{ByteSize.FromBytes(input)}
-  fn Float.Bytes(input: this Float) ByteSize{ByteSize.FromBytes(input)}
-  fn Int64.Bytes(input: this Int64) ByteSize{ByteSize.FromBytes(input)}
-  fn Byte.Kilobytes(input: this Byte) ByteSize{ByteSize.FromKilobytes(input)}
-  fn SByte.Kilobytes(input: this SByte) ByteSize{ByteSize.FromKilobytes(input)}
-  fn Short.Kilobytes(input: this Short) ByteSize{ByteSize.FromKilobytes(input)}
-  fn UShort.Kilobytes(input: this UShort) ByteSize{ByteSize.FromKilobytes(input)}
-  fn Int.Kilobytes(input: this Int) ByteSize{ByteSize.FromKilobytes(input)}
-  fn UInt.Kilobytes(input: this UInt) ByteSize{ByteSize.FromKilobytes(input)}
-  fn Float.Kilobytes(input: this Float) ByteSize{ByteSize.FromKilobytes(input)}
-  fn Int64.Kilobytes(input: this Int64) ByteSize{ByteSize.FromKilobytes(input)}
-  fn Byte.Megabytes(input: this Byte) ByteSize{ByteSize.FromMegabytes(input)}
-  fn SByte.Megabytes(input: this SByte) ByteSize{ByteSize.FromMegabytes(input)}
-  fn Short.Megabytes(input: this Short) ByteSize{ByteSize.FromMegabytes(input)}
-  fn UShort.Megabytes(input: this UShort) ByteSize{ByteSize.FromMegabytes(input)}
-  fn Int.Megabytes(input: this Int) ByteSize{ByteSize.FromMegabytes(input)}
-  fn UInt.Megabytes(input: this UInt) ByteSize{ByteSize.FromMegabytes(input)}
-  fn Float.Megabytes(input: this Float) ByteSize{ByteSize.FromMegabytes(input)}
-  fn Int64.Megabytes(input: this Int64) ByteSize{ByteSize.FromMegabytes(input)}
-  fn Byte.Gigabytes(input: this Byte) ByteSize{ByteSize.FromGigabytes(input)}
-  fn SByte.Gigabytes(input: this SByte) ByteSize{ByteSize.FromGigabytes(input)}
-  fn Short.Gigabytes(input: this Short) ByteSize{ByteSize.FromGigabytes(input)}
-  fn UShort.Gigabytes(input: this UShort) ByteSize{ByteSize.FromGigabytes(input)}
-  fn Int.Gigabytes(input: this Int) ByteSize{ByteSize.FromGigabytes(input)}
-  fn UInt.Gigabytes(input: this UInt) ByteSize{ByteSize.FromGigabytes(input)}
-  fn Float.Gigabytes(input: this Float) ByteSize{ByteSize.FromGigabytes(input)}
-  fn Int64.Gigabytes(input: this Int64) ByteSize{ByteSize.FromGigabytes(input)}
-  fn Byte.Terabytes(input: this Byte) ByteSize{ByteSize.FromTerabytes(input)}
-  fn SByte.Terabytes(input: this SByte) ByteSize{ByteSize.FromTerabytes(input)}
-  fn Short.Terabytes(input: this Short) ByteSize{ByteSize.FromTerabytes(input)}
-  fn UShort.Terabytes(input: this UShort) ByteSize{ByteSize.FromTerabytes(input)}
-  fn Int.Terabytes(input: this Int) ByteSize{ByteSize.FromTerabytes(input)}
-  fn UInt.Terabytes(input: this UInt) ByteSize{ByteSize.FromTerabytes(input)}
-  fn Float.Terabytes(input: this Float) ByteSize{ByteSize.FromTerabytes(input)}
-  fn Int64.Terabytes(input: this Int64) ByteSize{ByteSize.FromTerabytes(input)}
-  fn Byte.Petabytes(input: this Byte) ByteSize{ByteSize.FromPetabytes(input)}
-  fn SByte.Petabytes(input: this SByte) ByteSize{ByteSize.FromPetabytes(input)}
-  fn Short.Petabytes(input: this Short) ByteSize{ByteSize.FromPetabytes(input)}
-  fn UShort.Petabytes(input: this UShort) ByteSize{ByteSize.FromPetabytes(input)}
-  fn Int.Petabytes(input: this Int) ByteSize{ByteSize.FromPetabytes(input)}
-  fn UInt.Petabytes(input: this UInt) ByteSize{ByteSize.FromPetabytes(input)}
-  fn Float.Petabytes(input: this Float) ByteSize{ByteSize.FromPetabytes(input)}
-  fn Int64.Petabytes(input: this Int64) ByteSize{ByteSize.FromPetabytes(input)}
-  fn Byte.Exabytes(input: this Byte) ByteSize{ByteSize.FromExabytes(input)}
-  fn SByte.Exabytes(input: this SByte) ByteSize{ByteSize.FromExabytes(input)}
-  fn Short.Exabytes(input: this Short) ByteSize{ByteSize.FromExabytes(input)}
-  fn UShort.Exabytes(input: this UShort) ByteSize{ByteSize.FromExabytes(input)}
-  fn Int.Exabytes(input: this Int) ByteSize{ByteSize.FromExabytes(input)}
-  fn UInt.Exabytes(input: this UInt) ByteSize{ByteSize.FromExabytes(input)}
-  fn Float.Exabytes(input: this Float) ByteSize{ByteSize.FromExabytes(input)}
-  fn Int64.Exabytes(input: this Int64) ByteSize{ByteSize.FromExabytes(input)}
-  fn Byte.Pebibytes(input: this Byte) ByteSize{ByteSize.FromPebibytes(input)}
-  fn SByte.Pebibytes(input: this SByte) ByteSize{ByteSize.FromPebibytes(input)}
-  fn Short.Pebibytes(input: this Short) ByteSize{ByteSize.FromPebibytes(input)}
-  fn UShort.Pebibytes(input: this UShort) ByteSize{ByteSize.FromPebibytes(input)}
-  fn Int.Pebibytes(input: this Int) ByteSize{ByteSize.FromPebibytes(input)}
-  fn UInt.Pebibytes(input: this UInt) ByteSize{ByteSize.FromPebibytes(input)}
-  fn Float.Pebibytes(input: this Float) ByteSize{ByteSize.FromPebibytes(input)}
-  fn Int64.Pebibytes(input: this Int64) ByteSize{ByteSize.FromPebibytes(input)}
-  fn ByteSize.Humanize(input: this ByteSize, format: String? = null) String{string.IsNullOrWhiteSpace(format)?input.ToString():input.ToString(format)}
-  fn ByteSize.Humanize(input: this ByteSize, formatProvider IFormatProvider) String{input.ToString(formatProvider)}
-  fn ByteSize.Humanize(input: this ByteSize, format String?, formatProvider IFormatProvider?) String{string.IsNullOrWhiteSpace(format)?input.ToString(formatProvider):input.ToString(format, formatProvider)}
-  fn ByteSize.HumanizeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, format: String? = null, formatProvider: IFormatProvider? = null) String{unitSystem==ByteSizeUnitSystem.Legacy?input.Humanize(format, formatProvider):input.Format(unitSystem, format, formatProvider)}
-  fn ByteSize.HumanizeComposite(input: this ByteSize, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
+  export static fn Byte.Bits(input: this Byte) ByteSize{ByteSize.FromBits(input)}
+  export static fn SByte.Bits(input: this SByte) ByteSize{ByteSize.FromBits(input)}
+  export static fn Short.Bits(input: this Short) ByteSize{ByteSize.FromBits(input)}
+  export static fn UShort.Bits(input: this UShort) ByteSize{ByteSize.FromBits(input)}
+  export static fn Int.Bits(input: this Int) ByteSize{ByteSize.FromBits(input)}
+  export static fn UInt.Bits(input: this UInt) ByteSize{ByteSize.FromBits(input)}
+  export static fn Int64.Bits(input: this Int64) ByteSize{ByteSize.FromBits(input)}
+  export static fn Float.Bits(input: this Float) ByteSize{ByteSize.FromBytes(input/ByteSize.BitsInByte)}
+  export static fn Byte.Bytes(input: this Byte) ByteSize{ByteSize.FromBytes(input)}
+  export static fn SByte.Bytes(input: this SByte) ByteSize{ByteSize.FromBytes(input)}
+  export static fn Short.Bytes(input: this Short) ByteSize{ByteSize.FromBytes(input)}
+  export static fn UShort.Bytes(input: this UShort) ByteSize{ByteSize.FromBytes(input)}
+  export static fn Int.Bytes(input: this Int) ByteSize{ByteSize.FromBytes(input)}
+  export static fn UInt.Bytes(input: this UInt) ByteSize{ByteSize.FromBytes(input)}
+  export static fn Float.Bytes(input: this Float) ByteSize{ByteSize.FromBytes(input)}
+  export static fn Int64.Bytes(input: this Int64) ByteSize{ByteSize.FromBytes(input)}
+  export static fn Byte.Kilobytes(input: this Byte) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn SByte.Kilobytes(input: this SByte) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn Short.Kilobytes(input: this Short) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn UShort.Kilobytes(input: this UShort) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn Int.Kilobytes(input: this Int) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn UInt.Kilobytes(input: this UInt) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn Float.Kilobytes(input: this Float) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn Int64.Kilobytes(input: this Int64) ByteSize{ByteSize.FromKilobytes(input)}
+  export static fn Byte.Megabytes(input: this Byte) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn SByte.Megabytes(input: this SByte) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn Short.Megabytes(input: this Short) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn UShort.Megabytes(input: this UShort) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn Int.Megabytes(input: this Int) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn UInt.Megabytes(input: this UInt) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn Float.Megabytes(input: this Float) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn Int64.Megabytes(input: this Int64) ByteSize{ByteSize.FromMegabytes(input)}
+  export static fn Byte.Gigabytes(input: this Byte) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn SByte.Gigabytes(input: this SByte) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn Short.Gigabytes(input: this Short) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn UShort.Gigabytes(input: this UShort) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn Int.Gigabytes(input: this Int) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn UInt.Gigabytes(input: this UInt) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn Float.Gigabytes(input: this Float) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn Int64.Gigabytes(input: this Int64) ByteSize{ByteSize.FromGigabytes(input)}
+  export static fn Byte.Terabytes(input: this Byte) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn SByte.Terabytes(input: this SByte) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn Short.Terabytes(input: this Short) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn UShort.Terabytes(input: this UShort) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn Int.Terabytes(input: this Int) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn UInt.Terabytes(input: this UInt) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn Float.Terabytes(input: this Float) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn Int64.Terabytes(input: this Int64) ByteSize{ByteSize.FromTerabytes(input)}
+  export static fn Byte.Petabytes(input: this Byte) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn SByte.Petabytes(input: this SByte) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn Short.Petabytes(input: this Short) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn UShort.Petabytes(input: this UShort) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn Int.Petabytes(input: this Int) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn UInt.Petabytes(input: this UInt) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn Float.Petabytes(input: this Float) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn Int64.Petabytes(input: this Int64) ByteSize{ByteSize.FromPetabytes(input)}
+  export static fn Byte.Exabytes(input: this Byte) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn SByte.Exabytes(input: this SByte) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn Short.Exabytes(input: this Short) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn UShort.Exabytes(input: this UShort) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn Int.Exabytes(input: this Int) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn UInt.Exabytes(input: this UInt) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn Float.Exabytes(input: this Float) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn Int64.Exabytes(input: this Int64) ByteSize{ByteSize.FromExabytes(input)}
+  export static fn Byte.Pebibytes(input: this Byte) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn SByte.Pebibytes(input: this SByte) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn Short.Pebibytes(input: this Short) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn UShort.Pebibytes(input: this UShort) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn Int.Pebibytes(input: this Int) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn UInt.Pebibytes(input: this UInt) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn Float.Pebibytes(input: this Float) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn Int64.Pebibytes(input: this Int64) ByteSize{ByteSize.FromPebibytes(input)}
+  export static fn ByteSize.Humanize(input: this ByteSize, format: String? = null) String{string.IsNullOrWhiteSpace(format)?input.ToString():input.ToString(format)}
+  export static fn ByteSize.Humanize(input: this ByteSize, formatProvider IFormatProvider) String{input.ToString(formatProvider)}
+  export static fn ByteSize.Humanize(input: this ByteSize, format String?, formatProvider IFormatProvider?) String{string.IsNullOrWhiteSpace(format)?input.ToString(formatProvider):input.ToString(format, formatProvider)}
+  export static fn ByteSize.HumanizeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, format: String? = null, formatProvider: IFormatProvider? = null) String{unitSystem==ByteSizeUnitSystem.Legacy?input.Humanize(format, formatProvider):input.Format(unitSystem, format, formatProvider)}
+  export static fn ByteSize.HumanizeComposite(input: this ByteSize, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
     if precision<1{
       throw new ArgumentOutOfRangeException(nameof(precision), precision, "Precision must be greater than zero.")
     }
@@ -115,7 +115,7 @@ type ByteSizeExtensions export static{
     addPart(1, DataUnit.Bit)
     return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign:null , string.Join(separator, parts))
   }
-  fn ByteSize.HumanizeCompositeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
+  export static fn ByteSize.HumanizeCompositeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
     if unitSystem==ByteSizeUnitSystem.Legacy{
       return input.HumanizeComposite(precision, formatProvider, separator, toWords)
     }
@@ -176,5 +176,5 @@ type ByteSizeExtensions export static{
   Array<CompositeUnit> BinaryCompositeUnits =[new (ByteSize.BytesInPebibyte, "PiB", DataUnit.BinaryPebibyte), new (ByteSize.BytesInTebibyte, "TiB", DataUnit.BinaryTebibyte), new (ByteSize.BytesInGibibyte, "GiB", DataUnit.BinaryGibibyte), new (ByteSize.BytesInMebibyte, "MiB", DataUnit.BinaryMebibyte), new (ByteSize.BytesInKibibyte, "KiB", DataUnit.BinaryKibibyte)]
   type CompositeUnit readonly(Bytes Int64, Symbol String, DataUnit DataUnit){
   }
-  fn ByteSize.Per(size: this ByteSize, interval TimeSpan) ByteRate{new (size, interval)}
+  export static fn ByteSize.Per(size: this ByteSize, interval TimeSpan) ByteRate{new (size, interval)}
 }

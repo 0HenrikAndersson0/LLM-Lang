@@ -1,4 +1,5 @@
 namespace Humanizer;
+using System.Runtime.CompilerServices;
 
 public class LocaliserRegistry<TLocaliser>
 {
@@ -16,14 +17,14 @@ public class LocaliserRegistry<TLocaliser>
     {
         this .defaultLocaliser=defaultLocaliser;
     }
-    internal TLocaliser ResolveForUiCulture() =>
+    public TLocaliser ResolveForUiCulture() =>
         ResolveForCulture(CultureInfo.CurrentUICulture);
-    internal TLocaliser ResolveForCulture(CultureInfo? culture)
+    public TLocaliser ResolveForCulture(CultureInfo? culture)
     {
         var cultureInfo = culture??CultureInfo.CurrentCulture;
         return cultureSpecificCache.GetValue(cultureInfo, c => new (FindLocaliser(c)(c))).Value!;
     }
-    internal void Register(string localeCode, TLocaliser localiser)
+    public void Register(string localeCode, TLocaliser localiser)
     {
         lock (lockObject)
         {
@@ -34,7 +35,7 @@ public class LocaliserRegistry<TLocaliser>
             localisersBuilder[localeCode]=_ => localiser;
         }
     }
-    internal void Register(string localeCode, Func<CultureInfo,TLocaliser> localiser)
+    public void Register(string localeCode, Func<CultureInfo,TLocaliser> localiser)
     {
         lock (lockObject)
         {

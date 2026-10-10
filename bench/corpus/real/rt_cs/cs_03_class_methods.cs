@@ -3,21 +3,21 @@ namespace Humanizer;
 class DefaultCollectionFormatter(string defaultSeparator)
 {
     readonly string DefaultSeparator = defaultSeparator;
-    internal string Humanize<T>(IEnumerable<T> collection) =>
+    public virtual string Humanize<T>(IEnumerable<T> collection) =>
         Humanize(collection, o => o?.ToString(), DefaultSeparator);
-    internal string Humanize<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter) =>
+    public virtual string Humanize<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter) =>
         Humanize(collection, objectFormatter, DefaultSeparator);
-    internal string Humanize<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter) =>
+    public string Humanize<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter) =>
         Humanize(collection, objectFormatter, DefaultSeparator);
-    internal string Humanize<T>(IEnumerable<T> collection, string separator) =>
+    public virtual string Humanize<T>(IEnumerable<T> collection, string separator) =>
         Humanize(collection, o => o?.ToString(), separator);
-    internal string Humanize<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
+    public virtual string Humanize<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(objectFormatter);
         return HumanizeDisplayStrings(collection, objectFormatter, separator);
     }
-    internal string Humanize<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
+    public string Humanize<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(objectFormatter);
@@ -41,7 +41,7 @@ class DefaultCollectionFormatter(string defaultSeparator)
         }
         return HumanizeDisplayItems(items, separator);
     }
-    internal List<string> CreateDisplayItems<T>(IEnumerable<T> collection)
+    static internal List<string> CreateDisplayItems<T>(IEnumerable<T> collection)
     {
         return collection switch
         {
@@ -50,7 +50,7 @@ class DefaultCollectionFormatter(string defaultSeparator)
             _ => []
         };
     }
-    internal void AddDisplayString(List<string> items, string? item)
+    static internal void AddDisplayString(List<string> items, string? item)
     {
         if (string.IsNullOrWhiteSpace(item))
         {
@@ -76,7 +76,7 @@ class DefaultCollectionFormatter(string defaultSeparator)
         }
         return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1]);
     }
-    internal string JoinLeadingItems(List<string> items)
+    static internal string JoinLeadingItems(List<string> items)
     {
         var count = items.Count-1;
         if (count==1)
@@ -92,6 +92,6 @@ class DefaultCollectionFormatter(string defaultSeparator)
         }
         return builder.ToString();
     }
-    internal string GetConjunctionFormatString(int itemCount) =>
+    protected virtual string GetConjunctionFormatString(int itemCount) =>
         $"{{0}} {{1}} {{2}}";
 }

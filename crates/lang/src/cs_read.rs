@@ -909,7 +909,23 @@ impl<'a> CsReader<'a> {
                 vec![]
             }
             "using_directive" => {
-                // contract drop: BCL using boilerplate (recorded row)
+                // capture as @use (BCL usings restore at emit: the emitted
+                // file re-declares BCL-typed members without source usings)
+                {
+                    let mut uc = node.walk();
+                    if uc.goto_first_child() {
+                        loop {
+                            if matches!(uc.node().kind(), "qualified_name" | "identifier") {
+                                let path = text(uc.node(), self.src).to_string();
+                                if !self.uses.iter().any(|u| u == &path) {
+                                    self.uses.push(path);
+                                }
+                                break;
+                            }
+                            if !uc.goto_next_sibling() { break; }
+                        }
+                    }
+                }
                 vec![]
             }
             "comment" => vec![],

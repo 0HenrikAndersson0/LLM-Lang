@@ -2,7 +2,7 @@ namespace Humanizer;
 
 class LithuanianNumberFormDetector
 {
-    internal LithuanianNumberForm Detect(long number)
+    public static LithuanianNumberForm Detect(long number)
     {
         var tens = number%100/10;
         var units = number%10;
