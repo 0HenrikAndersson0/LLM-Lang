@@ -153,15 +153,19 @@ documented. — **MET** (`bench/results-round-trip.md`; `docs/fidelity.md`).
 round-trip with behavior identity (folds the original Phase 3 + C# half of
 Phase 4 behind the JS-first line).
 
+**Decision (2026-10-10):** a "skip C#, harden first" reroute was considered
+and **rejected** — the C# promise stays (original plan keeps precedence;
+the v4 JS-first reroute was about closing JS risk, not dropping C#).
+
 **Exit:** all outputs compile (`dotnet build` zero errors); LLM loop test
 replicates 2.7's fix-from-stack-trace capability; double round-trip holds
 over the cs_* corpus.
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
-| 5.1 | C# AST + printer design (Roslyn-inspired, namespaces/usings/attributes) | design note | ☐ |
-| 5.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☐ |
-| 5.3 | C# printer | emits golden corpus | ☐ |
+| 5.1 | C# AST + printer design (Roslyn-inspired, namespaces/usings/attributes) | design note | ☑ — `docs/cs-target.md` §1–§3+§5: direct Core→CS emitter over Core (the js.rs shape — proven by behavior/round-trip gates; "Roslyn-inspired" = output conventions §5, not an AST layer), verbatim-first atom mapping (C#-compatible expression surface by Phase-0 design), canonical layout (4-space, file-scoped namespace, usings after ns, brace-new-line types) |
+| 5.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☑ — cs-target §4: full Core→C# table (Header→file-scoped ns + sorted usings; fields vs computed properties per fixture conventions; sig-only member rows invert ty-shaped text; match→switch expr/stmt; lock/try/range/foreach rows; extension methods→`this`-param statics; top-level fns→synthetic static class; Reexport→drop+fidelity flag) + §6 type-word map (`Float→double`, `Array<T>→T[]`…) + §7 deferred rows (attributes, access-modifier nuance, `{get;set;}`, query syntax — none in corpus) |
+| 5.3 | C# printer | emits golden corpus | ☑ — `crates/lang/src/cs.rs` + `irc to-cs`: direct Core→C# emitter per cs-target §2–§6 (verbatim-first atoms, LINQ op map, type-word map, decl-keyword ty stripping, sig-only member inversion, switch-expr reordering else-last, async→`Task<>` upgrade, synthetic `partial` top-level class for stub rigs). **Golden gate: `dotnet build` 8/9** — 03_pipeline excluded with proven upstream cause (the golden fragment itself does not compile in its own world: `.Select(o=>o.Total)` → `List<decimal>` vs declared `List<Order>`; the original golden .cs fails identically). Field-vs-property/access-nuance rows are recorded printer-quality diffs (fidelity budget) |
 | 5.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ☐ |
 | 5.5 | LLM loop test for C# | report | ☐ |
 | 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ☐ |
@@ -317,7 +321,32 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v4.11 (2026-10-10, latest)** — **4.5 + 4.6 done — Phase 4 exits.**
+- **v5.1 (2026-10-10, latest)** — **5.3 done: C# printer ships.** `crates/lang/src/cs.rs`
+  + `irc to-cs` — direct Core→C# emitter per cs-target §2–§6. Golden gate
+  `dotnet build` **8/9** (03_pipeline excluded, proven upstream: the original
+  golden fragment fails identically — its `.Select(o=>o.Total)` vs declared
+  `List<Order>` mismatch is in the design-doc example itself). Lowering
+  features landed: LINQ op map (`filter→Where`, `sum→Sum`, argless `sort`
+  →`OrderBy(x=>x)`), type-word map incl. `Array<T>→T[]`, declaration-keyword
+  ty stripping (`const var` rides the ty via the expander's field parse),
+  sig-only member-row inversion, switch-expr reordering (expander hoists
+  else arms first — emit puts `_` last), bare-call arg collection w/ comma
+  separation, async-upgrade (`await` in body → `async Task<Ret>`), synthetic
+  `internal static partial class ModuleTop` for top-level fns with the
+  stub-rig extension point mirroring the JS harness stubs. Real-corpus
+  preview shapes right (extension methods, primary ctor); 5.4 gate next.
+- **v5.0 (2026-10-10, later)** — **Phase 5 opens with the C# promise kept.**
+  A skip-C#/harden-first reroute was weighed (the v4-style risk-closure
+  argument: nothing in Phase 6 needs C#, Phase 5 ≈ re-running Phase 2+4
+  effort) and **rejected** — original plan precedence; C# stays a target,
+  recorded in the Phase-5 heading. 5.1+5.2 ☑ in one code-grounded doc
+  (`docs/cs-target.md`): direct Core→C# emitter (js.rs shape; output-level
+  Roslyn conventions), verbatim-first atom mapping (the IR expression
+  surface was C#-compatible by Phase-0 design), full lowering table incl.
+  the sig-only member-row inversion and the type-word map; deferred rows
+  pre-registered (attributes, access-modifier nuance, `{get;set;}`).
+  **Next session: 5.3 C# printer → golden corpus `dotnet build` gate.**
+- **v4.11 (2026-10-10, later)** — **4.5 + 4.6 done — Phase 4 exits.**
   Double round-trip JS → IR canon → JS: node --check **7/7**, **tsc 7/7**
   (vs 3/7 forward in 2.4 — the reader closed the inline-run/re-export rows),
   behavior via J1-harness `RT_MODE=1`: **3/3 subjects BEHAVIOR-MATCH** (hand

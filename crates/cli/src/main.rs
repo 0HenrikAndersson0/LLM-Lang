@@ -10,6 +10,7 @@ fn main() {
         Some("parse") => parse_files(&args[1..], debug),
         Some("expand") => expand_files(&args[1..]),
         Some("to-js") => to_js_files(&args[1..], map),
+        Some("to-cs") => to_cs_files(&args[1..]),
         Some("from-js") => from_js_files(&args[1..]),
         Some("canon") => canon_files(&args[1..]),
         Some("js-kinds") => {
@@ -111,6 +112,19 @@ fn canon_files(paths: &[String]) {
         let src = std::fs::read_to_string(path).expect("read");
         match ir_lang::expander::expand(&src) {
             Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+            Err(e) => println!("// {path}: ERROR {e}"),
+        }
+    }
+}
+
+fn to_cs_files(paths: &[String]) {
+    for path in paths {
+        let src = std::fs::read_to_string(path).expect("read");
+        match ir_lang::expander::expand(&src) {
+            Ok(core) => match ir_lang::cs::emit(&core) {
+                Ok(text) => print!("{text}"),
+                Err(e) => println!("// {path}: CS-ERR {e}"),
+            },
             Err(e) => println!("// {path}: ERROR {e}"),
         }
     }
