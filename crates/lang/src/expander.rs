@@ -718,10 +718,21 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             // R3 inline-pair hijack: `var x = {…}` / `var x: T = {…}` — the
             // reader models the `{...}` pair as `inline_body`, leaving
             // value = Some([]). The pair IS the initializer: re-wrap it (an
-            // EMPTY pair = `{}`).
+            // EMPTY pair = `{}`). For values ENDING in `=>` (block-lambda
+            // tail) the brace payload is the body — splice with braces.
             let value = match (&value, &inline) {
                 (Some(v2), Some(inl)) if v2.is_empty() => {
                     let mut wrapped = vec![Atom::Sym("{".into())];
+                    wrapped.extend(inl.iter().cloned());
+                    wrapped.push(Atom::Sym("}".into()));
+                    Some(wrapped)
+                }
+                (Some(v2), Some(inl))
+                    if !v2.is_empty()
+                        && matches!(v2.last(), Some(Atom::Sym(s)) if s == "=>") =>
+                {
+                    let mut wrapped = v2.clone();
+                    wrapped.push(Atom::Sym("{".into()));
                     wrapped.extend(inl.iter().cloned());
                     wrapped.push(Atom::Sym("}".into()));
                     Some(wrapped)
@@ -757,6 +768,18 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 let head_atoms = atoms.clone();
                 let arms = split_switch_arms(&children)?;
                 return Ok(Core::Stmt { head: head_atoms, body: Body::Inline(Vec::new()), arms, span });
+            }
+            // run-end `…{…}` pair: the reader extracted the brace payload as
+            // `inline`; splice it back with its braces (mid-run pairs never
+            // split, so this only fires where a `{…}` CLOSES the line —
+            // obj-lit initializers are the var-branch hijack; a tail
+            // `=>{ … }` block-lambda run must keep its body)
+            if let Some(inl) = inline {
+                let mut full = atoms.clone();
+                full.push(Atom::Sym("{".into()));
+                full.extend(inl);
+                full.push(Atom::Sym("}".into()));
+                return Ok(Core::Expr(full, span));
             }
             Ok(Core::Expr(atoms, span))
         }
@@ -1130,6 +1153,17 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
     }
     let kw = match &atoms[0] {
         Atom::Ident(id) => id.clone(),
+        // `"opaque:…"` member capture row (§8.1.3c): verbatim member blob
+        Atom::Str(s) if s.starts_with("opaque:") => {
+            return Ok(Core::Var(VarDecl {
+                name: String::new(),
+                ty: None,
+                value: Some(atoms.clone()),
+                modifiers: vec!["opaque".into()],
+                objlit: None,
+                span,
+            }));
+        }
         other => return Err(ExpandError { msg: format!("member start {other}") }),
     };
     match kw.as_str() {

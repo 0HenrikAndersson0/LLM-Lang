@@ -145,6 +145,12 @@ pub struct JsReadError {
     pub msg: String,
 }
 
+impl std::fmt::Debug for JsReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JsReadError").field("msg", &self.msg).finish()
+    }
+}
+
 impl std::fmt::Display for JsReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
@@ -217,56 +223,96 @@ impl<'a> JsReader<'a> {
     // type surface → text (erased to signatures; IR conventions: ` | ` in
     // unions per hand renders, tight generics `List<T>`)
 
+    /// the type half of a `type_annotation` (its first child is the `:`).
+    fn annotation_type(&self, ta: Option<tree_sitter::Node>) -> String {
+        let Some(ta) = ta else { return String::new() };
+        let mut c = ta.walk();
+        if !c.goto_first_child() {
+            return String::new();
+        }
+        loop {
+            let n = c.node();
+            let is_colon = n.kind() == ":";
+            let empty = n.utf8_text(self.src.as_bytes()).unwrap_or("").trim().is_empty();
+            if !is_colon && !empty {
+                return self.type_text(n);
+            }
+            if !c.goto_next_sibling() {
+                return String::new();
+            }
+        }
+    }
+
     fn type_text(&self, node: tree_sitter::Node) -> String {
         match node.kind() {
-            "identifier" | "type_identifier" | "predefined_type" | "unknown"
-            | "void" | "this" | "boolean" => text(node, self.src).to_string(),
+            "identifier" | "type_identifier" | "unknown" | "this" => text(node, self.src).to_string(),
+            // TS type words → IR signature spellings (§8.2; hand canon)
+            "predefined_type" | "void" => match text(node, self.src) {
+                "string" => "String".into(),
+                "number" => "Int".into(),
+                "boolean" => "Bool".into(),
+                "unknown" | "any" => "Any".into(),
+                other => other.to_string(),
+            },
             "generic_type" => {
-                let mut c = node.walk();
                 let name = node
                     .child_by_field_name("name")
                     .map(|n| self.type_text(n))
                     .unwrap_or_default();
-                c.goto_first_child();
-                let mut args = String::new();
-                // type_arguments node holds the comma-separated inner types
-                while let Some(ch) = {
-                    let n = c.node();
-                    let keep = n.kind() == "type_arguments";
-                    let _ = keep;
-                    if c.goto_next_sibling() { Some(true) } else { None }
-                } {
-                    let _ = args;
-                    let _ = ch;
+                let args = node
+                    .child_by_field_name("type_arguments")
+                    .map(|a| self.type_args(a))
+                    .unwrap_or_default();
+                if args.is_empty() {
+                    name
+                } else {
+                    format!("{name}<{args}>")
                 }
-                // simpler: take the whole node text minus whitespace between
-                // `>` delimiters is risky; canon is tight — reformat below
-                format!("{name}<{}>", node.child_by_field_name("type_arguments").map(|a| self.type_args(a)).unwrap_or_default())
             }
             "type_arguments" => self.type_args(node),
             "union_type" => {
+                // canon unions are TIGHT (`a|b`) — the IR reader lexes ` | `
+                // space forms and re-prints tight, so read-side unions spell
+                // tight from the start (identity gate)
                 let mut c = node.walk();
                 let mut parts = vec![];
                 if c.goto_first_child() {
                     loop {
-                        parts.push(self.type_text(c.node()));
+                        // `|` separator tokens are children too — skip them
+                        if c.node().kind() != "|" {
+                            let t = self.type_text(c.node());
+                            if !t.is_empty() {
+                                parts.push(t);
+                            }
+                        }
                         if !c.goto_next_sibling() {
                             break;
                         }
                     }
                 }
-                parts.join(" | ")
+                parts.join("|")
             }
             "array_type" => {
                 let el = node.child(0).map(|n| self.type_text(n)).unwrap_or_default();
-                format!("Array<{el}>")
+                if el.is_empty() {
+                    String::new()
+                } else {
+                    format!("Array<{el}>")
+                }
             }
             "function_type" => {
-                "(…)=>…".to_string() // callback signature spelled opaquely in v0? — refined in tests
+                // erased signature: function-typed params/rets drop the
+                // annotation (ellipsis spellings would need a grammar change;
+                // types erase at emit anyway — fidelity note, §8.2)
+                String::new()
             }
             "parenthesized_type" => {
                 let inner = node.child(1).map(|n| self.type_text(n)).unwrap_or_default();
-                format!("({inner})")
+                if inner.is_empty() {
+                    String::new()
+                } else {
+                    format!("({inner})")
+                }
             }
             "literal_type" => {
                 node.child(0).map(|n| match n.kind() {
@@ -277,19 +323,40 @@ impl<'a> JsReader<'a> {
             }
             "lookup_type" => {
                 // `SelectOptions['quirksMode']` → member access (js_08.ir:24)
-                let obj = node.child_by_field_name("object")
-                    .map(|n| self.type_text(n))
-                    .unwrap_or_default();
-                let idx = node.child_by_field_name("index")
-                    .map(|n| text(n, self.src).trim_matches(|c| c == '\'' || c == '"').to_string())
-                    .unwrap_or_default();
+                let mut c = node.walk();
+                let mut obj = String::new();
+                let mut idx = String::new();
+                if c.goto_first_child() {
+                    loop {
+                        let n = c.node();
+                        let k = n.kind();
+                        if obj.is_empty()
+                            && matches!(
+                                k,
+                                "identifier" | "type_identifier" | "predefined_type"
+                                    | "generic_type" | "parenthesized_type"
+                            )
+                        {
+                            obj = self.type_text(n);
+                        } else if !obj.is_empty()
+                            && idx.is_empty()
+                            && matches!(k, "string" | "number" | "identifier")
+                        {
+                            idx = text(n, self.src)
+                                .trim_matches(|c| c == '\'' || c == '"')
+                                .to_string();
+                        }
+                        if !c.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                }
                 format!("{obj}.{idx}")
             }
             "template_literal_type" | "template_type" => text(node, self.src).to_string(),
             "object_type" => {
-                // interface-shaped → members text is handled by the alias
-                // split; here spell it `{…}`
-                "{…}".to_string()
+                // interface-shaped object-type annotation erases
+                String::new()
             }
             _ => text(node, self.src).to_string(),
         }
@@ -364,6 +431,7 @@ impl<'a> JsReader<'a> {
             "template_string" => vec![Atom::Str(self.template_payload(node))],
             "regex" => {
                 let pat = node.child_by_field_name("pattern")
+                    .or_else(|| node.child(1))
                     .map(|n| text(n, self.src))
                     .unwrap_or("");
                 let flags = node.child_by_field_name("flags")
@@ -405,7 +473,29 @@ impl<'a> JsReader<'a> {
                     .map(|n| text(n, self.src).to_string())
                     .unwrap_or_default();
                 let mut v = obj;
-                v.push(Atom::Sym(".".into()));
+                // `x?.y`: an inline `optional_chain` child carries the `?.`
+                // (including its dot) → canon `?.`; plain chains add `.`
+                let mut opt = false;
+                {
+                    let mut c = node.walk();
+                    if c.goto_first_child() {
+                        loop {
+                            if c.node().kind() == "optional_chain" {
+                                opt = true;
+                                break;
+                            }
+                            if !c.goto_next_sibling() {
+                                break;
+                            }
+                        }
+                    }
+                }
+                if opt {
+                    v.push(Atom::Sym("?".into()));
+                    v.push(Atom::Sym(".".into()));
+                } else {
+                    v.push(Atom::Sym(".".into()));
+                }
                 v.push(Atom::Ident(prop));
                 v
             }
@@ -413,10 +503,29 @@ impl<'a> JsReader<'a> {
                 let obj = node.child_by_field_name("object")
                     .map(|n| self.atomize(n))
                     .unwrap_or_default();
+                // `x?.[i]` optional subscript: `optional_chain` child marker
+                let mut opt = false;
+                {
+                    let mut c = node.walk();
+                    if c.goto_first_child() {
+                        loop {
+                            if c.node().kind() == "optional_chain" {
+                                opt = true;
+                                break;
+                            }
+                            if !c.goto_next_sibling() {
+                                break;
+                            }
+                        }
+                    }
+                }
                 let idx = node.child_by_field_name("index")
                     .map(|n| self.atomize(n))
                     .unwrap_or_default();
                 let mut v = obj;
+                if opt {
+                    v.push(Atom::Sym("?".into()));
+                }
                 v.push(Atom::Sym("[".into()));
                 v.extend(idx);
                 v.push(Atom::Sym("]".into()));
@@ -501,21 +610,21 @@ impl<'a> JsReader<'a> {
             "object" => {
                 let mut v = vec![Atom::Sym("{".into())];
                 let mut c = node.walk();
+                let mut pairs = 0usize;
                 if c.goto_first_child() {
                     loop {
                         let n = c.node();
                         match n.kind() {
                             "pair" | "shorthand_property_identifier" | "spread_element"
-                            | "method_definition" | "comment" => {
+                            | "method_definition" => {
                                 let mut part = self.atomize(n);
-                                let need_comma = match v.last() {
-                                    Some(Atom::Sym(s)) => s != "{",
-                                    _ => false,
-                                };
-                                if need_comma && part.first().is_some() {
+                                if pairs > 0 && !v.is_empty() {
                                     v.push(Atom::Sym(",".into()));
                                 }
-                                v.append(&mut part);
+                                if !part.is_empty() {
+                                    pairs += 1;
+                                    v.append(&mut part);
+                                }
                             }
                             _ => {}
                         }
@@ -538,19 +647,19 @@ impl<'a> JsReader<'a> {
             "array" => {
                 let mut v = vec![Atom::Sym("[".into())];
                 let mut c = node.walk();
+                let mut items = 0usize;
                 if c.goto_first_child() {
                     loop {
                         let n = c.node();
-                        if n.kind() != "comment" && n.kind() != "," && n.kind() != "[" && n.kind() != "]" {
+                        if !matches!(n.kind(), "comment" | "," | "[" | "]") {
                             let mut part = self.atomize(n);
-                            let need_comma = match v.last() {
-                                Some(Atom::Sym(s)) => s != "[",
-                                _ => false,
-                            };
-                            if need_comma && part.first().is_some() {
+                            if items > 0 && !v.is_empty() {
                                 v.push(Atom::Sym(",".into()));
                             }
-                            v.append(&mut part);
+                            if !part.is_empty() {
+                                items += 1;
+                                v.append(&mut part);
+                            }
                         }
                         if !c.goto_next_sibling() {
                             break;
@@ -577,12 +686,14 @@ impl<'a> JsReader<'a> {
             }
             "arrow_function" | "function_expression" | "function" => self.lambda_atoms(node),
             "as_expression" => {
-                // `x as T` — operand + `as` + erasure text
+                // `x as T` — operand + `as` + erased type atoms; union parts
+                // split (`|` as Sym) so canon print round-1 == round-2 glue
                 let l = node.child(0).map(|n| self.atomize(n)).unwrap_or_default();
-                let r = node.child(2).map(|n| self.type_text(n)).unwrap_or_default();
                 let mut v = l;
                 v.push(Atom::Ident("as".into()));
-                v.push(Atom::Ident(r));
+                if let Some(ty) = node.child(2) {
+                    v.extend(self.alias_body_atoms(ty));
+                }
                 v
             }
             "optional_chain" => {
@@ -646,24 +757,25 @@ impl<'a> JsReader<'a> {
     fn args_atoms(&self, args_node: tree_sitter::Node) -> Vec<Atom> {
         let mut v: Vec<Atom> = vec![];
         let mut c = args_node.walk();
+        let mut argc = 0usize;
         if c.goto_first_child() {
             loop {
                 let n = c.node();
-                if n.kind() == "comment" {
+                // separators & parens: rendered by the canon, never atomized
+                if matches!(n.kind(), "comment" | "(" | ")" | "," | "=>") {
                     if !c.goto_next_sibling() {
                         break;
                     }
                     continue;
                 }
                 let mut part = self.atomize(n);
-                let need_comma = match v.last() {
-                    Some(Atom::Sym(s)) => s != "(" && s != ",",
-                    _ => false,
-                };
-                if need_comma && part.first().is_some() {
+                if argc > 0 && !v.is_empty() {
                     v.push(Atom::Sym(",".into()));
                 }
-                v.append(&mut part);
+                if !part.is_empty() {
+                    argc += 1;
+                    v.append(&mut part);
+                }
                 if !c.goto_next_sibling() {
                     break;
                 }
@@ -728,18 +840,31 @@ impl<'a> JsReader<'a> {
     fn lambda_params(&self, p: tree_sitter::Node) -> Vec<Atom> {
         let mut v: Vec<Atom> = vec![Atom::Sym("(".into())];
         let mut c = p.walk();
+        let mut pc = 0usize;
         if c.goto_first_child() {
             loop {
                 let n = c.node();
-                if n.kind() != "comment" && n.kind() != "(" && n.kind() != ")" && n.kind() != "," {
+                if n.kind() != "comment" && n.kind() != "(" && n.kind() != ")" && n.kind() != ","
+                    && n.kind() != ":" && n.kind() != "type_annotation"
+                {
                     if matches!(
                         n.kind(),
                         "identifier" | "this" | "rest_pattern" | "object_pattern" | "array_pattern"
+                        | "required_parameter" | "optional_parameter" | "formal_parameter"
                     ) {
-                        if matches!(v.last(), Some(Atom::Sym(s)) if s != "(") {
+                        let part = if n.child_by_field_name("pattern").is_some() {
+                            // typed param wrapper → its pattern atom(s)
+                            n.child_by_field_name("pattern")
+                                .map(|p| self.atomize(p))
+                                .unwrap_or_default()
+                        } else {
+                            self.atomize(n)
+                        };
+                        if pc > 0 && !v.is_empty() {
                             v.push(Atom::Sym(",".into()));
                         }
-                        v.extend(self.atomize(n));
+                        pc += 1;
+                        v.extend(part);
                     }
                 }
                 if !c.goto_next_sibling() {
@@ -748,6 +873,24 @@ impl<'a> JsReader<'a> {
             }
         }
         v.push(Atom::Sym(")".into()));
+        v
+    }
+
+    /// bare `kw e` run pieces: leading ident + value atoms (`;` never atomizes)
+    fn kw_stmt_atoms(&self, node: tree_sitter::Node, kw: &str) -> Vec<Atom> {
+        let mut v: Vec<Atom> = vec![Atom::Ident(kw.into())];
+        let mut c = node.walk();
+        if c.goto_first_child() {
+            loop {
+                let n = c.node();
+                if !matches!(n.kind(), ";" | "comment") && n.kind() != kw {
+                    v.extend(self.atomize(n));
+                }
+                if !c.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
         v
     }
 
@@ -776,16 +919,8 @@ impl<'a> JsReader<'a> {
                 }
                 v
             }
-            "return_statement" => {
-                let mut v: Vec<Atom> = vec![Atom::Ident("return".into())];
-                v.extend(node.child(1).map(|n| self.atomize(n)).unwrap_or_default());
-                v
-            }
-            "throw_statement" => {
-                let mut v: Vec<Atom> = vec![Atom::Ident("throw".into())];
-                v.extend(node.child(1).map(|n| self.atomize(n)).unwrap_or_default());
-                v
-            }
+            "return_statement" => self.kw_stmt_atoms(node, "return"),
+            "throw_statement" => self.kw_stmt_atoms(node, "throw"),
             "expression_statement" => node
                 .child(0)
                 .map(|n| self.atomize(n))
@@ -819,17 +954,22 @@ impl<'a> JsReader<'a> {
         v.push(Atom::Sym("{".into()));
         // then-arm: `consequence` field, else arm via else_clause
         if let Some(then) = node.child_by_field_name("consequence") {
-            let mut c = then.walk();
-            if c.goto_first_child() {
-                loop {
-                    let n = c.node();
-                    if n.kind() != "{" && n.kind() != "}" && n.kind() != "comment" {
-                        v.extend(self.stmt_atoms(n));
-                    }
-                    if !c.goto_next_sibling() {
-                        break;
+            if then.kind() == "statement_block" {
+                let mut c = then.walk();
+                if c.goto_first_child() {
+                    loop {
+                        let n = c.node();
+                        if n.kind() != "{" && n.kind() != "}" && n.kind() != "comment" {
+                            v.extend(self.stmt_atoms(n));
+                        }
+                        if !c.goto_next_sibling() {
+                            break;
+                        }
                     }
                 }
+            } else {
+                // braceless arm — the node IS the statement
+                v.extend(self.stmt_atoms(then));
             }
         }
         v.push(Atom::Sym("}".into()));
@@ -880,71 +1020,93 @@ impl<'a> JsReader<'a> {
                 vec![]
             }
             "export_statement" => {
-                // two shapes: `export <decl>` (declaration child) and
-                // `export {…} from m` / `export * from m`
-                let mut forms = vec![];
-                let mut is_export = false;
-                let mut c = node.walk();
-                if c.goto_first_child() {
-                    loop {
-                        let n = c.node();
-                        match n.kind() {
-                            "export" => is_export = true,
-                            "export_clause" | "export_specifier" => {
-                                forms.push(self.reexport(node));
+                // three shapes: `export <decl>` (declaration child),
+                // `export {…} from m` (export_clause), `export * from m`
+                // (star child, no clause). Keyword/string children under an
+                // export are NEVER module content — pre-scan decides.
+                let mut has_clause = false;
+                let mut has_decl = false;
+                let mut has_star = false;
+                {
+                    let mut c = node.walk();
+                    if c.goto_first_child() {
+                        loop {
+                            match c.node().kind() {
+                                "export_clause" | "export_specifier" => has_clause = true,
+                                "declaration" | "lexical_declaration"
+                                | "function_declaration" | "class_declaration"
+                                | "interface_declaration" | "type_alias_declaration"
+                                | "statement_block"
+                                | "function_signature" | "abstract_method_signature"
+                                | "method_signature" => has_decl = true,
+                                "*" => has_star = true,
+                                _ => {}
+                            }
+                            if !c.goto_next_sibling() {
                                 break;
                             }
-                            "declaration" | "lexical_declaration"
-                            | "function_declaration" | "class_declaration"
-                            | "interface_declaration" | "type_alias_declaration"
-                            | "statement_block" => {
-                                let mut f = self.decl(n);
-                                if is_export {
-                                    for form in f.iter_mut() {
-                                        match form {
-                                            Core::Fn(d) => {
-                                                if !d.modifiers.iter().any(|m| m == "export") {
-                                                    d.modifiers.push("export".into());
-                                                }
-                                            }
-                                            Core::Type(t) => {
-                                                if !t.modifiers.iter().any(|m| m == "export") {
-                                                    t.modifiers.push("export".into());
-                                                }
-                                            }
-                                            Core::Var(v) => {
-                                                if !v.modifiers.iter().any(|m| m == "export") {
-                                                    v.modifiers.insert(0, "export".into());
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                }
-                                forms.extend(f);
-                                break;
-                            }
-                            _ => {
-                                if n.kind() != "export" && n.kind() != "from"
-                                    && !text(n, self.src).trim().is_empty()
-                                    && n.byte_range() != node.byte_range()
-                                {
-                                    forms.extend(self.decl(n));
-                                }
-                            }
-                        }
-                        if !c.goto_next_sibling() {
-                            break;
                         }
                     }
                 }
-                if forms.is_empty() && node.child_count() > 1 {
-                    // `export * from m` (no export_clause child matched)
-                    forms.push(self.reexport(node));
+                if has_clause {
+                    vec![self.reexport(node)]
+                } else if has_star {
+                    vec![self.reexport(node)]
+                } else if has_decl {
+                    let mut forms = vec![];
+                    let mut c = node.walk();
+                    if c.goto_first_child() {
+                        loop {
+                            let n = c.node();
+                            if matches!(
+                                n.kind(),
+                                "declaration" | "lexical_declaration"
+                                | "function_declaration" | "class_declaration"
+                                | "interface_declaration" | "type_alias_declaration"
+                                | "statement_block" | "function_signature"
+                                | "abstract_method_signature" | "method_signature"
+                            ) {
+                                let mut f = self.decl(n);
+                                for form in f.iter_mut() {
+                                    match form {
+                                        Core::Fn(d) => {
+                                            if !d.modifiers.iter().any(|m| m == "export") {
+                                                d.modifiers.push("export".into());
+                                            }
+                                        }
+                                        Core::Type(t) => {
+                                            if !t.modifiers.iter().any(|m| m == "export") {
+                                                t.modifiers.push("export".into());
+                                            }
+                                        }
+                                        Core::Var(v) => {
+                                            if !v.modifiers.iter().any(|m| m == "export") {
+                                                v.modifiers.insert(0, "export".into());
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                forms.extend(f);
+                            }
+                            if !c.goto_next_sibling() {
+                                break;
+                            }
+                        }
+                    }
+                    forms
+                } else if node.child_count() > 1 {
+                    vec![self.reexport(node)]
+                } else {
+                    vec![]
                 }
-                forms
             }
             "function_declaration" => vec![self.fn_decl(node, false)],
+            // overload signatures (declaration-only fns) drop — IR has no
+            // overload set; the implementation fn carries the signature
+            // (hand canon js_05.ir:3-5, fidelity item 5)
+            "function_signature" => vec![],
+            "abstract_method_signature" | "method_signature" => vec![self.fn_decl(node, true)],
             "lexical_declaration" | "variable_declaration" => {
                 self.top_vars(node)
             }
@@ -1052,12 +1214,8 @@ impl<'a> JsReader<'a> {
             .unwrap_or_default();
         let ret = node
             .child_by_field_name("return_type")
-            .map(|n| {
-                // return_type wraps type_annotation → inner type
-                let t = n.child(0).map(|c| self.type_text(c)).unwrap_or_default();
-                t
-            })
-            .filter(|t| !t.is_empty() && t != "void");
+            .and_then(|n| self.ret_text(n))
+            .filter(|t| !t.is_empty());
         let mut modifiers: Vec<String> = vec![];
         if is_async(node) {
             modifiers.push("async".into());
@@ -1065,7 +1223,11 @@ impl<'a> JsReader<'a> {
         let body = node
             .child_by_field_name("body")
             .map(|b| self.body_core(b))
-            .unwrap_or(Body::Bare(vec![]));
+            .unwrap_or_else(|| {
+                // signature-only (interface/method_signature): empty inline
+                // (Body::Bare([]) canon prints `{`+newline+`}` — unstable)
+                Body::Inline(vec![])
+            });
         let _ = is_method;
         Core::Fn(FnDecl {
             name,
@@ -1077,6 +1239,55 @@ impl<'a> JsReader<'a> {
             body,
             span: self.span(node),
         })
+    }
+
+    /// fn return type surface → signature text (fn type params dropped:
+    /// the expander skips `<…>` on re-parse, so name stays bare — canon
+    /// identity). Type predicates (`x is T`) erase to `Bool` (hand canon
+    /// js_01.ir:5).
+    fn ret_text(&self, node: tree_sitter::Node) -> Option<String> {
+        fn has_predicate(node: tree_sitter::Node<'_>) -> bool {
+            let mut c = node.walk();
+            'walk: loop {
+                if c.node().kind() == "type_predicate" {
+                    return true;
+                }
+                if c.goto_first_child() {
+                    continue;
+                }
+                loop {
+                    if c.goto_next_sibling() {
+                        continue 'walk;
+                    }
+                    if !c.goto_parent() {
+                        return false;
+                    }
+                    if c.node() == node {
+                        return false;
+                    }
+                }
+            }
+        }
+        if has_predicate(node) {
+            return Some("Bool".into());
+        }
+        let mut c = node.walk();
+        let inner = if c.goto_first_child() {
+            loop {
+                let n = c.node();
+                let empty = n.utf8_text(self.src.as_bytes()).unwrap_or("").trim().is_empty();
+                if n.kind() != ":" && !empty {
+                    break;
+                }
+                if !c.goto_next_sibling() {
+                    break;
+                }
+            }
+            self.type_text(c.node())
+        } else {
+            String::new()
+        };
+        (!inner.is_empty() && inner != "void").then_some(inner)
     }
 
     /// params: canon `name Type` pairs; types erased to text; `p?` → `Type?`
@@ -1106,7 +1317,7 @@ impl<'a> JsReader<'a> {
                             }
                         }
                         if let Some(ta) = n.child_by_field_name("type") {
-                            ty = ta.child(0).map(|t| self.type_text(t)).unwrap_or_default();
+                            ty = self.annotation_type(Some(ta));
                         }
                         if optional {
                             ty = format!("{ty}?");
@@ -1188,7 +1399,7 @@ impl<'a> JsReader<'a> {
                     .unwrap_or(false);
                 let ty = n
                     .child_by_field_name("type")
-                    .map(|t| t.child(0).map(|x| self.type_text(x)).unwrap_or_default())
+                    .map(|t| self.annotation_type(Some(t)))
                     .filter(|t| !t.is_empty());
                 let value = n
                     .child_by_field_name("value")
@@ -1301,9 +1512,10 @@ impl<'a> JsReader<'a> {
                 // C-style: prefer the corpus canon (range loop) when the
                 // init/cond/step shape matches `let i = 0; i < N; i++`;
                 // else C-style head verbatim (js-target §4 additive row)
-                let init = node.child_by_field_name("init");
-                let cond = node.child_by_field_name("condition");
-                let step = node.child_by_field_name("update");
+        let init = node.child_by_field_name("initializer").or_else(|| node.child_by_field_name("init"));
+        let cond = node.child_by_field_name("condition");
+        let step = node.child_by_field_name("increment")
+            .or_else(|| node.child_by_field_name("update"));
                 let range = self.cstyle_as_range(init, cond, step);
                 let head = match range {
                     Some((var, hi)) => {
@@ -1326,9 +1538,14 @@ impl<'a> JsReader<'a> {
                             loop {
                                 let n = c.node();
                                 match n.kind() {
-                                    "(" | ")" | ";" | "for" => head.push(Atom::Sym(text(n, self.src).to_string())),
+                                    // `for` keyword child: head already
+                                    // starts with the Ident — don't repeat
+                                    "(" | ")" | ";" => head.push(Atom::Sym(text(n, self.src).to_string())),
+                                    // NOTE: expression_statement children are
+                                    // ALWAYS the loop body (update/increment
+                                    // position is `increment`) — never head
                                     "variable_declaration" | "lexical_declaration"
-                                    | "expression_statement" | "empty_statement"
+                                    | "empty_statement"
                                     | "assignment_expression" | "binary_expression"
                                     | "augmented_assignment_expression"
                                     | "update_expression" => head.extend(self.stmt_atoms(n)),
@@ -1351,7 +1568,19 @@ impl<'a> JsReader<'a> {
             "return_statement" | "throw_statement" => {
                 let kw = if node.kind() == "return_statement" { "return" } else { "throw" };
                 let mut head: Vec<Atom> = vec![Atom::Ident(kw.into())];
-                head.extend(node.child(1).map(|n| self.atomize(n)).unwrap_or_default());
+                // value = any non-keyword, non-`;` child
+                let mut c = node.walk();
+                if c.goto_first_child() {
+                    loop {
+                        let n = c.node();
+                        if !matches!(n.kind(), ";" | "comment") && n.kind() != kw {
+                            head.extend(self.atomize(n));
+                        }
+                        if !c.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                }
                 Core::Stmt { head, body: Body::Inline(vec![]), arms: vec![], span: self.span(node) }
             }
             "expression_statement" => {
@@ -1408,16 +1637,16 @@ impl<'a> JsReader<'a> {
     /// statement-block body → Body (fused single-statement, else Bare)
     fn block_body(&mut self, node: tree_sitter::Node<'a>) -> Body {
         if node.kind() != "statement_block" {
-            // bare single statement (braceless)
+            // bare single statement (braceless): expression-like bodies fuse
+            // inline onto the head canon (`for i in 0..len{fn(a, i)}` — hand
+            // canon js_01.ir:20; a standalone `fn (...)` call LINE would
+            // re-parse as a fn declaration)
             return match node.kind() {
                 "lexical_declaration" | "variable_declaration" => {
-                    let mut vs = self.top_vars(node);
-                    match vs.len() {
-                        1 => Body::Bare(vs),
-                        _ => Body::Bare(vs),
-                    }
+                    let vs = self.top_vars(node);
+                    Body::Bare(vs)
                 }
-                _ => Body::Bare(vec![self.stmt(node)]),
+                _ => Body::Inline(self.stmt_atoms(node)),
             };
         }
         self.body_core(node)
@@ -1479,33 +1708,55 @@ impl<'a> JsReader<'a> {
     }
 
     fn member_field(&mut self, node: tree_sitter::Node) -> Vec<Core> {
-        let name = node.child_by_field_name("name")
-            .map(|n| match n.kind() {
-                "computed_property_name" | "private_property_identifier" => {
-                    text(n, self.src).to_string()
-                }
-                _ => text(n, self.src).to_string(),
-            })
+        let name_raw = node.child_by_field_name("name")
+            .map(|n| text(n, self.src).to_string())
             .unwrap_or_default();
-        let ty = node
-            .child_by_field_name("type")
-            .map(|t| t.child(0).map(|x| self.type_text(x)).unwrap_or_default())
-            .filter(|t| !t.is_empty() && t != "void");
+        let span = self.span(node);
+        // private member (`#p`): the IR name model lexes no `#` — capture
+        // the whole member opaque (§8.1.3c; bounded loss, never wrong)
+        if name_raw.starts_with('#') && node.parent().map(|p| p.kind() == "class_body").unwrap_or(false) {
+            return vec![Core::Expr(
+                vec![Atom::Str(format!("opaque:{}", text(node, self.src).trim()))],
+                span,
+            )];
+        }
+        let name = name_raw;
+        let ty_opt = self.annotation_type(node.child_by_field_name("type"));
+        let has_optional = node.child(0).map(|c| c.kind() == "?").unwrap_or(false);
+        let ty = if ty_opt.is_empty() {
+            None
+        } else {
+            Some(if has_optional { format!("{ty_opt}?") } else { ty_opt })
+        };
+        let is_property_signature = node.kind() == "property_signature";
         let value = node
             .child_by_field_name("value")
+            .filter(|_| !is_property_signature)
             .filter(|v| !matches!(v.kind(), "arrow_function" | "function_expression" | "function"))
             .map(|v| self.atomize(v));
         let mut modifiers: Vec<String> = vec![];
         if is_async(node) {
             modifiers.push("async".into());
         }
-        let span = self.span(node);
+        let _ = &modifiers;
         match value {
             Some(atoms) if !atoms.is_empty() => {
                 vec![Core::Var(VarDecl {
                     name,
                     ty,
                     value: Some(atoms),
+                    modifiers,
+                    objlit: None,
+                    span,
+                })]
+            }
+            None if is_property_signature => {
+                // property signature: type half only (hand canon js_08.ir:5
+                // `Bool? xmlMode`), never opaque — signature surface §8.2
+                vec![Core::Var(VarDecl {
+                    name,
+                    ty,
+                    value: None,
                     modifiers: vec![],
                     objlit: None,
                     span,
@@ -1619,7 +1870,7 @@ impl<'a> JsReader<'a> {
 
     /// alias body atoms: unions → ` | `, literals → strings, template types
     /// → their payload text, generics tight
-    fn alias_body_atoms(&mut self, node: tree_sitter::Node) -> Vec<Atom> {
+    fn alias_body_atoms(&self, node: tree_sitter::Node) -> Vec<Atom> {
         match node.kind() {
             "union_type" => {
                 let mut v = vec![];
@@ -1690,7 +1941,8 @@ impl<'a> JsReader<'a> {
             }
             "string" => vec![Atom::Str(self.str_payload(node))],
             "number" => vec![Atom::Number(text(node, self.src).to_string())],
-            "true" | "false" | "null" | "undefined" | "void" | "unknown" => {
+            // `as const` assertion: the type operand is a bare `const` leaf
+            "true" | "false" | "null" | "undefined" | "void" | "unknown" | "const" => {
                 vec![Atom::Ident(text(node, self.src).to_string())]
             }
             _ => vec![Atom::Str(format!(
@@ -1774,4 +2026,95 @@ fn find_kind<'t>(
 /// descend into first child if any
 fn cursor_down(c: &mut tree_sitter::TreeCursor) -> bool {
     c.goto_first_child()
+}
+
+#[cfg(test)]
+mod roundtrip_tests {
+    use super::*;
+    use crate::printer;
+
+    /// canon identity: JS → core → canon text → IR reader → expand → print
+    /// == canon. This is the 4.4 gate — the canon surface the reader emits
+    /// must be re-stable under the Phase-1 reader/printer pair.
+    fn canon_identity(src: &str, label: &str) {
+        let core = read_js(src).unwrap_or_else(|e| panic!("{label}: read_js failed: {e}"));
+        let canon = printer::print(&core);
+        let core2 = crate::expander::expand(&canon)
+            .unwrap_or_else(|e| panic!("{label}: canon failed to re-parse:\n{e}\n--- canon ---\n{canon}"));
+        let canon2 = printer::print(&core2);
+        assert_eq!(canon, canon2, "{label}: canon NOT stable across IR re-parse");
+    }
+
+    #[test]
+    fn js_01_util_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_01_util.ts"), "js_01");
+    }
+
+    #[test]
+    fn js_02_types_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_02_types.ts"), "js_02");
+    }
+
+    #[test]
+    fn js_03_parse_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_03_parse.ts"), "js_03");
+    }
+
+    #[test]
+    fn js_04_forms_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_04_forms.ts"), "js_04");
+    }
+
+    #[test]
+    fn js_05_css_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_05_css.ts"), "js_05");
+    }
+
+    #[test]
+    fn js_06_slim_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_06_slim.ts"), "js_06");
+    }
+
+    #[test]
+    fn js_08_options_canon_identity() {
+        canon_identity(include_str!("../../../bench/corpus/real/src/js_08_options.ts"), "js_08");
+    }
+
+    #[test]
+    fn reader_construct_smoke() {
+        // the §8.2 mapping rows the corpus exercises, one per canon shape
+        canon_identity("const x = 1;", "var");
+        canon_identity("let x = 1; x = 2;", "var-mut");
+        canon_identity("const {a, b} = obj;", "destructured-object");
+        canon_identity("function f(a, b=1, ...rest){ return a; }", "fn-defaults");
+        canon_identity(
+            "class A extends B { static x = 1; #p = 2; m(){ return this.#p; } get g(){ return 1 } }",
+            "class",
+        );
+        canon_identity("interface I { a?: string; b: number; m(x: number): void }", "interface");
+        canon_identity("type T = { a: string; b?: number };", "type-object");
+        canon_identity("type U = 'a' | 'b';", "opaque-union");
+        canon_identity("if (a) { b(); } else if (c) { d(); } else { e(); }", "if-elseif-else");
+        canon_identity("while (a) { b(); }", "while");
+        canon_identity("for (const k in obj){ f(obj[k]); }", "for-in");
+        canon_identity("for (let i = 0; i < n; i++) { f(i); }", "for-range");
+        canon_identity("for (let x = xs.length - 1; x >= 0; x--) { g(x); }", "for-cstyle");
+        canon_identity("return;", "bare-return");
+        canon_identity("throw new Error('oops');", "throw-new");
+        canon_identity("try { a(); } catch (e) { b(e); } finally { c(); }", "try-catch");
+        canon_identity("switch (x) { case 1: a(); break; default: b(); }", "switch");
+        canon_identity("const f = (a) => a * 2;", "arrow");
+        canon_identity("const g = (a) => { const b = a + 1; return b; };", "arrow-block");
+        canon_identity("`t ${v}`;", "template");
+        canon_identity("new Foo(a, b);", "new-expr");
+        canon_identity("x?.y?.z ?? d;", "optional-chain");
+        canon_identity("a ? b : c;", "ternary");
+        canon_identity("typeof x === 'string';", "typeof");
+        canon_identity("delete m[k];", "delete");
+        canon_identity("`[a-z]` && /[a-z]+/g;", "regex");
+        canon_identity("import { a, b } from './mod.js'; f(a);", "import-named");
+        canon_identity("import * as M from './mod.js'; M.f();", "import-star");
+        canon_identity("export { a, b } from './mod.js';", "reexport");
+        canon_identity("export * from './mod.js';", "reexport-star");
+    }
 }

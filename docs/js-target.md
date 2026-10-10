@@ -287,3 +287,43 @@ ERROR node whose source line matches a known-representable construct gets
 its mapping; otherwise the enclosing member is captured opaque (§8.1.3c).
 The 4.2 audit histogram is the checklist: any future corpus kind landing as
 ERROR gets classified before the reader is extended.
+
+### 8.4 Reader canon shapes (4.4, verified)
+
+Decisions locked while bringing `read_js` + canon print through the identity
+gate (`cargo test --lib roundtrip_tests`: all 7 corpus files + 30 construct
+rows stable). These are canon-shape truths, not design drift:
+
+- **fn type parameters are dropped** (`isCheerio<T>` → `isCheerio`) — the
+  expander skips `<…>` on fn re-parse, so keeping them breaks identity.
+  Type-ARGUMENTS in call positions stay verbatim and erase at emit (J3).
+- **Signatures erase tight**: unions spell `a|b` in canon (the printer
+  re-renders spaced only where the frozen keyword-space rule requires, e.g.
+  `null`), function types erase entirely (param keeps its bare name), empty
+  generics drop (`Array<AnyNode>` keeps contents; `Array<{…}>` → bare).
+  Type words: string/number/boolean/unknown → String/Int/Bool/Any; void
+  drops. Optional member `?` rides the type (`Bool? xmlMode`).
+- **Overload signatures drop** (fidelity budget item 5, hand js_05.ir:3).
+- **Type predicates** (`x is T` return types) erase to `Bool`.
+- **Private members (`#p`) capture opaque** — the IR name model lexes no
+  `#` (§8.1.3c member row `"opaque:…"`, print_member verbatim).
+- **`cstyle-for → range` canon** uses the field name `increment` (not
+  `update`); non-range C-style heads print verbatim.
+- **Block-lambda bodies glue as statement-pieced runs** (`=>{stmt stmt}`),
+  matching the J2 emission-side classification; bare if/for bodies fuse
+  inline onto the head (`for i in 0..len{fn(array[i], i)}`).
+- **`x?.y` reads the member's inline `optional_chain` child** and canon
+  spells `?.` as two syms (lex-stable).
+- **`!==` needs a space before the operator in canon** — the frozen ident
+  suffix rule (`x!`) makes glued `a!==` lex `a!` + `==`, which then drops
+  the `!` at emit. `render_atoms` spaces before `!`-prefixed syms
+  (hand canon's ` !==` spacing reproduces correct emit `str!=="string"`).
+
+**Pipeline holes closed additively to make the round trip stable** (canon
+identity gates were already text-only so these were silent before the reader
+exercised them at scale): `expand_line`'s expr fallback splices run-end
+`{…}` inline bodies back into the atom run (tail block-lambdas were dropped
+on re-parse); the var-branch obj-lit hijack extends to `=>`-terminated
+values; `expand_member` accepts the `"opaque:…"` verbatim member row;
+`print_member` renders captured members verbatim (signature-only opaque
+vars keep field rendering).

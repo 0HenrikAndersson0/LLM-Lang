@@ -452,6 +452,18 @@ fn print_member(c: &Core, level: usize) -> String {
         let computed = v.modifiers.iter().any(|m| m == "computed");
         let mut s = String::new();
         s.push_str(&indent(level));
+        // opaque member capture: value IS the verbatim row (`"opaque:…"`,
+        // §8.1.3c) — no name/ty/`=` scaffolding. Signature-only opaque
+        // vars (value None) keep the field rendering (name/ty text is
+        // re-stable; the opaque mod is not part of canon surface).
+        if v.modifiers.iter().any(|m| m == "opaque")
+            && matches!(&v.value, Some(a) if !a.is_empty())
+        {
+            if let Some(val) = &v.value {
+                s.push_str(&render_atoms(val));
+            }
+            return s;
+        }
         if let Some(ty) = &v.ty {
             s.push_str(ty);
             s.push(' ');
@@ -540,6 +552,11 @@ pub fn render_atoms(atoms: &[Atom]) -> String {
                 (Atom::Ident(_) | Atom::Number(_), Atom::Ident(_) | Atom::Number(_)) => true,
                 // `a , b` — comma glues left, space after
                 (Atom::Sym(c), _) if c == "," => true,
+                // `!` ops after a word: the lexer's ident-suffix rule eats
+                // `!` (`a!==` lexes `a!` + `==` — atoms change, and the
+                // emitter drops the non-null `!` suffix). One space keeps
+                // the operator lex-fresh → atoms survive the re-parse.
+                (Atom::Ident(_) | Atom::Number(_), Atom::Sym(s)) if s.starts_with('!') => true,
                 // `if(` — keyword space rule (probe tie, floor wins)
                 (Atom::Ident(k), _) if is_keyword(k) => true,
                 _ => false,

@@ -136,8 +136,8 @@ documented.
 | 4.1 | tree-sitter-javascript grammar for parsing JS targets | parser setup | ☑ — `js_read.rs`: tree-sitter + tree-sitter-typescript v0.23.2; CST parse over the js_*.ts corpus (TS grammar superset — types surface as `type_annotation` and get skipped by the JS-only mapping); 6/7 corpus files parse clean, **gap identified: `export type * from` unsupported by the grammar** (round-trip will treat it as opaque passthrough); node-kind histogram wired as `irc js-kinds <dir>` (4.2 groundwork, kind histogram incl. `program/file` roots) |
 | 4.2 | IR-form coverage audit on js corpus: % of constructs representable in core+ sugar | coverage report | ☑ — `bench/results-coverage.md` + `bench/scripts/coverage_audit.py` (verdict table per kind, evidence rows via per-file histograms): **4398 nodes / 145 kinds over the 7 js_*.ts files; 2233 constructs the reader must map; 100.0% representable** — core 1576/51 kinds (direct core form or verbatim surface per hand renders: `new`, `typeof`, `delete`, `as`, `?.` all pass through), sugar 14/4 (templates→interpolation, `i++`→`+=`, fn-expr→arrow), signature 634/23 (types erased to signatures, §3/§6.6), `opaque type` capture 8/1 (js_02 union/template aliases, reconcile row 21 — bounded loss), grammar-gap 1 (ts grammar lacks `export type *`, construct = Core::Reexport). Comments dropped by design (§6.1). Reader (4.4) has no representability blockers |
 | 4.3 | Mapping table: JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☑ — js-target.md §8: capture design (verify-grounded: `Body::Opaque`, `opaque` modifier, `opaque:` atoms, `opaque{ raw }` bodies all exist in expander/printer; `opaque type` canon rows js_02.ir:5-9), capture rules (whole declaration/member, never partial expr; verbatim print identity), exhaustive capture sites, mapping table by audit bucket (core/verbatim incl. `new`/`typeof`/`delete`/`as`/`?.`; sugar canon: templates→interpolation, `i++`→`+=`, fn-expr→arrow; signature erasure incl. lookup-type member resolution; opaque = union/template aliases only; comments dropped by design), reader-side reclassification of the 2.4 accepted-v0 rows, ts-grammar ERROR fallback rule |
-| 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ◐ — WIP in js_read.rs (compiles, 40 lib tests green): expression/statement/declaration walk per js-target §8.2 (atoms, Var+`var mut` over-label, Stmt incl. C-style-for→range canon, Fn+param erasure, class/interface members), imports→@use aliases, reexports→Core::Reexport, alias split (interface-shaped vs `opaque type` union/template), `opaque:` verbatim member capture. NOT yet tested: canon-print verification + corpus smoke + re-emit round-trip are the next concrete steps |
-| 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ☐ |
+| 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ☑ — `read_js` walk complete + `irc from-js` CLI; **canon identity: print(read(js)) ≡ print(expand(print(read(js)))) on all 7 js_*.ts files + 30 construct-row smoke** (`cargo test --lib roundtrip_tests`); re-classifications per §8.4/§8.2 — reexports→Reexport (named/type/star), alias split (interface-shaped vs `opaque type` union/template), overload signatures dropped, fn type-params dropped (expander reparse convention), type predicates→Bool, private-class members opaque-captured, `?.`/`as const`/lookup-type/cstyle-for→range canon; canon-shape truths documented in js-target §8.4 |
+| 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ◐ — **leg 1 green**: JS → IR canon → JS `node --check` **7/7** (first time js_04/05/06 pass any compile gate on machine canon) and behavior harness cases (js_01 22 + domEach side-effects, js_08 6 flattenOptions) **all match** vs originals. Remaining: tsc stricter gate on the TS corpus + full report incl. the 2.4 accepted-v0 reclassification diff-vs-hand row |
 | 4.6 | Document actual §5 budget (what was dropped in practice) | fidelity doc | ☐ |
 
 > [3] **`(opaque …)` passthrough:** unrepresentable members are captured
@@ -317,7 +317,23 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v4.9 (2026-10-10, latest)** — **4.4 in flight (session paused):** reader walk
+- **v4.10 (2026-10-10, latest)** — **4.4 done: JS reader + canon identity + re-emit gate.**
+  `read_js` (js_read.rs, tree-sitter CST → Core) + `irc from-js`. The identity gate
+  (canon → IR reader → expand → print) held after closing reader canon bugs (union
+  tightness, lookup-type object, property-signature `?`, braceless if/for arms, bare
+  `return;`, array/args separators, function/object-type erasure, `as const` leaf,
+  `?.` optional-chain children, `increment` field) and — additively — three latent
+  **pipeline holes the reader was the first to exercise at scale**: `expand_line`'s
+  expr fallback splices run-end `{…}` inline bodies (tail block-lambdas silently
+  lost on re-parse before); var-branch obj-lit hijack extends to `=>` tails;
+  `expand_member`/`print_member` verbatim `"opaque:…"` member rows. Lexic truth
+  found: `!==` glued after an ident can't survive the frozen `x!` suffix rule —
+  canon prints a space (hand-canon spacing reproduces correct emit). **Evidence:
+  48 lib tests incl. all-7-corpus canon identity + 30-row construct smoke;
+  JS → IR → JS `node --check` 7/7; behavior cases (js_01 22 + domEach side
+  effects, js_08 6) ALL MATCH vs originals.** js-target §8.4 records canon shapes.
+  **4.5 opens at ◐ (leg 1 green; tsc gate + report next).**
+- **v4.9 (2026-10-10, later)** — **4.4 in flight (session paused):** reader walk
   written and compiling in `js_read.rs` — expressions/atoms (`new`/`typeof`/
   `delete`/`as`/`?.` verbatim, templates→interpolation payloads, `i++`→`+=`,
   callee-generics preserved), statements (`var`/`var mut` over-label,

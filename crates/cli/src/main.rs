@@ -10,6 +10,8 @@ fn main() {
         Some("parse") => parse_files(&args[1..], debug),
         Some("expand") => expand_files(&args[1..]),
         Some("to-js") => to_js_files(&args[1..], map),
+        Some("from-js") => from_js_files(&args[1..]),
+        Some("canon") => canon_files(&args[1..]),
         Some("js-kinds") => {
             // PLAN 4.2 groundwork: node-kind histogram over a JS/TS source dir
             for dir in &args[1..] {
@@ -28,7 +30,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: irc [--expand] lex|parse|expand|to-js <files...>\n       irc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       irc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
+                "usage: irc [--expand] lex|parse|expand|to-js|from-js <files...>\n       irc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       irc from-js <js/ts files>   JS → canonical IR text (4.4 round-trip leg)\n       irc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
             );
             std::process::exit(2);
         }
@@ -100,6 +102,26 @@ fn to_js_files(paths: &[String], map: bool) {
                 Err(e) => println!("// {path}: LOWER-ERR {e}"),
             },
             Err(e) => println!("// {path}: ERROR {e}"),
+        }
+    }
+}
+
+fn canon_files(paths: &[String]) {
+    for path in paths {
+        let src = std::fs::read_to_string(path).expect("read");
+        match ir_lang::expander::expand(&src) {
+            Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+            Err(e) => println!("// {path}: ERROR {e}"),
+        }
+    }
+}
+
+fn from_js_files(paths: &[String]) {
+    for path in paths {
+        let src = std::fs::read_to_string(path).expect("read");
+        match ir_lang::js_read::read_js(&src) {
+            Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+            Err(e) => println!("// {path}: JS-READ-ERR {e}"),
         }
     }
 }
