@@ -328,7 +328,19 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v6.2 (2026-10-10, latest)** — **6.6 prep ☑.** `examples/` ships:
+- **v6.3 (2026-10-10, latest)** — **6.6-preflight: the char-atom probe
+  ran** (`bench/scripts/charatom_probe.py` +
+  `bench/results-char-atom.md`): **token-neutral** (±1 over 36 swaps;
+  the quoted-pair `{'Y'` vs `{"Y'` BPE-identical), fixes the 8 char-family
+  emit rows, and resolves the canon-ambiguity finding (cs_05 holds
+  `k/M/G` as BOTH char and string — canon text can't distinguish; the
+  atom can). The naive payload-swap corrupted 3 suffix strings — the
+  implementation must be tree-position-based (the reader knows). The
+  probe is the working-agreement's Phase-0 re-run for the @2 admission;
+  **the admit call is the human's** (~1 day; reader/printer/emit arms +
+  @2 migration per versioning.md). README consumer rewrite + `irc verify`
+  lint also landed this pass.
+- **v6.2 (2026-10-10, later)** — **6.6 prep ☑.** `examples/` ships:
   `metric.ir`→`metric.cs` (the C#-idiom emit, verified) and
   `compact.ir`→`compact.js` (the JS-idiom emit) with `examples/README`
   showing the two-way round trip (`from-cs` re-reads). Crate metadata
