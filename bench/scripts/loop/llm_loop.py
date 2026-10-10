@@ -58,7 +58,8 @@ class EchoAdapter:
     def __init__(self, cfg: dict, opts):
         self.cfg = cfg
         self.calls = 0
-        self.suffix = "_js" if getattr(opts, "lang", "ir") == "js" else ""
+        lang = getattr(opts, "lang", "ir")
+        self.suffix = {"js": "_js", "cs": "_cs", "ir-cs": "_cs_ir"}.get(lang, "")
     def reply(self, workdir: Path, messages: list, round_no: int) -> str:
         self.calls += 1
         key = ("echo_fix" if self.calls > 1 else "echo_draft") + self.suffix
@@ -169,6 +170,22 @@ def extract_ir(text: str):
         return text.strip()
     return None
 
+def extract_cs(text: str):
+    """C# baseline world: prefer the fenced csharp/cs block with
+    'static'/'class'/'=>'; fall back to the last fenced block; fall back to
+    the whole text if it looks like C#."""
+    fences = re.findall(r"```([^\n`]*)\n(.*?)```", text, re.S)
+    for lang, body in fences:
+        if lang.strip().lower() in ("csharp", "cs", "") and ("static" in body or "class " in body):
+            return body.strip()
+    for lang, body in reversed(fences):
+        if "static" in body:
+            return body.strip()
+    t = text.strip()
+    if t.startswith(("using ", "//", "public ", "internal ", "static ", "class ")):
+        return t
+    return None
+
 def extract_js(text: str):
     """Baseline world: prefer the fenced ```js block that exports a fn; fall
     back to the last fenced block containing 'export'; fall back to the whole
@@ -250,14 +267,126 @@ def js_to_ir(entries, line):
     prev = [e for e in entries if e[0] <= line]
     return (prev[-1][2], prev[-1][3]) if prev else None
 
+def irc_emit_cs(workdir: Path, ir_text: str):
+    """cs IR world: write feature.ir; emit via irc to-cs. Returns (ok, errors, cs_path)."""
+    ir_path = workdir / "feature.ir"
+    ir_path.write_text(ir_text if ir_text.endswith("\n") else ir_text + "\n")
+    proc = subprocess.run(
+        [resolve_irc(), "to-cs", str(ir_path)],
+        capture_output=True, text=True, timeout=60,
+    )
+    out = (proc.stdout or "") + (proc.stderr or "")
+    if "CS-ERR" in out or "ERROR" in out:
+        errs = []
+        for line in out.splitlines():
+            m = re.match(r"// .*:? ?(CS-ERR|ERROR) (.*)", line)
+            if m:
+                errs.append(m.group(2))
+        return False, (errs or [out.strip()]), None
+    if not out.strip():
+        return False, ["no emit output"], None
+    cs_path = workdir / "feature.cs"
+    cs_path.write_text(out if out.endswith("\n") else out + "\n")
+    return True, [], cs_path
+
+def write_feature_cs(workdir: Path, cs_text: str):
+    """C# baseline world: the reply IS the target file."""
+    cs_path = workdir / "feature.cs"
+    cs_path.write_text(cs_text if cs_text.endswith("\n") else cs_text + "\n")
+    return cs_path
+
+def run_rig_cs(workdir: Path, cfg: dict):
+    """Generate + run the dotnet rig. Reflection finds the fn by name+arity
+    in the emitted assembly; the canon cases are JSON — args convert via
+    System.Text.Json, results deep-compare via JsonNode.DeepEqual (net10)."""
+    cases = cfg["cases"]
+    rows = ",\n        ".join(
+        f'("{fn}", {json.dumps(json.dumps(args))}, {json.dumps(json.dumps(expected))})'
+        for (fn, args, expected) in cases
+    )
+    rig_body = """using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+var cases = new (string Fn, string ArgsJson, string ExpectedJson)[] {
+        """ + rows + """
+};
+
+static object? Conv(JsonNode n, Type t)
+{
+    if (n is JsonValue v)
+    {
+        if (t == typeof(string)) return (string?)v ?? "";
+        if (t == typeof(int)) return (int)v!;
+        if (t == typeof(long)) return (long)v!;
+        if (t == typeof(bool)) return (bool)v!;
+        if (t == typeof(double)) return (double)v!;
+        if (t == typeof(char)) return (string?)v ?? "";
+    }
+    return n.Deserialize(t);
+}
+
+static (MethodInfo, object?[]) Resolve(string fn, string argsJson)
+{
+    var argsNode = (JsonArray)JsonNode.Parse(argsJson)!;
+    var cand = typeof(Rig).Assembly.GetTypes()
+        .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
+        .Where(m => m.Name == fn && m.GetParameters().Length == argsNode.Count)
+        .Select(m => (t: m.DeclaringType!, m: m))
+        .FirstOrDefault();
+    if (cand.m is null)
+        throw new MissingMethodException($"fn not found: {fn}({argsNode.Count} args)");
+    var argv = argsNode.Select((n, i) => Conv(n, cand.m.GetParameters()[i].ParameterType)).ToArray();
+    return (cand.m, argv);
+}
+
+int fail = 0;
+foreach (var (cf, aJson, eJson) in cases)
+{
+    try
+    {
+        var (m, argv) = Resolve(cf, aJson);
+        var got = m.Invoke(null, argv);
+        var gotJson = JsonSerializer.Serialize(got);
+        var ok = JsonNode.DeepEquals(JsonNode.Parse(gotJson)!, JsonNode.Parse(eJson)!);
+        if (ok) Console.WriteLine($"PASS {cf}({aJson}) -> {gotJson}");
+        else { fail++; Console.Error.WriteLine($"FAIL {cf}({aJson}) -> {gotJson} (expected {eJson})"); }
+    }
+    catch (Exception err)
+    {
+        fail++;
+        Console.Error.WriteLine($"ERROR {cf}({aJson}): {err.Message}");
+    }
+}
+if (fail > 0) { Console.Error.WriteLine($"RESULT: {fail} failing"); return 1; }
+Console.WriteLine("RESULT: ALL PASS");
+return 0;
+"""
+    feat = workdir / "feature.cs"
+    fsrc = feat.read_text() if feat.exists() else ""
+    # the Rig type must live in its own file (C# top-level statements may
+    # not be followed by type declarations) and in the global namespace
+    # (typeof(Rig) resolves from the optionally-namespaced feature/world)
+    (workdir / "riglib.cs").write_text("public static class Rig { }\n")
+    (workdir / "rig.cs").write_text(rig_body)
+    (workdir / "t.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType>'
+        "<TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings>"
+        "<Nullable>disable</Nullable></PropertyGroup></Project>"
+    )
+    proc = subprocess.run(["dotnet", "run", "-v", "q", "--nologo"],
+                          cwd=workdir, capture_output=True, text=True, timeout=180)
+    out = (proc.stdout or "") + (proc.stderr or "")
+    return proc.returncode == 0, out
+
 def feedback_text(node_out: str, src_text: str, map_file, lang: str = "ir") -> str:
     """Errors + the mapped source lines (span map, innermost rule — IR world
     only). For value failures (no stack trace) include the numbered source so
     the model can act. The js baseline world has no span map: the source IS
     the emitted code, so feedback is the raw node output + numbered source."""
-    fence = "ir" if lang == "ir" else "js"
-    parts = ["## Reported errors\n", "```\n" + node_out.strip()[:4000] + "\n```"]
-    src_lang = "IR" if lang == "ir" else "JS"
+    fence = {"ir": "ir", "js": "js", "ir-cs": "ir", "cs": "cs"}.get(lang, "ir")
+    parts = ["## Reported errors\n", "```\n" + (node_out if lang in ("ir-cs", "cs") else node_out.strip())[:4000] + "\n```"]
+    src_lang = {"ir": "IR", "js": "JS", "ir-cs": "IR", "cs": "C#"}.get(lang, "IR")
     js_file = "feature.js"
     entries = json.loads(map_file.read_text())["mappings"] if map_file and Path(map_file).exists() else []
     lines = src_text.splitlines()
@@ -312,6 +441,10 @@ def setup_run(cfg: dict, args, lang: str = "ir") -> Path:
         tag = args.adapter
     if lang == "js":
         tag = (tag or "file") + "-js"
+    if lang == "ir-cs":
+        tag = (tag or "file") + "-cs_ir"
+    if lang == "cs":
+        tag = (tag or "file") + "-cs"
     workdir = Path(args.workdir) if args.workdir else HERE / "runs" / f"{cfg['id']}_{tag}_{stamp}"
     if workdir.exists() and any(workdir.iterdir()):
         sys.exit(f"workdir not empty: {workdir}")
@@ -323,7 +456,7 @@ def cmd_run(args):
     cfg = json.loads(Path(args.task).read_text())
     workdir = setup_run(cfg, args, lang)
     adapter = ADAPTERS[args.adapter](cfg, args)
-    spec = cfg["spec_js"] if (lang == "js" and cfg.get("spec_js")) else cfg["spec"]
+    spec = cfg["spec_js"] if (lang == "js" and cfg.get("spec_js")) else cfg["spec_cs"] if (lang == "cs" and cfg.get("spec_cs")) else cfg["spec_cs_ir"] if (lang == "ir-cs" and cfg.get("spec_cs_ir")) else cfg["spec"]
     messages = []
     if lang != "js":
         # the language guide is IR-world overhead (the baseline needs none) —
@@ -334,10 +467,16 @@ def cmd_run(args):
     rounds_max = args.rounds
     verdict = f"FAIL: {rounds_max} rounds exhausted"
     round_log = []
-    fence = "ir" if lang == "ir" else "js"
+    fence = {"ir": "ir", "js": "js", "ir-cs": "ir", "cs": "cs"}.get(lang, "ir")
 
     def extract(text):
-        return extract_ir(text) if lang == "ir" else extract_js(text)
+        if lang == "ir":
+            return extract_ir(text)
+        if lang == "cs":
+            return extract_cs(text)
+        if lang == "ir-cs":
+            return extract_ir(text)
+        return extract_js(text)
 
     def emit_and_run(workdir, src_text):
         if lang == "ir":
@@ -345,9 +484,20 @@ def cmd_run(args):
             if not ok:
                 return None, errs, None
             map_file = js_path.with_suffix("").with_name(js_path.name[:-3] + ".map.json")
-        else:
-            js_path = write_feature_js(workdir, src_text)
-            map_file = None
+            passed, out = run_rig(workdir, cfg)
+            return (passed, out, js_path), [], map_file
+        if lang == "ir-cs":
+            ok, errs, cs_path = irc_emit_cs(workdir, src_text)
+            if not ok:
+                return None, errs, None
+            passed, out = run_rig_cs(workdir, cfg)
+            return (passed, out, cs_path), [], None
+        if lang == "cs":
+            cs_path = write_feature_cs(workdir, src_text)
+            passed, out = run_rig_cs(workdir, cfg)
+            return (passed, out, cs_path), [], None
+        js_path = write_feature_js(workdir, src_text)
+        map_file = None
         passed, out = run_rig(workdir, cfg)
         return (passed, out, js_path), [], map_file
 
@@ -400,10 +550,14 @@ def cmd_run(args):
             messages.append({"role": "user", "content": f"Your reply contained no fenced ```{fence} block. Re-emit the complete {fence} file in one fenced {fence} block."})
             round_log.append({"round": r, "outcome": f"no-{fence}-block", "detail": "", "src_chars": 0, "elapsed": time.time() - t0})
             continue
-        (workdir / f"feature-R{r:02}.{fence}").write_text(src + "\n")
+        # the cs worlds compile every .cs in the workdir (dotnet SDK glob) —
+        # the per-round archives get non-compilable extensions (`.csrc`)
+        round_ext = "csrc" if lang == "cs" else fence
+        (workdir / f"feature-R{r:02}.{round_ext}").write_text(src + "\n")
         res, errs, map_file = emit_and_run(workdir, src)
         if res is None:
-            msg = f"Your {'IR did not transpile. Errors' if lang == 'ir' else 'module failed to load. Errors'}:\n" + "\n".join(f"- {e}" for e in errs) + f"\nRe-emit the complete corrected {fence} file."
+            stage = {"ir": "IR did not transpile. Errors", "ir-cs": "IR did not transpile. Errors", "js": "module failed to load. Errors", "cs": "C# module failed to build. Errors"}.get(lang, "IR did not transpile. Errors")
+            msg = f"Your {stage}:\n" + "\n".join(f"- {e}" for e in errs) + f"\nRe-emit the complete corrected {fence} file."
             messages.append({"role": "user", "content": msg})
             round_log.append({"round": r, "outcome": "transpile-error" if lang == "ir" else "load-error", "detail": "; ".join(errs)[:300], "src_chars": len(src), "elapsed": time.time() - t0})
             continue
@@ -424,8 +578,9 @@ def cmd_run(args):
 
 def write_report(workdir, cfg, adapter_name, args, round_log, verdict, messages, lang: str = "ir"):
     fence = "ir" if lang == "ir" else "js"
-    rep = [f"# Loop run — {cfg['id']}" + (" (js baseline world)" if lang == "js" else ""), ""]
-    rep.append(f"- lang/world: `{lang}`" + (" — no guide, no transpile, no span map (J6 baseline)" if lang == "js" else " — guide + transpile + span map"))
+    world_note = {"js": " — no guide, no transpile, no span map (J6 baseline)", "cs": " — C# baseline world: no guide, no transpile", "ir-cs": " — guide + to-cs emit + dotnet rig"}.get(lang, " — guide + transpile + span map")
+    rep = [f"# Loop run — {cfg['id']}" + ("" if lang in ("ir", "js") else f" ({lang} world)"), ""]
+    rep.append(f"- lang/world: `{lang}`" + world_note)
     rep.append(f"- adapter: `{adapter_name}`" + (f", model: `{args.model}`" if args.model else ""))
     rep.append(f"- task: {cfg['title']}")
     rep.append(f"- rounds: {len(round_log)} (cap {args.rounds}); started {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
@@ -437,9 +592,12 @@ def write_report(workdir, cfg, adapter_name, args, round_log, verdict, messages,
         detail = e["detail"].replace("|", "\\|")
         rep.append(f"| {e['round']} | {e['outcome']} | {detail} | {e['src_chars']} | {e['elapsed']:.1f} |")
     rep.append("")
-    rep.append("Artifacts: `prompt-R*.md` (transcripts), `reply-R*.md` (model replies), `feature-R*." + fence + "`, "
-               f"`feature.{fence}` (last), `feature.js` (last emit/run), `rig.js` (cases)"
-               + (", `feature.map.json` (IR↔JS line map)" if lang == "ir" else " — no map in the js world") + ".")
+    if lang in ("ir-cs", "cs"):
+        rep.append("Artifacts: `prompt-R*.md`, `reply-R*.md`, `feature-R*.ir` (model drafts), `feature.cs` (last emit), `rig.cs` (dotnet rig), `t.csproj`.")
+    else:
+        rep.append("Artifacts: `prompt-R*.md` (transcripts), `reply-R*.md` (model replies), `feature-R*." + fence + "`, "
+                   f"`feature.{fence}` (last), `feature.js` (last emit/run), `rig.js` (cases)"
+                   + (", `feature.map.json` (IR↔JS line map)" if lang == "ir" else " — no map in the js world") + ".")
     final_src = workdir / f"feature.{fence}"
     if final_src.exists():
         rep.append(f"\n## Final {'IR' if lang == 'ir' else 'JS'}\n\n```{fence}\n" + final_src.read_text() + "```\n")
@@ -450,7 +608,8 @@ def cmd_selftest(args):
     """Echo-adapter loop over task_01: verifies the deterministic mechanics
     (draft -> runtime error -> mapped feedback -> repair -> ALL PASS)."""
     import shutil
-    workdir = HERE / "runs" / ("selftest-echo" if args.lang == "ir" else "selftest-echo-js")
+    tag = {"ir": "selftest-echo", "js": "selftest-echo-js", "ir-cs": "selftest-echo-cs_ir", "cs": "selftest-echo-cs"}.get(args.lang, "selftest-echo")
+    workdir = HERE / "runs" / tag
     if workdir.exists():
         shutil.rmtree(workdir)
     ns = argparse.Namespace(
@@ -471,7 +630,7 @@ def cmd_selftest(args):
     cmd_run(ns)
     verdict = (workdir / "report.md").read_text()
     if "verdict: **PASS**" not in verdict:
-        sys.exit(f"selftest FAILED — see bench/scripts/loop/runs/{'selftest-echo' if args.lang == 'ir' else 'selftest-echo-js'}/report.md")
+        sys.exit(f"selftest FAILED — see bench/scripts/loop/runs/{tag}/report.md")
     print(f"[selftest] OK: echo loop completed ({args.lang} world; draft bug repaired, ALL PASS)")
 
 def main():
@@ -479,7 +638,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("run")
     p.add_argument("--task", required=True, help="task .json under tasks/")
-    p.add_argument("--lang", default="ir", choices=["ir", "js"], help="ir = transpiled world (default); js = baseline world (J6): the model writes feature.js directly — no guide, no transpile, no span map")
+    p.add_argument("--lang", default="ir", choices=["ir", "js", "ir-cs", "cs"], help="ir = transpiled-to-JS world (default); js = JS baseline world (J6); ir-cs = transpiled-to-C# world (to-cs + dotnet rig); cs = C# baseline world")
     p.add_argument("--adapter", default="echo", choices=sorted(ADAPTERS))
     p.add_argument("--rounds", type=int, default=4)
     p.add_argument("--reply-file", help="file-adapter: model writes the transcript here")
@@ -492,7 +651,7 @@ def main():
     p.add_argument("--workdir", help="explicit run directory")
     p.set_defaults(func=cmd_run)
     p2 = sub.add_parser("selftest", help="echo-adapter mechanics check (no model access)")
-    p2.add_argument("--lang", default="ir", choices=["ir", "js"])
+    p2.add_argument("--lang", default="ir", choices=["ir", "js", "ir-cs", "cs"])
     p2.set_defaults(func=cmd_selftest)
     args = ap.parse_args()
     args.func(args)

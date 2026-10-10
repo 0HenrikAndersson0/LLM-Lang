@@ -1,21 +1,71 @@
 {
   "id": "task_01_stringops",
-  "title": "CompactLabel — trim/split/initials string ops",
+  "title": "CompactLabel \u2014 trim/split/initials string ops",
   "guide": "teach.md",
-  "requires": ["CompactLabel"],
+  "requires": [
+    "CompactLabel"
+  ],
   "spec": "# Task: CompactLabel\n\nWrite the complete .ir file (one fenced ir block) implementing exactly:\n\n```\nexport fn CompactLabel(String s) String\n```\n\nSemantics:\n1. trim surrounding whitespace from `s`\n2. if the result is empty, return `-`\n3. split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. take the first character of each word, uppercased\n5. concatenate those characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nFollow the guide: real JS runtime (ESM), no C#-isms, explicit `return` inside try/branches is safest.",
-  "spec_js": "# Task: CompactLabel\n\nWrite the complete .js module (one fenced js block) implementing exactly:\n\n```\nexport function CompactLabel(s)\n```\n\nSemantics:\n1. trim surrounding whitespace from `s`\n2. if the result is empty, return `-`\n3. split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. take the first character of each word, uppercased\n5. concatenate those characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nRuntime: real JS (ESM, plain V8 library only). The cases call `CompactLabel(s)` with the arguments listed below (7 cases: one arg, a String) — no CLI, no globals.",
+  "spec_js": "# Task: CompactLabel\n\nWrite the complete .js module (one fenced js block) implementing exactly:\n\n```\nexport function CompactLabel(s)\n```\n\nSemantics:\n1. trim surrounding whitespace from `s`\n2. if the result is empty, return `-`\n3. split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. take the first character of each word, uppercased\n5. concatenate those characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nRuntime: real JS (ESM, plain V8 library only). The cases call `CompactLabel(s)` with the arguments listed below (7 cases: one arg, a String) \u2014 no CLI, no globals.",
   "cases": [
-    ["CompactLabel", ["hello world"], "HW"],
-    ["CompactLabel", ["hello brave new world"], "HBNW"],
-    ["CompactLabel", [""], "-"],
-    ["CompactLabel", ["   "], "-"],
-    ["CompactLabel", ["Hello world"], "HW"],
-    ["CompactLabel", ["a b c d e f g h i"], "ABCDEF"],
-    ["CompactLabel", ["  Multiple   Spaces   Here  "], "MSH"]
+    [
+      "CompactLabel",
+      [
+        "hello world"
+      ],
+      "HW"
+    ],
+    [
+      "CompactLabel",
+      [
+        "hello brave new world"
+      ],
+      "HBNW"
+    ],
+    [
+      "CompactLabel",
+      [
+        ""
+      ],
+      "-"
+    ],
+    [
+      "CompactLabel",
+      [
+        "   "
+      ],
+      "-"
+    ],
+    [
+      "CompactLabel",
+      [
+        "Hello world"
+      ],
+      "HW"
+    ],
+    [
+      "CompactLabel",
+      [
+        "a b c d e f g h i"
+      ],
+      "ABCDEF"
+    ],
+    [
+      "CompactLabel",
+      [
+        "  Multiple   Spaces   Here  "
+      ],
+      "MSH"
+    ]
   ],
   "echo_draft": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w.toFirstUpper()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n",
   "echo_fix": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w[0].toUpperCase()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n",
   "echo_draft_js": "export function CompactLabel(s) {\n  const t = s.trim();\n  if (t.length === 0) return \"-\";\n  const ws = t.split(\" \").filter(w => w.length > 0);\n  const label = ws.map(w => w.toFirstUpper()).join(\"\");\n  return label.length > 6 ? label.slice(0, 6) : label;\n}\n",
-  "echo_fix_js": "export function CompactLabel(s) {\n  const t = s.trim();\n  if (t.length === 0) return \"-\";\n  const ws = t.split(\" \").filter(w => w.length > 0);\n  const label = ws.map(w => w[0].toUpperCase()).join(\"\");\n  return label.length > 6 ? label.slice(0, 6) : label;\n}\n"
+  "echo_fix_js": "export function CompactLabel(s) {\n  const t = s.trim();\n  if (t.length === 0) return \"-\";\n  const ws = t.split(\" \").filter(w => w.length > 0);\n  const label = ws.map(w => w[0].toUpperCase()).join(\"\");\n  return label.length > 6 ? label.slice(0, 6) : label;\n}\n",
+  "spec_cs_ir": "# Task: CompactLabel\n\nWrite the complete .ir file (one fenced ir block) implementing exactly:\n\n```\nexport fn CompactLabel(String s) String\n```\n\nSemantics:\n1. Trim surrounding whitespace from `s` (`s.Trim()`)\n2. If the trimmed result is empty, return `-`\n3. Split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. Take the first character of each word, UPPERCASED (`char.ToUpper(...)` / `char.ToUpperInvariant`)\n5. Concatenate the characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nRuntime: real C# (.NET 10, ESM-free SDK console). Idiomatic .NET method names \u2014 `Trim()`, `Split(' ')`, `char.ToUpper(w[0])`, LINQ `Where`/`Select`/`string.Join`, `Substring(0, 6)`. NO JS-isms (no `toFirstUpper`, no JS `.toUpperCase()` method, no `slice`). The canon cases call `CompactLabel(s)` with one String argument (7 cases).\n",
+  "spec_cs": "# Task: CompactLabel (C#)\n\nWrite the complete C# file (one fenced csharp block) implementing exactly:\n\n```\npublic static string CompactLabel(string s)\n```\n\nYou may write `static class CompactLabelOps { public static string CompactLabel(string s) { ... } }` or a bare static method. Semantics:\n1. Trim surrounding whitespace from `s`\n2. If the trimmed result is empty, return `-`\n3. Split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. Take the first character of each word, UPPERCASED (`char.ToUpper(...)` / `char.ToUpperInvariant`)\n5. Concatenate; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nRuntime: real C# (.NET 10 SDK console). Idiomatic .NET only. No CLI, no globals \u2014 the cases call the static method via reflection.\n",
+  "echo_draft_cs_ir": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.Trim()\n  if t.Length==0{return \"-\"}\n  var ws=t.Split(' ').Where(w=>w.Length>0).ToArray()\n  var label=string.Join(\"\", ws.Select(w=>w[0]))\n  return label.Length>6 ? label.Substring(0,6) : label\n}\n",
+  "echo_fix_cs_ir": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.Trim()\n  if t.Length==0{return \"-\"}\n  var ws=t.Split(' ').Where(w=>w.Length>0).ToArray()\n  var label=string.Join(\"\", ws.Select(w=>char.ToUpper(w[0])))\n  return label.Length>6 ? label.Substring(0,6) : label\n}\n",
+  "echo_draft_cs": "public static class CompactLabelOps\n{\n    public static string CompactLabel(string s)\n    {\n        var t = s.Trim();\n        if (t.Length == 0) return \"-\";\n        var ws = t.Split(' ').Where(w => w.Length > 0).ToArray();\n        var label = string.Join(\"\", ws.Select(w => w[0]));\n        return label.Length > 6 ? label.Substring(0, 6) : label;\n    }\n}\n",
+  "echo_fix_cs": "public static class CompactLabelOps\n{\n    public static string CompactLabel(string s)\n    {\n        var t = s.Trim();\n        if (t.Length == 0) return \"-\";\n        var ws = t.Split(' ').Where(w => w.Length > 0).ToArray();\n        var label = string.Join(\"\", ws.Select(w => char.ToUpper(w[0])));\n        return label.Length > 6 ? label.Substring(0, 6) : label;\n    }\n}\n"
 }

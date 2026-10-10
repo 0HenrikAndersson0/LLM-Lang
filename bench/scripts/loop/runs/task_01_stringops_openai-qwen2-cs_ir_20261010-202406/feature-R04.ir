@@ -1,0 +1,12 @@
+@1 @ns Acme.Labels
+
+export fn CompactLabel(String s) String{
+  var trimmed=s.Trim()
+  if trimmed.Length==0{return "-"}
+  var chars=trimmed.Split(' ')
+    .Where(w=>w.Length>0)
+    .Select(w=>char.ToUpperInvariant(w[0]))
+  var result=string.Join("", chars)
+  if result.Length>6{return result.Substring(0, 6)}
+  result
+}

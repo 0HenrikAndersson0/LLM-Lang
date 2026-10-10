@@ -1,9 +1,9 @@
-# Loop run — task_01_stringops (js baseline world)
+# Loop run — task_01_stringops
 
 - lang/world: `js` — no guide, no transpile, no span map (J6 baseline)
 - adapter: `echo`
 - task: CompactLabel — trim/split/initials string ops
-- rounds: 2 (cap 4); started 2026-10-10T10:35:19+00:00
+- rounds: 2 (cap 4); started 2026-10-10T20:23:50+00:00
 - verdict: **PASS**
 
 | round | outcome | detail | src chars | s |

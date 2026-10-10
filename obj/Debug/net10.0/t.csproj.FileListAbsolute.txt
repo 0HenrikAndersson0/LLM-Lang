@@ -1,0 +1,5 @@
+/Users/henrikandersson/Developer/LLM-Lang/obj/Debug/net10.0/t.GeneratedMSBuildEditorConfig.editorconfig
+/Users/henrikandersson/Developer/LLM-Lang/obj/Debug/net10.0/t.AssemblyInfoInputs.cache
+/Users/henrikandersson/Developer/LLM-Lang/obj/Debug/net10.0/t.AssemblyInfo.cs
+/Users/henrikandersson/Developer/LLM-Lang/obj/Debug/net10.0/t.csproj.CoreCompileInputs.cache
+/Users/henrikandersson/Developer/LLM-Lang/obj/Debug/net10.0/t.sourcelink.json

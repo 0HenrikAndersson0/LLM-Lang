@@ -167,7 +167,7 @@ over the cs_* corpus.
 | 5.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☑ — cs-target §4: full Core→C# table (Header→file-scoped ns + sorted usings; fields vs computed properties per fixture conventions; sig-only member rows invert ty-shaped text; match→switch expr/stmt; lock/try/range/foreach rows; extension methods→`this`-param statics; top-level fns→synthetic static class; Reexport→drop+fidelity flag) + §6 type-word map (`Float→double`, `Array<T>→T[]`…) + §7 deferred rows (attributes, access-modifier nuance, `{get;set;}`, query syntax — none in corpus) |
 | 5.3 | C# printer | emits golden corpus | ☑ — `crates/lang/src/cs.rs` + `irc to-cs`: direct Core→C# emitter per cs-target §2–§6 (verbatim-first atoms, LINQ op map, type-word map, decl-keyword ty stripping, sig-only member inversion, switch-expr reordering else-last, async→`Task<>` upgrade, synthetic `partial` top-level class for stub rigs). **Golden gate: `dotnet build` 8/9** — 03_pipeline excluded with proven upstream cause (the golden fragment itself does not compile in its own world: `.Select(o=>o.Total)` → `List<decimal>` vs declared `List<Order>`; the original golden .cs fails identically). Field-vs-property/access-nuance rows are recorded printer-quality diffs (fidelity budget) |
 | 5.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ◐ — **`bench/results-cs-diff.md` first pass**: golden gate 8/9 (1 proven-upstream); real-corpus emit **structure-compiles 9/9** (syntax phase) under a 35-type stub world (the `--noResolve` analog — the corpus is Humanizer-library fragments); 13 additive emitter fixes shipped en route (bracket-depth, `$`-canon interpolation, keyword-space glue, `else`-arm Sym form, pattern designators restored in `split_switch_arms` — identity green, C-style-for, receiver-param prepend, static/const discipline, ctor-return gate, `new T()` fallback); tagged fidelity rows: hand-canon `<rest-omitted>` elisions, multi-line `{…}`-initializer reader loss, target-typed-new type loss, field-vs-property nuance. Remaining: full-library semantic compile (needs a redeclaration-aware rig), then 5.5/5.6 |
-| 5.5 | LLM loop test for C# | report | ☐ |
+| 5.5 | LLM loop test for C# | report | ◐ — `report_5p5_cs.md`: the harness gained the **ir-cs and cs worlds** (to-cs + dotnet rig; C#-baseline); all four echo selftests green; **task_01 cs-baseline: qwen2.5-coder:7b ONE-SHOT cold PASS** (idiomatic .NET); ir-cs: round-1 build-fail repaired round-2 (raw dotnet feedback), rounds 2–4 value near-miss (`"hellow"` — the small-scale semantic class; mapped-IR feedback = the queued to-cs sourcemap parity). Loop-as-QA: 7 rig/emitter truths fixed on landing |
 | 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ◐ — `cs_read.rs` + `irc from-cs`: **canon identity 9/9 + 17-row construct smoke; re-emit leg syntax-clean** (rounds 1–2: 35 fixes; zero emit-structural rows; 250 residual diagnostics decomposed: ~195 stub-member boundary + ~55 char-family design rows — fidelity row 17). Behavior leg: documented boundary (library context + char-atom decision, Phase-6) — `bench/results-cs-diff.md` §leg-2+verdict. **5.5 = the remaining Phase-5 task (needs model time)** |
 
 ---
@@ -321,7 +321,20 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v5.6 (2026-10-10, latest)** — **5.6 leg-2: behavior boundary documented.**
+- **v5.7 (2026-10-10, latest)** — **5.5 first runs: the loop gained the
+  ir-cs and cs worlds.** The 2.7 harness's third+fourth worlds:
+  `irc to-cs` emit + a generated dotnet rig (reflection fn-resolve,
+  `System.Text.Json` arg-conv, `JsonNode.DeepEquals` compare), C#-baseline
+  (feature.cs direct), echo selftests green in all four worlds. **Real
+  model evidence (qwen2.5-coder:7b, task_01): the cs baseline ONE-SHOT
+  cold-passed** (the first C#-target loop PASS); ir-cs repaired its own
+  dotnet build errors round-1→2 then hit the small-scale value miss
+  (`"hellow"`) — the to-cs sourcemap parity (mapped-IR repair feedback)
+  is the queued fix shape. Report: `bench/scripts/loop/report_5p5_cs.md`.
+  Loop-as-QA fixed 7 rig truths on landing (double-static synth, Rig-type
+  trailing top-level statements, DeepEquals/using, per-round .cs archives
+  compiling under the dotnet glob → `.csrc` suffix).
+- **v5.6 (2026-10-10, later)** — **5.6 leg-2: behavior boundary documented.**
   The C# behavior rig decomposition: ~55 char-family rows (the char atom's
   absence — fidelity row 17; unblocking = a Phase-6 design decision, not
   rushed) + ~195 stub-member rows (the library API; the emitted corpus

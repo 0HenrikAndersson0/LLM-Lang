@@ -1515,9 +1515,6 @@ pub fn emit(core: &[Core]) -> Result<String, CsLowerError> {
                 Core::Fn(f) => {
                     let ret = f.ret.clone();
                     let mut f2 = f.clone();
-                    if !f2.modifiers.iter().any(|m| m == "static") {
-                        f2.modifiers.push("static".into());
-                    }
                     async_upgrade(&mut f2);
                     out.push_str(&IND.repeat(1));
                     out.push_str(&fn_sig(&f2, true, true));
