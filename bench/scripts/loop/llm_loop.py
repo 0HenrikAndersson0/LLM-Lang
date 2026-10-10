@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PLAN 2.7 — LLM loop test harness.
 
-Drives: model writes a feature in IR -> transpile (irc to-js --map) -> run
+Drives: model writes a feature in IR -> transpile (ircc to-js --map) -> run
 (node rig) -> feed errors back (with IR lines recovered from the span map)
 -> repair. Rounds until the rig passes or the round cap.
 
@@ -36,9 +36,9 @@ REPO = HERE.parents[2]
 # ----------------------------------------------------------------------------
 # tooling
 
-def resolve_irc() -> str:
-    cand = REPO / "target" / "debug" / "irc"
-    return str(cand) if cand.exists() else "irc"
+def resolve_ircc() -> str:
+    cand = REPO / "target" / "debug" / "ircc"
+    return str(cand) if cand.exists() else "ircc"
 
 def tok_count(text: str) -> str:
     try:
@@ -209,11 +209,11 @@ def write_feature_js(workdir: Path, js_text: str):
     return js_path
 
 def irc_emit(workdir: Path, ir_text: str):
-    """write feature.ir; emit via irc to-js --map. Returns (ok, errors, js_path)."""
+    """write feature.ir; emit via ircc to-js --map. Returns (ok, errors, js_path)."""
     ir_path = workdir / "feature.ir"
     ir_path.write_text(ir_text if ir_text.endswith("\n") else ir_text + "\n")
     proc = subprocess.run(
-        [resolve_irc(), "to-js", "--map", str(ir_path)],
+        [resolve_ircc(), "to-js", "--map", str(ir_path)],
         capture_output=True, text=True, timeout=60,
     )
     out = (proc.stdout or "") + (proc.stderr or "")
@@ -268,11 +268,11 @@ def js_to_ir(entries, line):
     return (prev[-1][2], prev[-1][3]) if prev else None
 
 def irc_emit_cs(workdir: Path, ir_text: str):
-    """cs IR world: write feature.ir; emit via irc to-cs. Returns (ok, errors, cs_path)."""
+    """cs IR world: write feature.ir; emit via ircc to-cs. Returns (ok, errors, cs_path)."""
     ir_path = workdir / "feature.ir"
     ir_path.write_text(ir_text if ir_text.endswith("\n") else ir_text + "\n")
     proc = subprocess.run(
-        [resolve_irc(), "to-cs", str(ir_path)],
+        [resolve_ircc(), "to-cs", str(ir_path)],
         capture_output=True, text=True, timeout=60,
     )
     out = (proc.stdout or "") + (proc.stderr or "")

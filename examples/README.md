@@ -5,12 +5,12 @@ Minimal, working IR files and their emitted targets. Run:
 ```
 cargo build
 # C# target (needs dotnet to run)
-target/debug/irc to-cs examples/metric.ir > metric.cs          # C# idiom in,
+target/debug/ircc to-cs examples/metric.ir > metric.cs          # C# idiom in,
                                                                 # .NET out
-target/debug/irc from-cs metric.cs                              # and back
+target/debug/ircc from-cs metric.cs                              # and back
 
 # JS target (needs node to run)
-target/debug/irc to-js examples/compact.ir > compact.js         # JS idiom in
+target/debug/ircc to-js examples/compact.ir > compact.js         # JS idiom in
                                                                 # node out
 ```
 

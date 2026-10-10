@@ -5,8 +5,8 @@
 
 mod common;
 
-use ir_lang::expander;
-use ir_lang::printer;
+use llm_lang::expander;
+use llm_lang::printer;
 
 fn corpus_files() -> Vec<(std::path::PathBuf, String)> {
     common::corpus_files()

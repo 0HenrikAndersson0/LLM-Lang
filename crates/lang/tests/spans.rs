@@ -5,10 +5,10 @@
 
 mod common;
 
-use ir_lang::ast::{Atom, Span};
-use ir_lang::expander::{self, Body, Core};
-use ir_lang::js;
-use ir_lang::reader;
+use llm_lang::ast::{Atom, Span};
+use llm_lang::expander::{self, Body, Core};
+use llm_lang::js;
+use llm_lang::reader;
 
 const SNIPPET: &str = "\
 @1 @ns Acme.Orders
@@ -32,38 +32,38 @@ fn Handle(Request r) Response{
 fn reader_records_construct_spans() {
     let forms = reader::read(SNIPPET).unwrap();
     assert_eq!(forms.len(), 2);
-    let ir_lang::ast::Form::Directive(_, sp) = &forms[0] else { panic!() };
+    let llm_lang::ast::Form::Directive(_, sp) = &forms[0] else { panic!() };
     assert_eq!((sp.lo, sp.hi), (1, 1));
-    let ir_lang::ast::Form::Line { span, children, .. } = &forms[1] else { panic!() };
+    let llm_lang::ast::Form::Line { span, children, .. } = &forms[1] else { panic!() };
     assert_eq!((span.lo, span.hi), (3, 3)); // fn header line
     // fn children: if(4) match(9) var(13) return-expr(14)
     assert_eq!(children.len(), 4);
     let lines: Vec<(usize, usize)> = children
         .iter()
         .map(|c| match c {
-            ir_lang::ast::Form::Line { span, .. } => (span.lo, span.hi),
-            ir_lang::ast::Form::Directive(_, sp) => (sp.lo, sp.hi),
+            llm_lang::ast::Form::Line { span, .. } => (span.lo, span.hi),
+            llm_lang::ast::Form::Directive(_, sp) => (sp.lo, sp.hi),
         })
         .collect();
     assert_eq!(lines, vec![(4, 4), (9, 9), (13, 13), (14, 14)]);
     // if construct: Log child (5), else fragment on the close line (6)
-    let ir_lang::ast::Form::Line { children: if_kids, .. } = &children[0] else { panic!() };
+    let llm_lang::ast::Form::Line { children: if_kids, .. } = &children[0] else { panic!() };
     let if_lines: Vec<(usize, usize)> = if_kids
         .iter()
         .map(|c| match c {
-            ir_lang::ast::Form::Line { span, .. } => (span.lo, span.hi),
-            ir_lang::ast::Form::Directive(_, sp) => (sp.lo, sp.hi),
+            llm_lang::ast::Form::Line { span, .. } => (span.lo, span.hi),
+            llm_lang::ast::Form::Directive(_, sp) => (sp.lo, sp.hi),
         })
         .collect();
     assert_eq!(if_lines, vec![(5, 5), (6, 6)]);
     // else fragment's own block child: throw (7)
-    let ir_lang::ast::Form::Line { children: else_kids, .. } = &if_kids[1] else { panic!() };
+    let llm_lang::ast::Form::Line { children: else_kids, .. } = &if_kids[1] else { panic!() };
     assert_eq!(
         else_kids
             .iter()
             .map(|c| match c {
-                ir_lang::ast::Form::Line { span, .. } => span.lo,
-                ir_lang::ast::Form::Directive(_, sp) => sp.lo,
+                llm_lang::ast::Form::Line { span, .. } => span.lo,
+                llm_lang::ast::Form::Directive(_, sp) => sp.lo,
             })
             .collect::<Vec<_>>(),
         vec![7]

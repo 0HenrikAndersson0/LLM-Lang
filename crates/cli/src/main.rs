@@ -1,7 +1,7 @@
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     // `--expand` before the subcommand = debug view on parse (task 1.5);
-    // `irc expand <files>` = expanded-core debug view directly (task 2.5 alias)
+    // `ircc expand <files>` = expanded-core debug view directly (task 2.5 alias)
     let debug = args.iter().position(|a| a == "--expand").map(|i| args.remove(i)).is_some();
     // `--map` on to-js: write <file>.js + <file>.map.json sidecar (task 2.6)
     let map = args.iter().position(|a| a == "--map").map(|i| args.remove(i)).is_some();
@@ -15,8 +15,8 @@ fn main() {
         Some("from-cs") => {
             for path in &args[1..] {
                 let src = std::fs::read_to_string(path).expect("read");
-                match ir_lang::cs_read::read_cs(&src) {
-                    Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+                match llm_lang::cs_read::read_cs(&src) {
+                    Ok(core) => print!("{}", llm_lang::printer::print(&core)),
                     Err(e) => println!("// {path}: CS-READ-ERR {e}"),
                 }
             }
@@ -26,7 +26,7 @@ fn main() {
         Some("js-kinds") => {
             // PLAN 4.2 groundwork: node-kind histogram over a JS/TS source dir
             for dir in &args[1..] {
-                match ir_lang::js_read::corpus_kinds(std::path::Path::new(dir)) {
+                match llm_lang::js_read::corpus_kinds(std::path::Path::new(dir)) {
                     Ok((hist, failures)) => {
                         for (k, v) in &hist {
                             println!("{v:>5}  {k}");
@@ -41,7 +41,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: irc [--expand] lex|parse|expand|to-js|from-js <files...>\n       irc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       irc from-js <js/ts files>   JS → canonical IR text (4.4 round-trip leg)\n       irc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
+                "usage: ircc [--expand] lex|parse|expand|to-js|from-js <files...>\n       ircc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       ircc from-js <js/ts files>   JS → canonical IR text (4.4 round-trip leg)\n       ircc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
             );
             std::process::exit(2);
         }
@@ -51,7 +51,7 @@ fn main() {
 fn lex_files(paths: &[String]) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
-        match ir_lang::lexer::lex(&src) {
+        match llm_lang::lexer::lex(&src) {
             Ok(l) => println!("{path}: {} tokens", l.tokens.len()),
             Err(e) => println!("{path}: ERROR {e}"),
         }
@@ -62,13 +62,13 @@ fn parse_files(paths: &[String], debug: bool) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
         if debug {
-            match ir_lang::expander::expand(&src) {
-                Ok(core) => print!("{}", ir_lang::printer::print_debug(&core)),
+            match llm_lang::expander::expand(&src) {
+                Ok(core) => print!("{}", llm_lang::printer::print_debug(&core)),
                 Err(e) => println!("{path}: ERROR {e}"),
             }
             continue;
         }
-        match ir_lang::reader::read(&src) {
+        match llm_lang::reader::read(&src) {
             Ok(forms) => {
                 let (lines, dirs) = count(&forms);
                 println!("{path}: {} top forms ({} lines, {} directives)", forms.len(), lines, dirs);
@@ -81,8 +81,8 @@ fn parse_files(paths: &[String], debug: bool) {
 fn expand_files(paths: &[String]) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
-        match ir_lang::expander::expand(&src) {
-            Ok(core) => print!("{}", ir_lang::printer::print_debug(&core)),
+        match llm_lang::expander::expand(&src) {
+            Ok(core) => print!("{}", llm_lang::printer::print_debug(&core)),
             Err(e) => println!("{path}: ERROR {e}"),
         }
     }
@@ -91,8 +91,8 @@ fn expand_files(paths: &[String]) {
 fn to_js_files(paths: &[String], map: bool) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
-        match ir_lang::expander::expand(&src) {
-            Ok(core) => match ir_lang::js::emit_with_map(&core) {
+        match llm_lang::expander::expand(&src) {
+            Ok(core) => match llm_lang::js::emit_with_map(&core) {
                 Ok((js, sm)) => {
                     if map {
                         let stem = std::path::Path::new(path).with_extension("");
@@ -127,12 +127,12 @@ fn verify_files(paths: &[String]) {
             println!("{path}: unreadable (missing or not UTF-8)");
             continue;
         };
-        match ir_lang::expander::expand(&src) {
+        match llm_lang::expander::expand(&src) {
             Ok(core) => {
-                let canon = ir_lang::printer::print(&core);
-                match ir_lang::expander::expand(&canon) {
+                let canon = llm_lang::printer::print(&core);
+                match llm_lang::expander::expand(&canon) {
                     Ok(core2) => {
-                        let canon2 = ir_lang::printer::print(&core2);
+                        let canon2 = llm_lang::printer::print(&core2);
                         if canon == canon2 {
                             println!("{path}: OK ({} lines, {} bytes canon)", canon.lines().count(), canon.len());
                         } else {
@@ -160,8 +160,8 @@ fn verify_files(paths: &[String]) {
 fn canon_files(paths: &[String]) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
-        match ir_lang::expander::expand(&src) {
-            Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+        match llm_lang::expander::expand(&src) {
+            Ok(core) => print!("{}", llm_lang::printer::print(&core)),
             Err(e) => println!("// {path}: ERROR {e}"),
         }
     }
@@ -170,8 +170,8 @@ fn canon_files(paths: &[String]) {
 fn to_cs_files(paths: &[String]) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
-        match ir_lang::expander::expand(&src) {
-            Ok(core) => match ir_lang::cs::emit(&core) {
+        match llm_lang::expander::expand(&src) {
+            Ok(core) => match llm_lang::cs::emit(&core) {
                 Ok(text) => print!("{text}"),
                 Err(e) => println!("// {path}: CS-ERR {e}"),
             },
@@ -183,20 +183,20 @@ fn to_cs_files(paths: &[String]) {
 fn from_js_files(paths: &[String]) {
     for path in paths {
         let src = std::fs::read_to_string(path).expect("read");
-        match ir_lang::js_read::read_js(&src) {
-            Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+        match llm_lang::js_read::read_js(&src) {
+            Ok(core) => print!("{}", llm_lang::printer::print(&core)),
             Err(e) => println!("// {path}: JS-READ-ERR {e}"),
         }
     }
 }
 
-fn count(forms: &[ir_lang::ast::Form]) -> (usize, usize) {
+fn count(forms: &[llm_lang::ast::Form]) -> (usize, usize) {
     let mut lines = 0;
     let mut dirs = 0;
     for f in forms {
         match f {
-            ir_lang::ast::Form::Directive(..) => dirs += 1,
-            ir_lang::ast::Form::Line { children, .. } => {
+            llm_lang::ast::Form::Directive(..) => dirs += 1,
+            llm_lang::ast::Form::Line { children, .. } => {
                 lines += 1;
                 let (l, d) = count(children);
                 lines += l;

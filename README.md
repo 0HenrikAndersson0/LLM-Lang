@@ -1,7 +1,7 @@
 # LLM-Lang
 
 A token-dense intermediate representation (IR) language for LLM code
-generation, with a working Rust transpiler (`irc`) targeting JavaScript
+generation, with a working Rust transpiler (`ircc`) targeting JavaScript
 (C# next). Plain-language overview: [`docs/overview.md`](docs/overview.md).
 
 The idea: LLMs pay per token for code generation. Production-language
@@ -13,7 +13,7 @@ target, and round-trip existing code back to the IR for cheap reads.
 ## Install
 
 ```
-cargo install irc
+cargo install ircc
 ```
 
 A self-contained Rust toolchain — no node/dotnet needed for authoring;
@@ -37,26 +37,26 @@ export fn CompactLabel(String s) String{
 Emit to a target:
 
 ```
-irc to-js feature.ir > feature.js        # runnable ESM
-irc to-cs  feature.ir > Feature.cs       # runnable .NET 10
+ircc to-js feature.ir > feature.js        # runnable ESM
+ircc to-cs  feature.ir > Feature.cs       # runnable .NET 10
 ```
 
 Round-trip an existing codebase so an agent can read it densely:
 
 ```
-irc from-js src/util.js  > util.ir       # the cheap canon
+ircc from-js src/util.js  > util.ir       # the cheap canon
 # ... edit util.ir ...
-irc to-js   util.ir > src/util.js        # regenerate
+ircc to-js   util.ir > src/util.js        # regenerate
 ```
 
 Lint before committing — canon files must be print-stable:
 
 ```
-irc verify feature.ir                    # exit 1 on drift/parse failure
+ircc verify feature.ir                    # exit 1 on drift/parse failure
 ```
 
-Reference: `irc parse/expand` (debug views), `irc canon`, `irc from-cs`,
-`irc js-kinds`. The library (`ir-lang` crate) exposes the same pipeline
+Reference: `ircc parse/expand` (debug views), `ircc canon`, `ircc from-cs`,
+`ircc js-kinds`. The library (`ir-lang` crate) exposes the same pipeline
 programmatically.
 
 **Measured:** machine-generated canon (from-js/from-cs over the real
@@ -124,9 +124,9 @@ async fn Load(Int id) User?{
 
 **Working transpiler, verified in both directions for JavaScript.**
 
-- **Reader/expander (Phase 1):** `irc lex|parse|expand` — parse→expand→
+- **Reader/expander (Phase 1):** `ircc lex|parse|expand` — parse→expand→
   print is identity on all 26 corpus fixtures; fuzzing suite green.
-- **Emit IR→JS (Phase 2):** `irc to-js` (+ `--map` for line-mapped
+- **Emit IR→JS (Phase 2):** `ircc to-js` (+ `--map` for line-mapped
   source maps) — 26/26 `node --check`, tsc 7/7 on the TS corpus; every
   tsc failure root-caused in the 2.4 report.
 - **JS depth (Phase 3):** behavior identity gated (emitted code *runs*
@@ -136,7 +136,7 @@ async fn Load(Int id) User?{
   **savings hold vs typed/documented sources, break even vs bare
   doc-free runtime and small-feature loop traffic** (the honest framing
   is in `docs/overview.md`).
-- **Round-trip JS→IR (Phase 4):** `irc from-js` — canon is identity
+- **Round-trip JS→IR (Phase 4):** `ircc from-js` — canon is identity
   stable over the whole corpus; double round-trip JS→IR→JS compiles
   (node 7/7, tsc 7/7) and behaves identically (3/3 harness subjects);
   actual fidelity budget in `docs/fidelity.md`.

@@ -8,7 +8,7 @@ savings, so this is the real go/no-go (agreed 2026-10-08).
 
 ```
 model writes feature.ir
-  → irc to-js --map          (feature.js + feature.map.json)
+  → ircc to-js --map          (feature.js + feature.map.json)
   → node rig.js              (task cases; PASS/FAIL/stack trace)
   → failure lines mapped IR-side via the span map (2.6)
   → repair prompt = errors + IR lines with context

@@ -164,7 +164,7 @@ JS line ranges. Result:
   covers arms too (each if/match arm is marked with its `Arm.span`).
 - `SourceMap.to_json(source)` — `{"source":…,"mappings":[[jsLo,jsHi,irLo,irHi],…]}`.
 
-CLI: `irc to-js --map f.ir` writes `f.js` + `f.map.json` (harness interface
+CLI: `ircc to-js --map f.ir` writes `f.js` + `f.map.json` (harness interface
 for 2.7). Lowering failures carry their IR line: `js: <msg> (IR line N)`.
 
 Known limits (accepted for v0): line-level only (columns not tracked —

@@ -1,5 +1,5 @@
 [package]
-name = "ir-lang"
+name = "llm-lang"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

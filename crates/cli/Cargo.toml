@@ -1,13 +1,13 @@
 [package]
-name = "irc"
+name = "ircc"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "irc — the IR toolchain CLI: parse, expand, to-js, to-cs, from-js, from-cs (round-trip)"
+description = "ircc — the IR toolchain CLI: parse, expand, to-js, to-cs, from-js, from-cs (round-trip)"
 
 [[bin]]
-name = "irc"
+name = "ircc"
 path = "src/main.rs"
 
 [dependencies]
-ir-lang = { path = "../lang", version = "0.1.0" }
+llm-lang = { path = "../lang", version = "0.1.0" }

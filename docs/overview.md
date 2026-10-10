@@ -19,7 +19,7 @@ normal code (and back) automatically?
 ## What we built
 
 A small, deliberately-designed shorthand ("IR" — intermediate representation)
-and a command-line translator called `irc`:
+and a command-line translator called `ircc`:
 
 ```
    agent writes this (short)          tool turns it into JavaScript

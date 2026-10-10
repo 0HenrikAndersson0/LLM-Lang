@@ -140,11 +140,11 @@ either target.
 ## 10. Tooling
 
 ```
-irc verify feature.ir        # the lint: canon identity (exit 1 on drift)
-irc parse feature.ir         # does the file read?
-irc to-js feature.ir         # emit ESM
-irc to-cs feature.ir         # emit .NET 10
-irc from-js src.js           # round-trip leg: existing code → canon
+ircc verify feature.ir        # the lint: canon identity (exit 1 on drift)
+ircc parse feature.ir         # does the file read?
+ircc to-js feature.ir         # emit ESM
+ircc to-cs feature.ir         # emit .NET 10
+ircc from-js src.js           # round-trip leg: existing code → canon
 ```
 
 `verify` is the cheap CI gate: canon files are print-stable by contract,

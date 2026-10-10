@@ -2,7 +2,7 @@
 """J1 (PLAN v4 Phase 3) — behavior harness: emitted JS must BEHAVE like the
 original sources, not merely parse.
 
-For each subject: emit IR → JS (irc to-js), transform the original with tsc
+For each subject: emit IR → JS (ircc to-js), transform the original with tsc
 (`import type` disappears — js_01/js_08 originals run standalone), then run a
 rig that calls both sides with the same inputs and compares outputs deeply
 (JSON). Expected values are hand-derived from the original semantics and act
@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 BUILD = HERE / "build"
-IRC = REPO / "target" / "debug" / "irc"
+IRCC = REPO / "target" / "debug" / "ircc"
 
 # subject config: stub modules the emitted side-effect imports must resolve;
 # behavior cases [[fn, args, expected]] (deep JSON compare); optional extra
@@ -129,7 +129,7 @@ def prepare(subject):
 
     def emit(name):
         src = ir_path(name)
-        proc = run([str(IRC), "to-js", "--map", str(src)])
+        proc = run([str(IRCC), "to-js", "--map", str(src)])
         out = src.parent / f"{name}.js"
         if not out.exists():
             return None, (proc.stdout + proc.stderr).strip()[:300]

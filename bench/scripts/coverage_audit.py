@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PLAN 4.2 — IR-form coverage audit over the js corpus.
 
-Joins the `irc js-kinds` histogram (tree-sitter-typescript CST kinds over
+Joins the `ircc js-kinds` histogram (tree-sitter-typescript CST kinds over
 bench/corpus/real/src/js_*.ts) with a curated kind -> verdict table:
 
   core        direct core form (design doc §2) / verbatim surface (floor #1)
@@ -167,10 +167,10 @@ BUCKET_ORDER = ["core", "sugar", "signature", "opaquetype", "grammar",
                 "unmapped", "dropped", "trivia"]
 
 def fetch_histogram():
-    out = subprocess.run([str(REPO / "target" / "debug" / "irc"), "js-kinds",
+    out = subprocess.run([str(REPO / "target" / "debug" / "ircc"), "js-kinds",
                           str(SRC)], capture_output=True, text=True)
     if out.returncode != 0:
-        sys.exit(f"irc js-kinds failed: {out.stderr}")
+        sys.exit(f"ircc js-kinds failed: {out.stderr}")
     hist = {}
     for line in out.stdout.splitlines():
         m = re.match(r"\s*(\d+)\s{2}(.+)$", line)
@@ -183,7 +183,7 @@ def instance_files(kind):
     """files containing the kind (per-file histograms, for evidence rows)"""
     hits = []
     for f in sorted(SRC.glob("js_*.ts")):
-        out = subprocess.run([str(REPO / "target" / "debug" / "irc"),
+        out = subprocess.run([str(REPO / "target" / "debug" / "ircc"),
                               "js-kinds", str(f)], capture_output=True, text=True)
         m = re.search(rf"^\s*(\d+)\s+{re.escape(kind)}\s*$", out.stdout, re.M)
         if m:
