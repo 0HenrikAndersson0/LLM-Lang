@@ -113,7 +113,7 @@ pipeline token number measured.
 | J3 | Gap rows: `export {…} from`/`export type *` re-exports, generics-in-expr erasure, value-match arms (bool/ident-literal) | tsc 7/7 on TS corpus | ☑ **tsc 7/7** — `Core::Reexport` additive core form (canon prints the line; JS drops `type`); callee-generics erased at emit; typed-var `=`-consumption bug + empty-objlit + fused-`>=` tolerance fixed; bool/null literal arms split. Still accepted-v0: value-position match arms stay statement-shaped (guide teaches explicit `return`); non-keyword-led inline statement pieces (see js-target.md §7) |
 | J4 | Real module imports: `@use` with named imports (usage-inferred) so multi-file features transpile + run | rig over 2 linked feature files | ☐ |
 | J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ◐ — **task_03 runs at 3 scales + agent-driven; two classes resolved, one open.** Post-fixer (v4.4): qwen2.5-coder:7b drafts now round-1 valid (was: braceless-if + for-run emitted as garbage — emitter truths, NOT model failures); remaining 7b failure class = value near-miss (first-word capitalize inverted in camelize, not repaired in 6 rounds; loop feedback shows got/expected + numbered IR but the error is semantic, not localized); qwen3.5:9b = structural (Pythonisms/unindented); gemma4:12b = operationally blocked on 16 GB (reasoning channel consumes the generation budget before content lands — adapter now falls back to the reasoning channel but runs stayed vacuous; ollama adapter gap, not language); agent-driven (file adapter): **task_03 PASS round 1 both worlds** (first task_03 IR pass ever) |
-| J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ◐ — **v1 measured (report_j6_pipeline.md): ≥30% whole-pipeline savings do NOT hold at small-feature scale.** Paired loop runs (same task+model; js baseline world = `--lang js`, no guide/no transpile): one-shot IR spends 206–316% of js per delivered feature (the guide + scaffolding); amortized over a session (guide once): 77–90% per feature, break-even S≈10–15, asymptotic savings ≈10–23%. Static compression survives on the WRITE side only (IR drafts 48–55% of js drafts on task_01; equal on task_02/03). One 6-round value-fail = 33× the js one-shot cost. Follow-ups: corpus-scale features, multi-feature-per-file tasks (the real agent-file amortization claim), leaner repair feedback |
+| J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ◐ — **v1+v2 measured (report_j6_pipeline.md): savings are conditional on the baseline class.** v1 (1-feature pairs, loop): one-shot IR 206–316% of `--lang js` baseline; amortized 77–90%, break-even S≈10–15; write-side IR drafts 48–55% (terse ops) but ~equal on control-heavy. v2 (task_04 3-feature session; the agent-file amortization): marginal parity (98.3%), one-shot session 184% (guide-dominated). **Denominator finding (js_08): IR module = 38.7% of the typed+documented source (Phase-0's 46% reproduces at file scale) but 169.8% of a bare clean-JS runtime** — the ≥30% claim holds vs agent files replacing typed/documented sources, fails vs minimal doc-free code. Loop reliability still dominates (one value-fail = 33×). Exit criterion for J6: sensitivity runs on scaffold trimming + one corpus-scale loop task, then the number is closed |
 
 > Bench discipline unchanged: J2/J3 touch no surface text (emission-side and
 > classification only) — bench-neutral by the Core::Stmt precedent; any
@@ -294,6 +294,18 @@ Each phase exit is a verification act, not a checklist:
   identity holds on all 26; 26/26 node --check; behavior gate green.
   **Next session: J4 real import names → J5 loop depth → J6 whole-pipeline
   tokens.**
+- **v4.5 (2026-10-10, later)** — **J6 v2 + re-scoped framing.** task_04
+  (3-feature module session; union spec, all 23 cases; agent-driven, PASS 1r
+  both worlds) measured the agent-file amortization directly: **marginal
+  parity (98.3%)** vs js — the spec amortizes exactly as claimed; one-shot
+  session ratio 184%, still guide-dominated (880). **Denominator finding:**
+  on the js_08 flattenOptions feature, the IR module is **38.7% of the
+  typed+documented TS source** (Phase-0's static number reproduces at file
+  scale) but **169.8% of the bare clean-JS runtime** — the loop baseline
+  (`--lang js`) strips exactly what IR compresses (types/docs), so savings
+  are conditional on the baseline class: met vs typed/documented sources,
+  ~0% vs doc-free code. North-star framing re-scoped accordingly (J6 exit:
+  scaffold-trimming sensitivity + one corpus-scale loop task).
 - **v4.4 (2026-10-10)** — **J1-J6 day: three emitter truths + harness hardening + the J6 number.**
   Loop-as-QA round 2: qwen2.5-coder:7b drafts exposed (1) braceless
   single-line `if (c) return x` — the reader glues the statement into the
@@ -319,9 +331,9 @@ Each phase exit is a verification act, not a checklist:
   IR 206–316% of js per feature, amortized 77–90% (break-even S≈10–15);
   write-side compression real (48–55%), loop scaffolding consumes it at
   300-char feature scale; follow-ups: corpus-scale features,
-  multi-feature-per-file, leaner feedback. **Next session: J6 at
-  corpus-scale/multi-feature (re-measure or re-scope the north-star
-  framing), then Phase-4 open (4.1 tree-sitter).**
+  multi-feature-per-file, leaner feedback. **Next session: J6 v2 session
+  measurement + framing (done same day, see v4.5), then Phase-4 open
+  (4.1 tree-sitter).**
 - **v4.3 (2026-10-09, later)** — **J4 done** (`8526982`): `@use` with dotted
   usage lowers to a namespace import (`import * as Helpers …`) — the
   qualifier is a module object in ESM, so cross-module calls work verbatim;

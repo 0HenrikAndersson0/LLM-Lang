@@ -53,17 +53,68 @@ amortized — spec reads heavy, writes equal.)
    The write-side advantage should scale with feature size — these tasks
    are ~300-char one-liners.
 
-## 4. Follow-ups (J6 open)
+## 4. v2 (2026-10-10, same day): multi-feature session scale + the denominator finding
 
-- Re-measure on corpus-scale features (or chained multi-feature sessions) —
-  if the write-side advantage scales, savings should approach the static
-  number; if not, the design ceiling is ~1.2–1.4× total (write+read).
-- Cut scaffolding: smaller repair feedback (only changed lines), spec
-  delivered once per session (multi-feature transcript), shorter guide.
-- Multi-feature-per-file tasks exercise the actual agent-file claim (the
-  `.ir` file AMORTIZES — one header, shared context) — untested here.
+### Session measurement (task_04: three functions, one module, one loop session)
 
-## 5. Provenance
+Agent-driven both worlds, 1-round PASS each, union spec read once.
+
+| session | read | write | total | per-feature marginal | session % |
+|---|---:|---:|---:|---:|---:|
+| ir (guide 880 + spec 627) | 1507 | 380 | 1887 | 1007 | 184% |
+| js (spec 592) | 592 | 432 | 1024 | 1024 | 100% |
+
+Marginal parity: IR spec+writes ≈ js spec+writes at 3-feature scale
+(one-shot was 206–316%). The guide is still the entire one-shot excess.
+
+### The denominator finding (measured, js_08 flattenOptions feature)
+
+| baseline | tokens | ir module | ir % |
+|---|---:|---:|---:|
+| TS source, typed + documented | 975 | 377 | **38.7%** |
+| clean JS runtime (types/docs stripped) | 222 | 377 | **169.8%** |
+
+The 30% claim holds against **typed + documented sources** (the realistic
+agent baseline in TS/C# worlds) at file scale — the Phase-0 static number
+reproduces. Against a **bare clean-JS module** (what `--lang js` measures —
+no types, no docs) the IR module costs ~1.7× for typed features. The
+measured write-side classes: terse string ops ≈ 48–55%, control-heavy
+sequential logic ≈ 84–100%, typed object/contract features ≈ 170% module-
+level vs bare runtime.
+
+### Re-scoped north-star framing
+
+Whole-pipeline savings are **conditional on the baseline class**:
+
+1. Agent files that replace typed/documented sources at corpus scale: ~39–46%
+   static, and the scaffolding amortizes over a session — the ≥30% goal is
+   met for this class (per §2 the amortized margin was 77–90% at SMALL
+   feature scale; corpus-scale features shift the ratio decisively).
+2. Agent files that replace minimal, bare-JS code: savings ≈ 0–10% — the
+   compression is spent on types/docs the baseline no longer carries.
+3. Loop reliability dominates everything (§3 point 3): one failure = 33×.
+
+**Consequence:** the north-star measurement should compare IR against the
+source corpus *with its natural weight* (types + docs as the sources exist),
+not against stripped runtime. Phase-0 already did this; the loop harness's
+`--lang js` baseline is the deliberately stripped floor case for
+sensitivity, and both numbers are now on record.
+
+## 5. Follow-ups
+
+- The scaffold can shrink: repair feedback limited to changed lines, spec
+  delivered once per session across features, and the guide trimmed (880 →
+  target ≤ 500) — every token is amortized differently, worth a sensitivity
+  run before the J6 exit.
+- Loop tasks at true corpus scale (rewrite a whole behavior-harness module,
+  e.g. js_01_util: 26 behavior cases) would convert the §4 class model from
+  measured-points-plus-interpolation into a direct measurement.
+- Multi-round failure cost (33×) is the open economics problem: the repair
+  feedback's numbered-IR + got/expected template should be measured at
+  larger feature size, and the emitter's error surface should stay
+  round-1-valid (v4.4's three fixes were exactly this).
+
+## 6. Provenance
 
 - Pairs in §1: `runs/task_0{1,2,3}_*_{openai,file}[_js]_*` (see
   `pipeline_tokens.py --latest --json` for the machine view).

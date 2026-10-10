@@ -1,0 +1,43 @@
+@1 @ns Bench.Multi
+
+export fn CompactLabel(String s) String{
+  var t=s.trim()
+  if t.length==0{return "-"}
+  var ws=t.split(" ").filter(w=>w.length>0)
+  var label=ws.map(w=>w[0].toUpperCase()).join("")
+  return label.length>6 ? label.slice(0,6) : label
+}
+
+export fn ParseDuration(String s) Int{
+  var mut total=0
+  var mut i=0
+  while i<s.length{
+    var numStart=i
+    while i<s.length && s[i]>="0" && s[i]<="9"{i+=1}
+    if i==numStart{return 0}
+    var num=parseInt(s.slice(numStart, i))
+    if i>=s.length{return 0}
+    match s[i]{
+      "h" total+=num*3600
+      "m" total+=num*60
+      "s" total+=num
+      else return 0
+    }
+    i+=1
+  }
+  total
+}
+
+export fn Tidy(List<String> xs) List<String>{
+  xs.filter(s=>{
+    var t=s.trim()
+    t.length>0
+  })
+  .map(s=>{
+    var words=s.split(" ").filter(w=>w.length>0)
+    var first=words[0].toLowerCase()
+    var rest=words.slice(1).map(w=>w[0].toUpperCase()+w.slice(1))
+    first+rest.join("")
+  })
+  .slice(0,3)
+}
