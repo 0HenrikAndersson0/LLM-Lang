@@ -1142,7 +1142,9 @@ fn split_switch_arms(children: &[Form]) -> Result<Vec<Arm>, ExpandError> {
             // the pattern, body starts at k+1 (was: binder dropped — cs_03
             // designator loss, 4.4-era canon shape)
             let lower_binder = matches!(&atoms[k], Atom::Ident(x)
-                if x.chars().next().is_some_and(|ch| ch.is_lowercase()) && x != "new");
+                if x.chars().next().is_some_and(|ch| ch.is_lowercase())
+                    && x != "new" && x != "throw" && x != "return" && x != "await" && x != "is"
+                    && x != "as" && x != "typeof" && x != "nameof");
             if lower_binder {
                 (atoms[..k + 1].to_vec(), Body::Inline(atoms[k + 1..].to_vec()))
             } else {

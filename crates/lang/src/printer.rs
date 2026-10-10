@@ -436,6 +436,12 @@ fn print_type(t: &TypeDecl, level: usize) -> String {
         s.push(' ');
         s.push_str(m);
     }
+    // kind word: canon keeps it when the target needs it (C# interface/
+    // struct/record emit rows 5.4) — plain-class stays implied
+    if t.kind != "class" {
+        s.push(' ');
+        s.push_str(&t.kind);
+    }
     s.push('{');
     s.push('\n');
     for m in &t.members {

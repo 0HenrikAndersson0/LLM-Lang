@@ -175,11 +175,25 @@ impl<'a> CsReader<'a> {
     }
 
     fn str_payload(&self, node: tree_sitter::Node) -> String {
-        let t = node
-            .child(0)
-            .map(|n| text(n, self.src).to_string())
-            .unwrap_or_default();
-        t.trim_matches(|c| c == '"' || c == '@').replace("\\\\", "\\")
+        // content children (string_literal_content); verbatim string child(0)
+        // is just the quote char
+        let mut t = String::new();
+        let mut c = node.walk();
+        if c.goto_first_child() {
+            loop {
+                let n = c.node();
+                match n.kind() {
+                    "string_literal_content" | "escape_sequence" => t.push_str(text(n, self.src)),
+                    _ => {}
+                }
+                if !c.goto_next_sibling() { break; }
+            }
+        }
+        if t.is_empty() {
+            let direct = text(node, self.src);
+            t = direct.trim_matches(|c| c == '"' || c == '@').to_string();
+        }
+        t
     }
 
     // ------------------------------------------------------------------
@@ -422,8 +436,20 @@ impl<'a> CsReader<'a> {
                 v
             }
             "argument" => {
-                // arg wrapper: descend to the value
-                node.child(0).map(|n| self.atomize(n)).unwrap_or_default()
+                // arg wrapper: name? + value — DESCEND to every child (out
+                // args carry [out, var, name]; named args `name: value`)
+                let mut v = vec![];
+                let mut c = node.walk();
+                if c.goto_first_child() {
+                    loop {
+                        let n = c.node();
+                        if n.kind() != ";" && n.kind() != "," {
+                            v.extend(self.atomize(n));
+                        }
+                        if !c.goto_next_sibling() { break; }
+                    }
+                }
+                v
             }
             "is_pattern_expression" => {
                 // verbatim: [X, is, [not], pattern atoms…]
@@ -489,25 +515,61 @@ impl<'a> CsReader<'a> {
         }
     }
 
-    /// pattern nodes → atoms (`{}-binder`, relational, type patterns, `not`)
+    /// `X switch { arms }` → Core::Stmt (arms from switch_expression_arm
+    /// children; patterns: constant/relational/type/discard). Value-position
+    /// switches canon as trailing-switch rows (`X switch{arm…}`) — the
+    /// reader keeps arm structure; atomizing loses it (canon is symmetric,
+    /// which is why the identity gate missed this until the emit gate).
+    fn switch_core(&self, node: tree_sitter::Node, span: Span) -> Core {
+        let mut head: Vec<Atom> = vec![];
+        if let Some(subj) = node.child(0) {
+            head.extend(self.cond_atoms(subj));
+        }
+        head.push(Atom::Ident("switch".into()));
+        let mut arms = vec![];
+        let mut c = node.walk();
+        if c.goto_first_child() {
+            loop {
+                let n = c.node();
+                if n.kind() == "switch_expression_arm" {
+                    let mut pat = vec![];
+                    let mut body_atoms: Vec<Atom> = vec![];
+                    let mut in_body = false;
+                    let mut ac = n.walk();
+                    if ac.goto_first_child() {
+                        loop {
+                            let an = ac.node();
+                            if an.kind() == "=>" {
+                                in_body = true;
+                            } else if !in_body && an.kind() != "comment" {
+                                pat.extend(self.pattern_atoms(an));
+                            } else if in_body && an.kind() != "comment" {
+                                body_atoms.extend(self.atomize(an));
+                            }
+                            if !ac.goto_next_sibling() { break; }
+                        }
+                    }
+                    arms.push(Arm {
+                        pattern: if pattern_empty_else(&pat) { vec![Atom::Sym("else".into())] } else { pat },
+                        body: Body::Inline(body_atoms),
+                        span: self.span(n),
+                    });
+                }
+                if !c.goto_next_sibling() { break; }
+            }
+        }
+        Core::Stmt { head, body: Body::Inline(vec![]), arms, span }
+    }
+
+    /// pattern nodes → atoms (`{}-binder, relational, type patterns, `not`)
     fn pattern_atoms(&self, node: tree_sitter::Node) -> Vec<Atom> {
         match node.kind() {
             "recursive_pattern" | "property_pattern" => {
-                // `{ }` or `{ } binder` or `{ prop… } binder`
+                // `{ }` / `{ prop: pat, … } [binder]` — verbatim leaf descent
+                // (the clause nests `{ }` + named subpattern pairs one level
+                // deep; the identifier-dropping arm lost them entirely)
                 let mut v = vec![];
-                let mut c = node.walk();
-                if c.goto_first_child() {
-                    loop {
-                        let n = c.node();
-                        match n.kind() {
-                            "{" => v.push(Atom::Sym("{".into())),
-                            "}" => v.push(Atom::Sym("}".into())),
-                            "identifier" => v.push(Atom::Ident(text(n, self.src).to_string())),
-                            _ => {}
-                        }
-                        if !c.goto_next_sibling() { break; }
-                    }
-                }
+                self.verbatim_atoms(node, &mut v);
                 v
             }
             "constant_pattern" => node
@@ -557,7 +619,8 @@ impl<'a> CsReader<'a> {
             match k {
                 "identifier" | "predefined_type" | "var" | "this" | "base"
                 | "out" | "in" | "ref" | "await" | "is" | "as" | "and" | "or" | "not"
-                | "new" | "lock" | "switch" | "case" | "default" | "throw" | "return" => {
+                | "new" | "lock" | "switch" | "case" | "default" | "throw" | "return"
+                | "typeof" | "nameof" | "when" | "params" | "yield" => {
                     v.push(Atom::Ident(t.to_string()));
                 }
                 // keyword LITERAL texts arrive as Sym rows through various
@@ -569,7 +632,7 @@ impl<'a> CsReader<'a> {
                 "integer_literal" | "real_literal" | "decimal_literal" => {
                     v.push(Atom::Number(t.to_string()));
                 }
-                ";" | "(" | ")" | "[" | "]" | "," => {
+                ";" => {
                     v.push(Atom::Sym(String::new()));
                 }
                 _ => {
@@ -1037,9 +1100,14 @@ impl<'a> CsReader<'a> {
     // bodies & statements
 
     fn body_core(&mut self, body: tree_sitter::Node<'a>) -> Body {
-        // arrow-expression clause: `=> expr`
+        // arrow-expression clause: `=> expr` — a switch value keeps arm
+        // structure (canon row `fn ...{X switch{arms}}`)
         if body.kind() == "arrow_expression_clause" {
             if let Some(e) = body.child(1) {
+                if e.kind() == "switch_expression" {
+                    let sp = self.span(e);
+                    return Body::Bare(vec![self.switch_core(e, sp)]);
+                }
                 return Body::Inline(self.atomize(e));
             }
             return Body::Inline(vec![]);
@@ -1085,6 +1153,12 @@ impl<'a> CsReader<'a> {
 
     fn stmt(&mut self, node: tree_sitter::Node<'a>) -> Option<Core> {
         let span = self.span(node);
+        // fn-tail statement values that are switch expressions carry arms
+        if node.kind() == "expression_statement" {
+            if node.child(0).map(|inner| inner.kind() == "switch_expression").unwrap_or(false) {
+                return Some(self.switch_core(node.child(0).unwrap(), span));
+            }
+        }
         Some(match node.kind() {
             "if_statement" => {
                 let mut head: Vec<Atom> = vec![Atom::Ident("if".into())];
@@ -1137,11 +1211,13 @@ impl<'a> CsReader<'a> {
             "for_statement" => {
                 // C-style head verbatim: `for (init; cond; step)`
                 let mut head: Vec<Atom> = vec![Atom::Ident("for".into())];
-                for part in ["initializer", "condition", "increment"] {
+                for part in ["initializer", "condition", "update"] {
                     if let Some(p) = node.child_by_field_name(part) {
-                        if let Some(inner) = p.child(1) {
-                            head.extend(self.atomize(inner));
-                        }
+                        // parts arrive direct (binary_expression cond, var
+                        // decl init) — cond_atoms handles both
+                        head.extend(self.cond_atoms(p));
+                        head.push(Atom::Ident(" ".into()));
+                        head.pop();
                     }
                     head.push(Atom::Sym(";".into()));
                 }
@@ -1265,17 +1341,30 @@ impl<'a> CsReader<'a> {
             "return_statement" | "throw_statement" => {
                 let kw = if node.kind() == "return_statement" { "return" } else { "throw" };
                 let mut head: Vec<Atom> = vec![Atom::Ident(kw.into())];
+                let mut arms = vec![];
                 let mut c = node.walk();
                 if c.goto_first_child() {
                     loop {
                         let n = c.node();
-                        if n.kind() != ";" && n.kind() != "comment" && text(n, self.src) != kw {
-                            head.extend(self.atomize(n));
+                        if matches!(n.kind(), "return" | "throw" | ";" | "comment") {
+                            if !c.goto_next_sibling() { break; }
+                            continue;
                         }
+                        if n.kind() == "switch_expression" {
+                            if let Core::Stmt { head: sw_head, arms: sw_arms, .. } = {
+                                let sp = self.span(n);
+                                self.switch_core(n, sp)
+                            } {
+                                head.extend(sw_head);
+                                arms = sw_arms;
+                            }
+                            break;
+                        }
+                        head.extend(self.atomize(n));
                         if !c.goto_next_sibling() { break; }
                     }
                 }
-                Core::Stmt { head, body: Body::Inline(vec![]), arms: vec![], span }
+                Core::Stmt { head, body: Body::Inline(vec![]), arms, span }
             }
             "local_declaration_statement" | "expression_statement" => {
                 node.child(0).map(|n| self.local_or_expr(n, span)).unwrap_or(Core::Expr(vec![], span))
@@ -1407,6 +1496,11 @@ fn declarator_value<'b>(d: tree_sitter::Node, r: &CsReader) -> Option<Vec<Atom>>
         }
     }
     if seen_eq && !v.is_empty() { Some(v) } else { None }
+}
+
+fn pattern_empty_else(pat: &[Atom]) -> bool {
+    matches!(pat.first(), Some(Atom::Sym(sp)) if sp == "else")
+        || matches!(pat.first(), Some(Atom::Ident(x)) if x == "else" || x == "_")
 }
 
 /// canon modifiers for member rows: public→export; const/volatile keep;

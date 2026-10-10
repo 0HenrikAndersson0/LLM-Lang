@@ -158,7 +158,7 @@ public static class ByteSizeExtensions
     {
         if (precision<1)
         {
-            throw new ArgumentOutOfRangeException(nameof (precision), precision, "");
+            throw new ArgumentOutOfRangeException(nameof (precision), precision, "Precision must be greater than zero.");
         }
         ArgumentNullException.ThrowIfNull(separator);
         formatProvider??=CultureInfo.CurrentCulture;
@@ -172,7 +172,7 @@ public static class ByteSizeExtensions
         var remainingBits = isNegative?(Int64)+1: (Int64);
         if (remainingBits==0)
         {
-            return string.Concat("", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol));
+            return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol: !toWords));
         }
         var parts = new List<String>(Math.Min(precision, 8));
         void addPart(long bitsPerUnit, DataUnit unit)
@@ -186,7 +186,7 @@ public static class ByteSizeExtensions
         {
             return ;
         }
-        parts.Add(string.Concat(count.ToString(formatProvider), "", formatter.DataUnitHumanize(unit, count, toSymbol)));
+        parts.Add(string.Concat(count.ToString(formatProvider), " ", formatter.DataUnitHumanize(unit, count, toSymbol: !toWords)));
         remainingBits%=bitsPerUnit;
     }
         addPart((Int64)*ByteSize.BitsInByte, DataUnit.Exabyte);
@@ -207,11 +207,11 @@ public static class ByteSizeExtensions
         }
         if (unitSystem is <ByteSizeUnitSystem.DecimalSi or >ByteSizeUnitSystem.BinaryIec)
         {
-            throw new ArgumentOutOfRangeException(nameof (unitSystem), unitSystem, "");
+            throw new ArgumentOutOfRangeException(nameof (unitSystem), unitSystem, "Unknown byte-size unit system.");
         }
         if (precision<1)
         {
-            throw new ArgumentOutOfRangeException(nameof (precision), precision, "");
+            throw new ArgumentOutOfRangeException(nameof (precision), precision, "Precision must be greater than zero.");
         }
         ArgumentNullException.ThrowIfNull(separator);
         formatProvider??=CultureInfo.CurrentCulture;
@@ -222,7 +222,7 @@ public static class ByteSizeExtensions
         }
         var formatter = Configurator.GetFormatter(culture);
         var builtInFormatter = formatter as DefaultFormatter;
-        if (builtInFormatter is not null &&formatter.GetType.Assembly!=typeofDefaultFormatter.Assembly)
+        if (builtInFormatter is not null &&formatter.GetType().Assembly!=typeof (DefaultFormatter).Assembly)
         {
             builtInFormatter=null ;
         }
@@ -231,7 +231,7 @@ public static class ByteSizeExtensions
         var units = unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits: BinaryCompositeUnits;
         if (remainingBits==0)
         {
-            return string.Concat("", toWords?humanizeUnit(DataUnit.Bit, 0): ByteSize.BitSymbol);
+            return string.Concat("0 ", toWords?humanizeUnit(DataUnit.Bit, 0): ByteSize.BitSymbol);
         }
         var parts = new List<String>(Math.Min(precision, units.Length+2));
         foreach (var unit in units)
@@ -247,7 +247,7 @@ public static class ByteSizeExtensions
                 continue;
             }
             var unitText = toWords?humanizeUnit(unit.DataUnit, count): unit.Symbol;
-            parts.Add(string.Concat(count.ToString(formatProvider), "", unitText));
+            parts.Add(string.Concat(count.ToString(formatProvider), " ", unitText));
             remainingBits%=bitsPerUnit;
         }
         addSmallUnit(ByteSize.BitsInByte, ByteSize.ByteSymbol, DataUnit.Byte);
@@ -264,12 +264,12 @@ public static class ByteSizeExtensions
         {
             return ;
         }
-        parts.Add(string.Concat(count.ToString(formatProvider), "", toWords?humanizeUnit(dataUnit, count): symbol));
+        parts.Add(string.Concat(count.ToString(formatProvider), " ", toWords?humanizeUnit(dataUnit, count): symbol));
         remainingBits%=bitsPerUnit;
     }
         void humanizeUnit(DataUnit dataUnit, long count)
     {
-        builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol): formatter.DataUnitHumanize(dataUnit, count, toSymbol);
+        builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol: false ): formatter.DataUnitHumanize(dataUnit, count, toSymbol: false );
     }
     }
     class CompositeUnit

@@ -37,12 +37,19 @@ class DefaultCollectionFormatter
         var items = CreateDisplayItems(collection);
         foreach (var item in collection)
         {
-            AddDisplayString(items, objectFormatteritem?.ToString());
+            AddDisplayString(items, objectFormatter(item)?.ToString());
         }
         return HumanizeDisplayItems(items, separator);
     }
-    List<string> CreateDisplayItems(IEnumerable<T> collection) =>
-        collection switch ;
+    List<string> CreateDisplayItems(IEnumerable<T> collection)
+    {
+        return collection switch
+        {
+            ICollection<T> items => new (),
+            IReadOnlyCollection<T> items => new (),
+            _ => []
+        };
+    }
     void AddDisplayString(List<string> items, string? item)
     {
         if (string.IsNullOrWhiteSpace(item))
@@ -63,9 +70,9 @@ class DefaultCollectionFormatter
             return items[0];
         }
         var conjunctionFormat = GetConjunctionFormatString(count);
-        if (conjunctionFormat=="")
+        if (conjunctionFormat==$"{0} {1} {2}")
         {
-            return count==2?string.Concat(items[0], "", separator, "", items[1]): string.Concat(JoinLeadingItems(items), "", separator, "", items[^1]);
+            return count==2?string.Concat(items[0], " ", separator, " ", items[1]): string.Concat(JoinLeadingItems(items), " ", separator, " ", items[^1]);
         }
         return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1]);
     }
@@ -78,13 +85,13 @@ class DefaultCollectionFormatter
         }
         var builder = new StringBuilder();
         builder.Append(items[0]);
-        for (i=1;<;)
+        for (var i=1;i<count;i++)
         {
-            builder.Append("");
+            builder.Append(", ");
             builder.Append(items[i]);
         }
         return builder.ToString();
     }
     string GetConjunctionFormatString(int itemCount) =>
-        "";
+        $"{0} {1} {2}";
 }

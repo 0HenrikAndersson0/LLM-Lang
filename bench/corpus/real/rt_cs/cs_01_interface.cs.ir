@@ -1,0 +1,12 @@
+@1 @ns Humanizer
+
+type IFormatter export{
+  fn DateHumanize_Now() String{}
+  fn DateHumanize_Never() String{}
+  fn DateHumanize(timeUnit TimeUnit, timeUnitTense Tense, unit Int) String{}
+  fn TimeSpanHumanize_Zero() String{}
+  fn TimeSpanHumanize(timeUnit TimeUnit, unit Int, toWords: Bool = false) String{}
+  fn TimeSpanHumanize_Age() String{}
+  fn DataUnitHumanize(dataUnit DataUnit, count Float, toSymbol: Bool = true) String{}
+  fn TimeUnitHumanize(timeUnit TimeUnit) String{}
+}

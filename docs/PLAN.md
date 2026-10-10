@@ -321,19 +321,23 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v5.3 (2026-10-10, latest)** — **5.6 in flight (◐):** `cs_read.rs` ships —
-  tree-sitter-c-sharp reader + `irc from-cs`; **canon identity green on all
-  9 cs_*.cs files + 17-row construct smoke** after 20 shape fixes (args
-  wrappers, `conditional_expression`/`null_literal` kinds, generics-atom
-  splitting for the comma-glue canon, braceless-statement bodies, lock/
-  foreach children-scans, param defaults, char-literal canon, computed-
-  property arrows, keyword-verbatim→Ident text map). All 9 corpus files
-  parse clean (no ts-grammar-style gaps). rt artifacts in
-  `bench/corpus/real/rt_cs/`. **Re-emit leg opens at 93 syntax-class
-  dotnet diagnostics** — the next session queue is root-causing those
-  (canon-print normalized shapes vs cs.rs emit expectations), then the
-  behavior leg. Also: `bracket_slice`-style depth fix ported; the reader
-  canon truths now match the same conventions the JS reader locked (§8.4).
+- **v5.4 (2026-10-10, latest)** — **5.6 leg-1 round-trip: canon identity 9/9
+  + re-emit 93 → <20.** Nine more reader/emitter fixes this pass (arg
+  wrappers descend all children incl. out-args; string-payload contents;
+  verbatim structural syms; keyword-verbatim→Ident; C#-for part fields;
+  `switch_core` arm extraction — arms now survive the reader; interface
+  kind canon-print (`type X interface{`, reparse-stable) + interface
+  signature-row emit; trailing-switch subject strips leading `return`;
+  designator-split excludes statement keywords; void-ret case-insensitive
+  filter; `?`-suffix ternary split; opaque-fragment statement drop). The
+  remaining 327 dotnet diagnostics: ~311 = the stub-world MEMBER gap by
+  gate design (types resolve, members don't — the corpus compiles inside
+  the real Humanizer lib); ~16 recorded reader rows in
+  `bench/results-cs-diff.md` (§5.6) for the next pass: cast operand
+  loss, `#if` capture emission, `opaque:(` fragment rows, interface
+  members with bodies, void-tail CS0127 ×2, static-ctor reachability,
+  init-order CS0236. Suite green (50+2+7). **Next pass: those ~16 rows →
+  syntax-clean → behavior leg + 5.6 report; then 5.5 loop test.**
 - **v5.2 (2026-10-10, later)** — **5.4 first pass (◐):** real-corpus emit
   under `dotnet build` — structure-compiles 9/9 (syntax phase) via a 35-type
   stub world (the corpus is Humanizer-library fragments; member-level

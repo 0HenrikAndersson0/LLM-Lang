@@ -26,11 +26,17 @@ type DefaultCollectionFormatter{
   fn HumanizeDisplayObjects(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
     var items=CreateDisplayItems(collection)
     for item in collection{
-      AddDisplayString(items, objectFormatteritem?.ToString())
+      AddDisplayString(items, objectFormatter(item)?.ToString())
     }
     return HumanizeDisplayItems(items, separator)
   }
-  fn CreateDisplayItems(collection IEnumerable<T>) List<String>{collection switch}
+  fn CreateDisplayItems(collection IEnumerable<T>) List<String>{
+    collection switch{
+      ICollection<T>items new ()
+      IReadOnlyCollection<T>items new ()
+      else []
+    }
+  }
   fn AddDisplayString(items List<String>, item String?) void{
     if string.IsNullOrWhiteSpace(item){
       return
@@ -46,8 +52,8 @@ type DefaultCollectionFormatter{
       return items[0]
     }
     var conjunctionFormat=GetConjunctionFormatString(count)
-    if conjunctionFormat==""{
-      return count==2?string.Concat(items[0], "", separator, "", items[1]):string.Concat(JoinLeadingItems(items), "", separator, "", items[^1])
+    if conjunctionFormat=="{0} {1} {2}"{
+      return count==2?string.Concat(items[0], " ", separator, " ", items[1]):string.Concat(JoinLeadingItems(items), " ", separator, " ", items[^1])
     }
     return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1])
   }
@@ -58,11 +64,11 @@ type DefaultCollectionFormatter{
     }
     var builder=new StringBuilder()
     builder.Append(items[0])
-    for i=1;<;{
-      builder.Append("")
+    for var i=1;i<count;i++{
+      builder.Append(", ")
       builder.Append(items[i])
     }
     return builder.ToString()
   }
-  fn GetConjunctionFormatString(itemCount Int) String{""}
+  fn GetConjunctionFormatString(itemCount Int) String{"{0} {1} {2}"}
 }

@@ -1,6 +1,6 @@
 @1 @ns Humanizer
 
-type IFormatter export{
+type IFormatter export interface{
   fn DateHumanize_Now() String{}
   fn DateHumanize_Never() String{}
   fn DateHumanize(timeUnit TimeUnit, timeUnitTense Tense, unit Int) String{}

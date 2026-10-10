@@ -273,6 +273,20 @@ impl<'a> ExprCtx<'a> {
                             continue;
                         }
                     }
+                    // ir `?` suffix rides the ident (`X?A` lexes one ident);
+                    // when an operand follows, it is the TERNARY `?` — emit
+                    // the split (`x ? a : b`)
+                    if id.ends_with('?')
+                        && !id.ends_with("?.")
+                        && id.len() > 1
+                        && !is_csharp_keyword(id)
+                    {
+                        let head_w = &id[..id.len() - 1];
+                        out.push_str(head_w);
+                        out.push('?');
+                        i += 1;
+                        continue;
+                    }
                     // `match` keyword inside expr runs (C# switch expr emits it)
                     // mid-run pattern keywords need a space BEFORE when the
                     // previous token ended word-ish (`M is`, `x is not` — the
@@ -606,7 +620,11 @@ fn emit_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<S
     };
     // match → switch (value-position handled by caller fusing `return`)
     if head.len() >= 2 && head.last().map(|a| matches!(a, Atom::Ident(x) if x == "switch")).unwrap_or(false) {
-        let subject = expr(&head[..head.len() - 1]);
+        let mut subj = &head[..head.len() - 1];
+        if matches!(subj.first(), Some(Atom::Ident(k)) if k == "return" || k == "throw") {
+            subj = &subj[1..];
+        }
+        let subject = expr(subj);
         let mut s = format!("{ind}return {subject} switch\n{ind}{{");
         let rendered_arms: Vec<(String, String)> = arms.iter().filter_map(|a| {
             let pat = pattern_txt(&a.pattern);
@@ -889,8 +907,12 @@ fn fn_sig(f: &FnDecl, in_static: bool) -> String {
     } else {
         if let Some(r) = &f.ret {
             let (rt, _) = split_default(r);
-            s.push_str(&map_type(rt));
-            s.push(' ');
+            if rt.eq_ignore_ascii_case("void") {
+                s.push_str("void ");
+            } else {
+                s.push_str(&map_type(rt));
+                s.push(' ');
+            }
         } else {
             s.push_str("void ");
         }
@@ -965,14 +987,15 @@ fn render_body(b: &Body, level: usize, ret: &Option<String>) -> Result<String, C
             }
             if lead == "await" {
                 let txt = expr(a);
-                if ret.is_some() {
+                let real_ret = ret.as_ref().map(|r| !r.eq_ignore_ascii_case("void")).unwrap_or(false);
+                if real_ret {
                     return Ok(format!("\n{ind}{{\n{ind}    return {txt};\n{ind}}}"));
                 }
                 return Ok(format!("\n{ind}{{\n{ind}    {txt};\n{ind}}}"));
             }
             let txt = render_stmt_line(a);
-            if let Some(r) = ret {
-                let _ = r;
+            let real_ret = ret.as_ref().map(|r| !r.eq_ignore_ascii_case("void")).unwrap_or(false);
+            if real_ret {
                 return Ok(format!(" =>\n{ind}    {txt};"));
             }
             return Ok(format!("\n{ind}{{\n{ind}    {txt};\n{ind}}}"));
@@ -1101,7 +1124,12 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
     for m in &t.members {
         match m {
             Core::Fn(f) => {
-                if f.modifiers.iter().any(|x| x == "ctor") {
+                if t.kind == "interface" && matches!(&f.body, Body::Inline(a) if a.is_empty()) {
+                    // interface member: signature row, no body
+                    out.push_str(&IND.repeat(level + 1));
+                    out.push_str(&fn_sig(f, is_static_class));
+                    out.push_str(";\n");
+                } else if f.modifiers.iter().any(|x| x == "ctor") {
                     let mut f2 = f.clone();
                     if !f2.name.is_empty() && f2.name != "{}" {
                         // ctor name == type name

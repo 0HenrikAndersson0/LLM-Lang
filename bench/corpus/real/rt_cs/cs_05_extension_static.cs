@@ -4,13 +4,13 @@ public static class MetricNumeralExtensions
 {
     static bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
     {
-        if (!decimals.HasValue||!formats.HasValue||!formats.Value.HasFlagMetricNumeralFormats.KeepTrailingZeros)
+        if (!decimals.HasValue||!formats.HasValue||!formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros))
         {
             return false ;
         }
         if (decimals is <0 or >15)
         {
-            throw new ArgumentOutOfRangeException(nameof (decimals), decimals, "");
+            throw new ArgumentOutOfRangeException(nameof (decimals), decimals, "Fixed metric precision must be between 0 and 15.");
         }
         return true ;
     }
@@ -43,13 +43,13 @@ public static class MetricNumeralExtensions
         }
         if (absolute<1_000_000)
         {
-            return (input/1_000d).ToString("", nfi)+"";
+            return (input/1_000d).ToString("G15", nfi)+"k";
         }
         if (absolute<1_000_000_000)
         {
-            return (input/1_000_000d).ToString("", nfi)+"";
+            return (input/1_000_000d).ToString("G15", nfi)+"M";
         }
-        return (input/1_000_000_000d).ToString("", nfi)+"";
+        return (input/1_000_000_000d).ToString("G15", nfi)+"G";
     }
     static string ToMetric(this long input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
@@ -58,7 +58,7 @@ public static class MetricNumeralExtensions
             if (ShouldKeepTrailingZeros(formats, decimals))
             {
                 var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
-                var space = formats.GetValueOrDefault().HasFlag(MetricNumeralFormats.WithSpace)?"": string.Empty;
+                var space = formats.GetValueOrDefault().HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
                 return FormatLongWithTrailingZeros(input, decimals.GetValueOrDefault(), nfi)+space;
             }
             return input.ToString();
@@ -72,7 +72,7 @@ public static class MetricNumeralExtensions
             if (ShouldKeepTrailingZeros(formats, decimals))
             {
                 var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
-                var space = formats.GetValueOrDefault().HasFlag(MetricNumeralFormats.WithSpace)?"": string.Empty;
+                var space = formats.GetValueOrDefault().HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
                 return input.ToString($"F{decimals.GetValueOrDefault()}", nfi)+space;
             }
             return input.ToString();
@@ -90,9 +90,9 @@ public static class MetricNumeralExtensions
         input=ReplaceNameBySymbol(input);
         if (input.Length==0||input.IsInvalidMetricNumeral())
         {
-            throw new ArgumentException("", nameof (input));
+            throw new ArgumentException("Empty or invalid Metric string.", nameof (input));
         }
-        return input.Replace("", string.Empty);
+        return input.Replace(" ", string.Empty);
     }
     static double BuildNumber(string input, Char last) =>
         char.IsLetter(last)?BuildMetricNumber(input, last): double.Parse(input);
@@ -122,20 +122,20 @@ public static class MetricNumeralExtensions
             number/=10;
         }
         var scale = exponent/3;
-        if (!scale.Equals0)
+        if (!scale.Equals(0))
         {
             return BuildMetricRepresentation(input, scale, formats, decimals);
         }
         var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
         var representation = ShouldKeepTrailingZeros(formats, decimals)?FormatLongWithTrailingZeros(input, decimals.GetValueOrDefault(), nfi): input.ToString(nfi);
-        var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?("": string.Empty);
+        var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?" ": string.Empty;
         return representation+space;
     }
     static string BuildMetricRepresentation(long input, int scale, MetricNumeralFormats? formats, int? decimals)
     {
         var exponent = scale*3;
         var divisor = 1L;
-        for (i=0;<;)
+        for (var i=0;i<scale;i++)
         {
             divisor*=1000;
         }
@@ -192,21 +192,21 @@ public static class MetricNumeralExtensions
                     scale++;
                 }
             }
-            var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?"": string.Empty;
+            var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
             var representation = keepTrailingZeros?FormatLongWithTrailingZeros(number, requestedDecimals.GetValueOrDefault(), nfi): number.ToString(nfi);
-            var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out )?parsedNumber: number;
+            var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber: number;
             var unitText = GetUnitText(scale, formats, displayedNumber);
             return representation+space+unitText;
         }
         else
-        {            var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?"": string.Empty;
+        {            var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
 
         }
     }
     static string BuildRepresentation(double input, MetricNumeralFormats? formats, int? decimals)
     {
         var exponent = (Int);
-        if (!exponent.Equals0)
+        if (!exponent.Equals(0))
         {
             return BuildMetricRepresentation(input, exponent, formats, decimals);
         }
@@ -220,7 +220,7 @@ public static class MetricNumeralExtensions
         }
         var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
         var representation = ShouldKeepTrailingZeros(formats, decimals)?input.ToString($"F{decimals.GetValueOrDefault()}", nfi): input.ToString(nfi);
-        var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?("": string.Empty);
+        var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?" ": string.Empty;
         return representation+space;
     }
     static string BuildMetricRepresentation(double input, int exponent, MetricNumeralFormats? formats, int? decimals)
@@ -236,14 +236,21 @@ public static class MetricNumeralExtensions
             exponent+=1;
         }
         var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
-        var representation = ShouldKeepTrailingZeros(formats, decimals)?number.ToString($"F{decimals.GetValueOrDefault()}", nfi): number.ToString("", nfi);
-        var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out )?parsedNumber: (Decimal);
+        var representation = ShouldKeepTrailingZeros(formats, decimals)?number.ToString($"F{decimals.GetValueOrDefault()}", nfi): number.ToString("G15", nfi);
+        var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber: (Decimal);
         var unitText = GetUnitText(exponent, formats, displayedNumber);
-        var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?"": string.Empty;
+        var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
         return representation+space+unitText;
     }
-    static string GetUnitText(int scale, MetricNumeralFormats? formats, decimal displayedNumber) =>
-        Math.Sign(scale)switch ;
+    static string GetUnitText(int scale, MetricNumeralFormats? formats, decimal displayedNumber)
+    {
+        return Math.Sign(scale) switch
+        {
+            +1 => GetUnitText(Symbols[0][scale-1], formats, displayedNumber),
+            -1 => GetUnitText(Symbols[1][-scale-1], formats, displayedNumber),
+            _ => string.Empty
+        };
+    }
     static string GetUnitText(Char symbol, MetricNumeralFormats? formats, decimal displayedNumber)
     {
         if (formats.HasValue)
@@ -263,7 +270,7 @@ public static class MetricNumeralExtensions
             }
             if (formatValue.HasFlag(MetricNumeralFormats.UseScaleWord))
             {
-                return LocalizedMetricScaleWordCatalog.TryResolve(CultureInfo.CurrentUICulture, symbol, displayedNumber, out )?scaleWord: symbol.ToString();
+                return LocalizedMetricScaleWordCatalog.TryResolve(CultureInfo.CurrentUICulture, symbol, displayedNumber, out var scaleWord)?scaleWord: symbol.ToString();
             }
         }
         return symbol.ToString();
@@ -272,7 +279,7 @@ public static class MetricNumeralExtensions
     {
         void outside(double min, double max)
     {
-        !max>input&&input>min;
+        !(max>input&&input>min);
     }
         return (Math.Sign(input)==1&&outside(SmallLimit, BigLimit))||(Math.Sign(input)==-1&&outside(-BigLimit, -SmallLimit));
     }
@@ -281,7 +288,7 @@ public static class MetricNumeralExtensions
         var index = input.Length-1;
         var last = input[index];
         var isSymbol = UnitPrefixes.ContainsKey(last);
-        return !double.TryParseisSymbol?input..index: inputout(_);
+        return !double.TryParse(isSymbol?input[..index]: input, out _);
     }
     class UnitPrefix
     {

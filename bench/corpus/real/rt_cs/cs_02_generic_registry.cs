@@ -23,7 +23,7 @@ public class LocaliserRegistry
         {
             if (frozenLocalisers!=null )
             {
-                throw new InvalidOperationException("");
+                throw new InvalidOperationException("Cannot register localisers after the registry has been used.");
             }
             localisersBuilder[localeCode]=_ => localiser;
         }
@@ -34,7 +34,7 @@ public class LocaliserRegistry
         {
             if (frozenLocalisers!=null )
             {
-                throw new InvalidOperationException("");
+                throw new InvalidOperationException("Cannot register localisers after the registry has been used.");
             }
             localisersBuilder[localeCode]=localiser;
         }
@@ -43,7 +43,7 @@ public class LocaliserRegistry
     {
         lock (lockObject)
         {
-            return ..localisersBuilder.Keys.OrderBystaticlocale => localeStringComparer.Ordinal;
+            return [..localisersBuilder.Keys.OrderBy(staticlocale => locale, StringComparer.Ordinal)];
         }
     }
     void UseGeneratedCultureResolver()
@@ -52,7 +52,7 @@ public class LocaliserRegistry
         {
             if (frozenLocalisers!=null )
             {
-                throw new InvalidOperationException("");
+                throw new InvalidOperationException("Cannot change culture resolution after the registry has been used.");
             }
             useGeneratedCultureResolver=true ;
         }
@@ -74,15 +74,15 @@ public class LocaliserRegistry
         }
         if (useGeneratedCultureResolver)
         {
-            if (frozen.TryGetValue(culture.Name, out ))
+            if (frozen.TryGetValue(culture.Name, out var exactLocaliser))
             {
                 return exactLocaliser;
             }
-            return GeneratedCultureResolver.TryResolve(culture.Name, out )&&frozen.TryGetValue(resolution.LocaleProfileOwner, out )?generatedLocaliser: defaultLocaliser;
+            return GeneratedCultureResolver.TryResolve(culture.Name, out var resolution)&&frozen.TryGetValue(resolution.LocaleProfileOwner, out var generatedLocaliser)?generatedLocaliser: defaultLocaliser;
         }
-        for (c=culture;string.IsNullOrEmpty(c.Name);)
+        for (var c=culture;!string.IsNullOrEmpty(c.Name);c=c.Parent)
         {
-            if (frozen.TryGetValue(c.Name, out ))
+            if (frozen.TryGetValue(c.Name, out var localiser))
             {
                 return localiser;
             }

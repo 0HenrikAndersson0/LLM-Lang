@@ -62,6 +62,35 @@ member-collides with redeclared emitted types — the same reason 2.4 used
 `--noResolve` for tsc. Full-library semantic compile is queued as a 5.4
 follow-up behind a redeclaration-aware rig.
 
+## 5.6 leg-1 round-trip gate (first pass, same session)
+
+`cs_read.rs` + `irc from-cs`; round-trip artifacts `bench/corpus/real/rt_cs/`:
+
+- **canon identity: all 9 cs_*.cs + 17-row construct smoke green**
+  (`cargo test --lib cs_read`).
+- **re-emit leg: 93 → <20 syntax/structure rows** after 9 more reader +
+  emitter fixes (arg-wrapper descent over all children incl. out-args;
+  string-payload content children; verbatim-structural syms restored;
+  keyword-text→Ident map; C#-for part fields `initializer/condition/update`;
+  switch arms — `switch_core` arms + interface signature-row emit + the
+  interface-kind canon print (now `type X interface{`, reparse-stable);
+  trailing-switch subject strips a leading `return`; pattern designator
+  split excludes statement keywords (`throw`/`return` — the expander's
+  `split_switch_arms` binder rule); ret-tail void filter (case-insensitive;
+  `return void-call` rows); `?`-suffix ternary split at emit (`X?A`
+  ident-glue); opaque-fragment statement drop).
+- **Remaining diagnostics (327 unique) root-caused**: ~311 are the
+  stub-world **member** gap (`ByteSize.FromBits`, `CultureInfo.CurrentCulture`,
+  LINQ/method overloads — types resolve, members don't) — by gate design,
+  the corpus compiles inside the real Humanizer library; ~16 rows are
+  recorded reader rows for the next pass: cast-expression operand loss
+  (`(Int64)input` → `((Int64))`), `#if`-preprocessor capture emission,
+  `opaque:(` fragment statements (2 in cs_05, 1 in cs_08 — inline-`{`-run
+  pieces), interface members with real bodies, `.Replace($"…")`-glue,
+  void-tail ret rows (CS0127 ×2), `static double BuildMetricNumber` with
+  an unreachable return (CS0161), `LongScaleWord ?? ShortScaleWord`
+  initialization order (CS0236).
+
 ## Verdict
 
 Phase-5 gate 5.4 (first pass): golden gate **8/9** (1 proven-upstream),

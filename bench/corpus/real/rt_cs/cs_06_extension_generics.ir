@@ -79,7 +79,7 @@ type ByteSizeExtensions export{
   fn ByteSize.HumanizeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, format: String? = null, formatProvider: IFormatProvider? = null) String{unitSystem==ByteSizeUnitSystem.Legacy?input.Humanize(format, formatProvider):input.Format(unitSystem, format, formatProvider)}
   fn ByteSize.HumanizeComposite(input: this ByteSize, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
     if precision<1{
-      throw new ArgumentOutOfRangeException(nameof(precision), precision, "")
+      throw new ArgumentOutOfRangeException(nameof(precision), precision, "Precision must be greater than zero.")
     }
     ArgumentNullException.ThrowIfNull(separator)
     formatProvider??=CultureInfo.CurrentCulture
@@ -91,7 +91,7 @@ type ByteSizeExtensions export{
     var isNegative=input.Bits<0
     var remainingBits=isNegative?(Int64)+1:(Int64)
     if remainingBits==0{
-      return string.Concat("", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol))
+      return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol:!toWords))
     }
     var parts=new List<String>(Math.Min(precision, 8))
     fn addPart(bitsPerUnit Int64, unit DataUnit){
@@ -102,7 +102,7 @@ type ByteSizeExtensions export{
       if count==0{
         return
       }
-      parts.Add(string.Concat(count.ToString(formatProvider), "", formatter.DataUnitHumanize(unit, count, toSymbol)))
+      parts.Add(string.Concat(count.ToString(formatProvider), " ", formatter.DataUnitHumanize(unit, count, toSymbol:!toWords)))
       remainingBits%=bitsPerUnit
     }
     addPart((Int64)*ByteSize.BitsInByte, DataUnit.Exabyte)
@@ -120,10 +120,10 @@ type ByteSizeExtensions export{
       return input.HumanizeComposite(precision, formatProvider, separator, toWords)
     }
     if unitSystem is <ByteSizeUnitSystem.DecimalSi or>ByteSizeUnitSystem.BinaryIec{
-      throw new ArgumentOutOfRangeException(nameof(unitSystem), unitSystem, "")
+      throw new ArgumentOutOfRangeException(nameof(unitSystem), unitSystem, "Unknown byte-size unit system.")
     }
     if precision<1{
-      throw new ArgumentOutOfRangeException(nameof(precision), precision, "")
+      throw new ArgumentOutOfRangeException(nameof(precision), precision, "Precision must be greater than zero.")
     }
     ArgumentNullException.ThrowIfNull(separator)
     formatProvider??=CultureInfo.CurrentCulture
@@ -133,14 +133,14 @@ type ByteSizeExtensions export{
     }
     var formatter=Configurator.GetFormatter(culture)
     var builtInFormatter=formatter as DefaultFormatter
-    if builtInFormatter is not null &&formatter.GetType.Assembly !=typeofDefaultFormatter.Assembly{
+    if builtInFormatter is not null &&formatter.GetType().Assembly !=typeof (DefaultFormatter).Assembly{
       builtInFormatter=null
     }
     var isNegative=input.Bits<0
     var remainingBits=isNegative?(Int64)+1:(Int64)
     var units=unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits:BinaryCompositeUnits
     if remainingBits==0{
-      return string.Concat("", toWords?humanizeUnit(DataUnit.Bit, 0):ByteSize.BitSymbol)
+      return string.Concat("0 ", toWords?humanizeUnit(DataUnit.Bit, 0):ByteSize.BitSymbol)
     }
     var parts=new List<String>(Math.Min(precision, units.Length+2))
     for unit in units{
@@ -153,7 +153,7 @@ type ByteSizeExtensions export{
         continue
       }
       var unitText=toWords?humanizeUnit(unit.DataUnit, count):unit.Symbol
-      parts.Add(string.Concat(count.ToString(formatProvider), "", unitText))
+      parts.Add(string.Concat(count.ToString(formatProvider), " ", unitText))
       remainingBits%=bitsPerUnit
     }
     addSmallUnit(ByteSize.BitsInByte, ByteSize.ByteSymbol, DataUnit.Byte)
@@ -167,10 +167,10 @@ type ByteSizeExtensions export{
       if count==0{
         return
       }
-      parts.Add(string.Concat(count.ToString(formatProvider), "", toWords?humanizeUnit(dataUnit, count):symbol))
+      parts.Add(string.Concat(count.ToString(formatProvider), " ", toWords?humanizeUnit(dataUnit, count):symbol))
       remainingBits%=bitsPerUnit
     }
-    fn humanizeUnit(dataUnit DataUnit, count Int64){builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol):formatter.DataUnitHumanize(dataUnit, count, toSymbol)}
+    fn humanizeUnit(dataUnit DataUnit, count Int64){builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol:false ):formatter.DataUnitHumanize(dataUnit, count, toSymbol:false )}
   }
   type CompositeUnit{
   }

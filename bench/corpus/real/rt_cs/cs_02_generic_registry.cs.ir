@@ -1,0 +1,68 @@
+@1 @ns Humanizer
+
+type LocaliserRegistry export{
+  ctor (defaultLocaliser TLocaliser){
+    this.defaultLocaliser=_=>defaultLocaliser
+  }
+  ctor (defaultLocaliser Func<CultureInfo,TLocaliser>){
+    this.defaultLocaliser=defaultLocaliser
+  }
+  fn ResolveForUiCulture() TLocaliser{ResolveForCulture(CultureInfo.CurrentUICulture)}
+  fn ResolveForCulture(culture CultureInfo?) TLocaliser{
+    var cultureInfo=culture??CultureInfo.CurrentCulture
+    return cultureSpecificCache.GetValue(cultureInfo, c=>new ()).Value!
+  }
+  fn Register(localeCode String, localiser TLocaliser) void{
+    lock lockObject{
+      if frozenLocalisers !=null{
+        throw new InvalidOperationException("Cannot register localisers after the registry has been used.")
+      }
+      localisersBuilder[localeCode]=_=>localiser
+    }
+  }
+  fn Register(localeCode String, localiser Func<CultureInfo,TLocaliser>) void{
+    lock lockObject{
+      if frozenLocalisers !=null{
+        throw new InvalidOperationException("Cannot register localisers after the registry has been used.")
+      }
+      localisersBuilder[localeCode]=localiser
+    }
+  }
+  fn GetRegisteredLocaleCodes() Array<String>{
+    lock lockObject{
+      return [..localisersBuilder.Keys.OrderBy(staticlocale=>locale, StringComparer.Ordinal)]
+    }
+  }
+  fn UseGeneratedCultureResolver() void{
+    lock lockObject{
+      if frozenLocalisers !=null{
+        throw new InvalidOperationException("Cannot change culture resolution after the registry has been used.")
+      }
+      useGeneratedCultureResolver=true
+    }
+  }
+  fn FindLocaliser(culture CultureInfo) Func<CultureInfo,TLocaliser>{
+    var frozen=frozenLocalisers
+    if frozen==null{
+      lock lockObject{
+        frozen=frozenLocalisers
+        if frozen==null{
+          frozen=localisersBuilder.ToFrozenDictionary()
+          frozenLocalisers=frozen
+        }
+      }
+    }
+    if useGeneratedCultureResolver{
+      if frozen.TryGetValue(culture.Name, out var exactLocaliser){
+        return exactLocaliser
+      }
+      return GeneratedCultureResolver.TryResolve(culture.Name, out var resolution)&&frozen.TryGetValue(resolution.LocaleProfileOwner, out var generatedLocaliser)?generatedLocaliser:defaultLocaliser
+    }
+    for c=culture;string.IsNullOrEmpty(c.Name);{
+      if frozen.TryGetValue(c.Name, out var localiser){
+        return localiser
+      }
+    }
+    return defaultLocaliser
+  }
+}
