@@ -1,6 +1,6 @@
 namespace Humanizer;
 
-class DefaultCollectionFormatter
+class DefaultCollectionFormatter(string defaultSeparator)
 {
     readonly string DefaultSeparator = defaultSeparator;
     internal string Humanize(IEnumerable<T> collection) =>

@@ -1277,6 +1277,7 @@ fn expr_at(atoms: &[Atom]) -> String {
             }
             Atom::Number(k) => out.push_str(&js_number(k)),
             Atom::Str(k) => out.push_str(&js_string(k)),
+            Atom::Char(k) => out.push_str(&js_string(k)),
             Atom::Regex(k) => {
                 out.push('/');
                 out.push_str(k);

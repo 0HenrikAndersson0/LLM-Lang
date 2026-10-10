@@ -272,7 +272,7 @@ public static class ByteSizeExtensions
     }
     static readonly CompositeUnit[] DecimalCompositeUnits = [new (ByteSize.BytesInDecimalExabyte, "EB", DataUnit.DecimalExabyte), new (ByteSize.BytesInDecimalPetabyte, "PB", DataUnit.DecimalPetabyte), new (ByteSize.BytesInDecimalTerabyte, "TB", DataUnit.DecimalTerabyte), new (ByteSize.BytesInDecimalGigabyte, "GB", DataUnit.DecimalGigabyte), new (ByteSize.BytesInDecimalMegabyte, "MB", DataUnit.DecimalMegabyte), new (ByteSize.BytesInDecimalKilobyte, "kB", DataUnit.DecimalKilobyte)];
     static readonly CompositeUnit[] BinaryCompositeUnits = [new (ByteSize.BytesInPebibyte, "PiB", DataUnit.BinaryPebibyte), new (ByteSize.BytesInTebibyte, "TiB", DataUnit.BinaryTebibyte), new (ByteSize.BytesInGibibyte, "GiB", DataUnit.BinaryGibibyte), new (ByteSize.BytesInMebibyte, "MiB", DataUnit.BinaryMebibyte), new (ByteSize.BytesInKibibyte, "KiB", DataUnit.BinaryKibibyte)];
-    class CompositeUnit
+    class CompositeUnit(long Bytes, string Symbol, DataUnit DataUnit)
     {
     }
     internal static ByteRate Per(this ByteSize size, TimeSpan interval) =>

@@ -432,6 +432,13 @@ fn print_type(t: &TypeDecl, level: usize) -> String {
     s.push_str(&indent(level));
     s.push_str("type ");
     s.push_str(&t.name);
+    if let Some(p) = &t.primary {
+        // primary ctor canon: `type Name(params) {` (fixture-row shape)
+        let parts: Vec<String> = p.iter().map(|(n, ty)| {
+            if ty.is_empty() { n.clone() } else { format!("{n} {ty}") }
+        }).collect();
+        s.push_str(&format!("({})", parts.join(", ")));
+    }
     for m in &t.modifiers {
         s.push(' ');
         s.push_str(m);
@@ -577,6 +584,7 @@ pub fn render_atoms(atoms: &[Atom]) -> String {
         s.push_str(&match a {
             Atom::Ident(x) | Atom::Number(x) => x.clone(),
             Atom::Str(x) => format!("{:?}", escape_string(x)),
+            Atom::Char(x) => format!("'{x}'"),
             Atom::Regex(x) => format!("/{x}"),
             Atom::Sym(x) => x.clone(),
         });

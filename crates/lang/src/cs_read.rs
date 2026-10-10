@@ -508,7 +508,7 @@ impl<'a> CsReader<'a> {
             }
             "interpolated_string_expression" => vec![Atom::Str(self.interp_payload(node))],
             "string_literal" => vec![Atom::Str(self.str_payload(node))],
-            "character_literal" => vec![Atom::Str(node
+            "character_literal" => vec![Atom::Char(node
                 .child_by_field_name("content")
                 .or_else(|| node.child_by_field_name("character_literal_content"))
                 .map(|n| text(n, self.src).to_string())
@@ -776,7 +776,7 @@ impl<'a> CsReader<'a> {
         // that re-lex differently on round 2)
         if node.kind() == "character_literal" {
             let t = text(node, self.src);
-            v.push(Atom::Str(t.trim_matches(|c| c == '\'').replace("\\'", "'").to_string()));
+            v.push(Atom::Char(t.trim_matches(|c| c == '\'').replace("\\'", "'").to_string()));
             return;
         }
         if node.kind() == "string_literal" {

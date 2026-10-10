@@ -3,12 +3,12 @@
 - lang/world: `ir` — guide + transpile + span map
 - adapter: `echo`
 - task: CompactLabel — trim/split/initials string ops
-- rounds: 2 (cap 4); started 2026-10-10T20:23:50+00:00
+- rounds: 2 (cap 4); started 2026-10-10T21:04:35+00:00
 - verdict: **PASS**
 
 | round | outcome | detail | src chars | s |
 |---|---|---|---|---|
-| 1 | runtime-fail | ERROR CompactLabel("hello world"): TypeError: w.toFirstUpper is not a function | 253 | 0.0 |
+| 1 | runtime-fail | ERROR CompactLabel("hello world"): TypeError: w.toFirstUpper is not a function | 253 | 0.1 |
 | 2 | ALL PASS | 8 rig lines | 255 | 0.0 |
 
 Artifacts: `prompt-R*.md` (transcripts), `reply-R*.md` (model replies), `feature-R*.ir`, `feature.ir` (last), `feature.js` (last emit/run), `rig.js` (cases), `feature.map.json` (IR↔JS line map).

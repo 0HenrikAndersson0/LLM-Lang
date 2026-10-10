@@ -66,7 +66,7 @@ The 4.5 JS budget above was JS-only. The C# reader (`cs_read.rs`) adds:
 
 | # | row | practice |
 |---|---|---|
-| 17 | **char literals vs string literals** | the IR atom set has no `char`; C# single-quote chars canon to Str atoms. *Recorded design limit*, not opaque: `new string('0', n)` re-emits `new string("0", n)` (CS1503-style shifts at the C#-emit stage of the round trip — 8 corpus rows in cs_05/cs_06). Bounded to char contexts; additive core-form extension (a Char atom) stays out of v0's frozen grammar |
+| 17 | **char literals vs string literals** | ✅ **RESOLVED 2026-10-10 (the @2 admission)**: canon v1.1 gained `Atom::Char` (single-quoted 1-char; double-quoted 1-char stays Str — 1-char JS strings are meaningful). The C# emit restores `'X'`; JS emit renders `"X"` (JSON string; JS has no chars). Token-neutral (probe: ±1 over 36 swaps — `bench/results-char-atom.md`). The 8 char-family emit rows cleared; the round-trip corpus re-emits with zero non-stub diagnostics |
 | 18 | accessibility nuance | canon keeps `export` (public) only; `internal`/`private`/`protected` collapse — the C# emitter emits `internal` for non-export members so multi-file cross-calls in the corpus assembly resolve as the originals do (`cs_06 → cs_08.DataUnitHumanizeExact`) |
 | 19 | `where` generic constraints | dropped (contract); the C# emitter emits type params without them |
 | 20 | data-braces vs interpolation in C# strings | **distinguished at the reader** (interpolated_string vs plain literal): plain literals canon-escape `{{…}}`, interpolation canon's `x{e}y`; the C# emit restores literal braces — *this one is preserved*, recorded because JS canon cannot make the same distinction |

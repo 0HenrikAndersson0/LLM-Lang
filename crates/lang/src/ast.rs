@@ -44,6 +44,9 @@ pub enum Atom {
     Number(String),
     /// string/template/regex literal payload (verbatim; interp `{}` inside)
     Str(String),
+    /// char literal (C#-side round trip): payload is the character content
+    /// (unquoted). Printed `'X'`; JS emit renders `"X"`.
+    Char(String),
     Sym(String),
     /// regex literal: body + closing / + flags
     Regex(String),
@@ -55,6 +58,7 @@ impl std::fmt::Display for Atom {
             Atom::Ident(s) => write!(f, "{s}"),
             Atom::Number(s) => write!(f, "{s}"),
             Atom::Str(s) => write!(f, "{s:?}"),
+            Atom::Char(s) => write!(f, "'{s}'"),
             Atom::Sym(s) => write!(f, "{s}"),
             Atom::Regex(s) => write!(f, "/{s}"),
         }

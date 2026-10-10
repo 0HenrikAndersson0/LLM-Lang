@@ -370,6 +370,11 @@ fn dotted(atoms: &[Atom]) -> String {
             Atom::Ident(x) | Atom::Number(x) => s.push_str(x),
             Atom::Sym(x) => s.push_str(x),
             Atom::Str(x) => s.push_str(x),
+            Atom::Char(x) => {
+                s.push('\'');
+                s.push_str(x);
+                s.push('\'');
+            }
             Atom::Regex(x) => {
                 s.push('/');
                 s.push_str(x)
@@ -393,6 +398,11 @@ pub fn spaced(atoms: &[Atom]) -> String {
             Atom::Ident(x) | Atom::Number(x) => s.push_str(x),
             Atom::Sym(x) => s.push_str(x),
             Atom::Str(x) => s.push_str(x),
+            Atom::Char(x) => {
+                s.push('\'');
+                s.push_str(x);
+                s.push('\'');
+            }
             Atom::Regex(x) => {
                 s.push('/');
                 s.push_str(x)

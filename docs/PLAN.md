@@ -328,7 +328,24 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v6.3 (2026-10-10, latest)** — **6.6-preflight: the char-atom probe
+- **v6.4 (2026-10-10, latest)** — **THE CHAR ATOM IS ADMITTED AND
+  IMPLEMENTED** (the @2 call: implemented, and the migration turned out
+  text-stable — no header bump fired; versioning §3 covers it). The
+  atom: `ast::Atom::Char` + lexer rule (1-char SINGLE-quoted → Char;
+  double-quoted/template 1-char stay Str — 1-char JS strings are
+  strings), reader passthrough, printer/dotted/spaced `'X'` arms,
+  `cs_read` char→Char, `to-cs` restore, `to-js` JSON-string render.
+  **The round-trip gate result: ZERO non-stub diagnostics** — the
+  char-family (fidelity 17) and 12 emit rows cleared; every remaining
+  diagnostic is the Humanizer-API stub boundary (185; the rig's stubs
+  now carry real ctor/return SHAPES: FrozenDictionary as a
+  Dictionary-subclass, ByteRate(2-arg), CultureResolver.TryResolve(bool,
+  out) — the emitted primary-ctor row resolves shape-correctly). Loop
+  selftests ×4 green. `bench/results-char-atom.md` gains the ADMITTED
+  verdict + the round-trip gate result; fidelity row 17 → ✅ resolved.
+  **The C# round-trip leg is clean at the emit stage for the whole
+  corpus.** Next: behavior rig behind the real library (Phase-6), 6.2.
+- **v6.3 (2026-10-10, later)** — **6.6-preflight: the char-atom probe
   ran** (`bench/scripts/charatom_probe.py` +
   `bench/results-char-atom.md`): **token-neutral** (±1 over 36 swaps;
   the quoted-pair `{'Y'` vs `{"Y'` BPE-identical), fixes the 8 char-family

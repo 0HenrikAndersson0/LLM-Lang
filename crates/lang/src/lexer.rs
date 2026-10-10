@@ -11,6 +11,8 @@ pub enum Tok {
     Number(String),
     /// string literal payload after unescaping: "…{expr}…"
     Str(String),
+    /// char literal payload (1-char single-quoted): 'X'
+    Char(String),
     /// regex literal: body + closing / + flags
     Regex(String),
     /// punctuation/operator
@@ -26,6 +28,7 @@ impl fmt::Display for Tok {
             Tok::Ident(s) => write!(f, "{s}"),
             Tok::Number(s) => write!(f, "{s}"),
             Tok::Str(s) => write!(f, "\"{s}\""),
+            Tok::Char(s) => write!(f, "'{s}'"),
             Tok::Regex(s) => write!(f, "/{s}"),
             Tok::Sym(s) => write!(f, "{s}"),
             Tok::Eof => write!(f, "<eof>"),
@@ -213,7 +216,12 @@ pub fn lex(src: &str) -> Result<Lexed, LexError> {
             if !closed {
                 return Err(LexError { line: tl, col: tc, msg: "unterminated single-quoted string".into() });
             }
-            push!(Tok::Str(payload), tl, tc);
+            // canon v1.1 (@2 rule): a 1-char single-quoted literal is Char
+            if payload.chars().count() == 1 {
+                push!(Tok::Char(payload), tl, tc);
+            } else {
+                push!(Tok::Str(payload), tl, tc);
+            }
             continue;
         }
 
@@ -432,7 +440,7 @@ mod tests {
         // unescape happens at lex time: payload holds post-unescape content
         assert_eq!(toks("\"a\\\"b\""), vec![Str("a\"b".into()), Eof]);
         // single-quoted strings lex, no interpolation
-        assert_eq!(toks("'k'"), vec![Str("k".into()), Eof]);
+        assert_eq!(toks("'k'"), vec![Char("k".into()), Eof]);
         assert_eq!(toks("'[cheerio object]'"), vec![Str("[cheerio object]".into()), Eof]);
         assert!(lex("'never").is_err());
     }

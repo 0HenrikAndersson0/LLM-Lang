@@ -344,6 +344,10 @@ impl<'a> ExprCtx<'a> {
                     out.push_str(k);
                     i += 1;
                 }
+                Atom::Char(k) => {
+                    out.push_str(&format!("'{k}'"));
+                    i += 1;
+                }
                 Atom::Str(k) => {
                     // interpolation canon `x{e}y` → `$"x{e}y"`; plain → "…".
                     // C#-canon payloads carry the leading `$` ($"...") — strip

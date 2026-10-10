@@ -671,6 +671,7 @@ fn to_atom(t: TokPos) -> Atom {
         Tok::Ident(s) => Atom::Ident(s),
         Tok::Number(s) => Atom::Number(s),
         Tok::Str(s) => Atom::Str(s),
+        Tok::Char(s) => Atom::Char(s),
         Tok::Regex(s) => Atom::Regex(s),
         Tok::Sym(s) => Atom::Sym(s),
         Tok::At => Atom::Sym("@".into()),
@@ -1001,6 +1002,7 @@ fn render_atom_text(toks: &[TokPos]) -> String {
         s.push_str(&match a {
             Atom::Ident(x) | Atom::Number(x) => x.clone(),
             Atom::Str(x) => format!("{x:?}"),
+            Atom::Char(x) => format!("'{x}'"),
             Atom::Regex(x) => format!("/{x}"),
             Atom::Sym(x) => x.clone(),
         });

@@ -18,9 +18,9 @@ public static class MetricNumeralExtensions
         return true ;
     }
     internal static string FormatLongWithTrailingZeros(long input, int decimals, NumberFormatInfo nfi) =>
-        decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string("0", decimals): input.ToString(nfi);
-    static readonly List<char>[] Symbols = [["k", "M", "G", "T", "P", "E", "Z", "Y"], ["m", "μ", "n", "p", "f", "a", "z", "y"]];
-    static readonly FrozenDictionary<char,UnitPrefix> UnitPrefixes = new Dictionary<Char, UnitPrefix>{{"Y", new ("yotta", "septillion", "quadrillion")}, {"Z", new ("zetta", "sextillion", "trilliard")}, {"E", new ("exa", "quintillion", "trillion")}, {"P", new ("peta", "quadrillion", "billiard")}, {"T", new ("tera", "trillion", "billion")}, {"G", new ("giga", "billion", "milliard")}, {"M", new ("mega", "million")}, {"k", new ("kilo", "thousand")}, {"m", new ("milli", "thousandth")}, {"μ", new ("micro", "millionth")}, {"n", new ("nano", "billionth", "milliardth")}, {"p", new ("pico", "trillionth", "billionth")}, {"f", new ("femto", "quadrillionth", "billiardth")}, {"a", new ("atto", "quintillionth", "trillionth")}, {"z", new ("zepto", "sextillionth", "trilliardth")}, {"y", new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary();
+        decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string('0', decimals): input.ToString(nfi);
+    static readonly List<char>[] Symbols = [['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'], ['m', 'μ', 'n', 'p', 'f', 'a', 'z', 'y']];
+    static readonly FrozenDictionary<char,UnitPrefix> UnitPrefixes = new Dictionary<Char, UnitPrefix>{{'Y', new ("yotta", "septillion", "quadrillion")}, {'Z', new ("zetta", "sextillion", "trilliard")}, {'E', new ("exa", "quintillion", "trillion")}, {'P', new ("peta", "quadrillion", "billiard")}, {'T', new ("tera", "trillion", "billion")}, {'G', new ("giga", "billion", "milliard")}, {'M', new ("mega", "million")}, {'k', new ("kilo", "thousand")}, {'m', new ("milli", "thousandth")}, {'μ', new ("micro", "millionth")}, {'n', new ("nano", "billionth", "milliardth")}, {'p', new ("pico", "trillionth", "billionth")}, {'f', new ("femto", "quadrillionth", "billiardth")}, {'a', new ("atto", "quintillionth", "trillionth")}, {'z', new ("zepto", "sextillionth", "trilliardth")}, {'y', new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary();
     internal static double FromMetric(this string input)
     {
         input=CleanRepresentation(input);
@@ -165,20 +165,20 @@ public static class MetricNumeralExtensions
         var fractionalPartCharacters = Array.Empty<char>();
         if (decimals>0)
         {
-            fractionalPartCharacters=fractionalPart.ToString().PadLeft(exponent, "0").ToCharArray();
+            fractionalPartCharacters=fractionalPart.ToString().PadLeft(exponent, '0').ToCharArray();
             if (!decimals.HasValue||(decimals>=fractionalPartCharacters.Length))
             {
                 decimals=fractionalPartCharacters.Length;
             }
-            else if (fractionalPartCharacters[decimals.Value]>="5")
-            {                var isExactlyAtMidpoint = (fractionalPartCharacters[decimals.Value]=="5")&&(fractionalPartCharacters.AsSpan().Slice(decimals.Value+1).IndexOfAnyExcept("0")<0);
+            else if (fractionalPartCharacters[decimals.Value]>='5')
+            {                var isExactlyAtMidpoint = (fractionalPartCharacters[decimals.Value]=='5')&&(fractionalPartCharacters.AsSpan().Slice(decimals.Value+1).IndexOfAnyExcept('0')<0);
                 bool shouldRoundUp;
                 if (!isExactlyAtMidpoint)
                 {
                     shouldRoundUp=true ;
                 }
                 else
-                {                    var precedingDigit = fractionalPartCharacters[decimals.Value-1]-"0";
+                {                    var precedingDigit = fractionalPartCharacters[decimals.Value-1]-'0';
                     var precedingDigitIsOdd = (precedingDigit&1)!=0;
                     shouldRoundUp=precedingDigitIsOdd;
 
@@ -187,17 +187,17 @@ public static class MetricNumeralExtensions
                 {
                     for (var i=decimals.Value-1;i>=0;i--)
                     {
-                        if (fractionalPartCharacters[i]<"9")
+                        if (fractionalPartCharacters[i]<'9')
                         {
                             fractionalPartCharacters[i]++;
                             break;
                         }
-                        fractionalPartCharacters[i]="0";
+                        fractionalPartCharacters[i]='0';
                     }
                 }
 
             }
-            while ((decimals>0)&&(fractionalPartCharacters[decimals.Value-1]=="0"))
+            while ((decimals>0)&&(fractionalPartCharacters[decimals.Value-1]=='0'))
             {
                 decimals--;
             }
@@ -230,7 +230,7 @@ public static class MetricNumeralExtensions
         }
         else
         {            var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
-            var representation = number.ToString(nfi)+nfi.NumberDecimalSeparator+new string(fractionalPartCharacters, 0, decimals.Value)+(keepTrailingZeros&&requestedDecimals>decimals?new string("0", requestedDecimals.Value-decimals.Value): string.Empty);
+            var representation = number.ToString(nfi)+nfi.NumberDecimalSeparator+new string(fractionalPartCharacters, 0, decimals.Value)+(keepTrailingZeros&&requestedDecimals>decimals?new string('0', requestedDecimals.Value-decimals.Value): string.Empty);
             var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber: number;
             var unitText = GetUnitText(scale, formats, displayedNumber);
             return representation+space+unitText;
@@ -322,7 +322,7 @@ public static class MetricNumeralExtensions
         var isSymbol = UnitPrefixes.ContainsKey(last);
         return !double.TryParse(isSymbol?input[..index]: input, out _);
     }
-    class UnitPrefix
+    class UnitPrefix(string name, string shortScaleWord, string? longScaleWord = null )
     {
         readonly string Name = name;
         readonly string ShortScaleWord = shortScaleWord;

@@ -392,7 +392,7 @@ public class DefaultFormatter
         }
         if (builder.Length>0)
         {
-            builder.Append(" ");
+            builder.Append(' ');
         }
         builder.Append(part);
     }
