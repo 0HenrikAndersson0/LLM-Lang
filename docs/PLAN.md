@@ -187,9 +187,9 @@ rather than a silent gap.
 |---|------|-------------|--------|
 | 6.1 | Bench rerun vs Phase 0 headline: did savings hold on the whole-pipeline view? | updated results | ☑ — `bench/results-6p1.md`: **machined-canon rerun — JS canon 36.7% o200k / 37.7% llama (beats the 46% Phase-0 hand-canonicalized headline); C# canon 62.1% / 62.5%; both-languages weighted 57.6%**. The J6 denominator finding carries over and now anchors to machine canon an agent regenerates from any file |
 | 6.2 | LLM loop test at scale: larger corpus, multiple models (GPT/Claude/Llama) | scale report | ☐ |
-| 6.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☐ |
+| 6.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☑ — **cut confirmed**: the loop evidence (2.7/4.4/5.5) never demanded tooling — the repair loop drives from emit/runtime errors + the canon guide; a spec/tutorial + the canon identity serve the authoring path. Revisit only if agent-driven authoring shows canon-drift at scale |
 | 6.4 | Versioning policy: additive-only core forms; macros absorb growth | policy doc | ☑ — `docs/versioning.md`: additive-only core forms (repo precedents), opaque-rows-fidelity principle, canon-text rules (additive rows + reader normalization; keyword renames never), the `@1`→`@2` migration rule (the char-atom flip is the named candidate), reader sugar + target lowering as the growth absorbers |
-| 6.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☐ |
+| 6.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☑ — `docs/spec.md` (canon v1.1 reference: lexical/grammar/types/statements/members/modules/printing/round-trip) + `docs/tutorial.md` (the target-agnostic walkthrough — supersedes teach.md's JS-only subset; JS + C# idiom tables) |
 | 6.6 | Release v0.1: crates.io + example repo | release | ☐ |
 
 ---
@@ -328,7 +328,16 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v6.0 (2026-10-10, latest)** — **Phase 6 opens (6.1 ☑ + 6.4 ☑) and
+- **v6.1 (2026-10-10, latest)** — **6.5 ☑ + 6.3 cut-confirmed.**
+  `docs/spec.md` (the canon v1.1 reference spec — lexical/grammar/core
+  forms/types/statements/members/modules/printing-invariants and the
+  round-trip contract) + `docs/tutorial.md` (the target-agnostic
+  teaching walkthrough — JS + C# idiom tables; the loop's teach.md stays
+  as the JS-verified subset). 6.3: **LSP cut confirmed** — the loop
+  evidence (2.7 repair, 4.4 reader, 5.5 worlds) never demanded
+  tooling; authoring runs through the guide + the repair loop.
+  Remaining Phase 6: 6.2 (loop at scale — model time), 6.6 (release).
+- **v6.0 (2026-10-10, later)** — **Phase 6 opens (6.1 ☑ + 6.4 ☑) and
   Phase 5 closes.** 6.1: the bench rerun on **machine canon** — JS canon
   36.7% o200k / 37.7% llama (beats the Phase-0 46% hand headline), C#
   62.1% / 62.5%, both-languages weighted **57.6%**; the char-heavy/
