@@ -3,7 +3,7 @@
 - lang/world: `js` — no guide, no transpile, no span map (J6 baseline)
 - adapter: `echo`
 - task: CompactLabel — trim/split/initials string ops
-- rounds: 2 (cap 4); started 2026-10-10T10:29:09+00:00
+- rounds: 2 (cap 4); started 2026-10-10T10:35:19+00:00
 - verdict: **PASS**
 
 | round | outcome | detail | src chars | s |

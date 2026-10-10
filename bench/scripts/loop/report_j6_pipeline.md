@@ -106,9 +106,13 @@ sensitivity, and both numbers are now on record.
   delivered once per session across features, and the guide trimmed (880 →
   target ≤ 500) — every token is amortized differently, worth a sensitivity
   run before the J6 exit.
-- Loop tasks at true corpus scale (rewrite a whole behavior-harness module,
-  e.g. js_01_util: 26 behavior cases) would convert the §4 class model from
-  measured-points-plus-interpolation into a direct measurement.
+- **Corpus-scale loop tasks are not measurable with JSON-case rigs:**
+  scoping js_01_util (the largest JS-corpus runtime surface) shows 4 short
+  pure functions + 1 iteration helper needing a callback arg — a loop write
+  stays small-side regardless of the source file's weight. The file-scale
+  denominator (types + docs vs types-only) is only measurable statically;
+  that number exists (Phase 0: 46%; per-feature: §4's js_08 row). Record
+  the two bases as complementary and close J6 on the class model.
 - Multi-round failure cost (33×) is the open economics problem: the repair
   feedback's numbered-IR + got/expected template should be measured at
   larger feature size, and the emitter's error surface should stay

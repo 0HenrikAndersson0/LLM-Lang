@@ -7,3 +7,5 @@ description = "Tokenizer-optimized IR language for LLM codegen: reader, expander
 
 [dependencies]
 proptest = { workspace = true }
+tree-sitter = "0.27.1"
+tree-sitter-typescript = "0.23.2"

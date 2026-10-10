@@ -10,9 +10,25 @@ fn main() {
         Some("parse") => parse_files(&args[1..], debug),
         Some("expand") => expand_files(&args[1..]),
         Some("to-js") => to_js_files(&args[1..], map),
+        Some("js-kinds") => {
+            // PLAN 4.2 groundwork: node-kind histogram over a JS/TS source dir
+            for dir in &args[1..] {
+                match ir_lang::js_read::corpus_kinds(std::path::Path::new(dir)) {
+                    Ok((hist, failures)) => {
+                        for (k, v) in &hist {
+                            println!("{v:>5}  {k}");
+                        }
+                        for f in &failures {
+                            println!("FAILURE  {f}");
+                        }
+                    }
+                    Err(e) => println!("{dir}: ERROR {e}"),
+                }
+            }
+        }
         _ => {
             eprintln!(
-                "usage: irc [--expand] lex|parse|expand|to-js <files...>\n       irc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       --expand  show macro-expanded core forms instead of the canonical print"
+                "usage: irc [--expand] lex|parse|expand|to-js <files...>\n       irc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       irc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
             );
             std::process::exit(2);
         }
