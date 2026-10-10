@@ -89,7 +89,7 @@ type ByteSizeExtensions export{
     }
     var formatter=Configurator.GetFormatter(culture)
     var isNegative=input.Bits<0
-    var remainingBits=isNegative?(Int64)+1:(Int64)
+    var remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
     if remainingBits==0{
       return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol:!toWords))
     }
@@ -105,12 +105,12 @@ type ByteSizeExtensions export{
       parts.Add(string.Concat(count.ToString(formatProvider), " ", formatter.DataUnitHumanize(unit, count, toSymbol:!toWords)))
       remainingBits%=bitsPerUnit
     }
-    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Exabyte)
-    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Petabyte)
-    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Terabyte)
-    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Gigabyte)
-    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Megabyte)
-    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Kilobyte)
+    addPart((Int64)ByteSize.BytesInExabyte*ByteSize.BitsInByte, DataUnit.Exabyte)
+    addPart((Int64)ByteSize.BytesInPetabyte*ByteSize.BitsInByte, DataUnit.Petabyte)
+    addPart((Int64)ByteSize.BytesInTerabyte*ByteSize.BitsInByte, DataUnit.Terabyte)
+    addPart((Int64)ByteSize.BytesInGigabyte*ByteSize.BitsInByte, DataUnit.Gigabyte)
+    addPart((Int64)ByteSize.BytesInMegabyte*ByteSize.BitsInByte, DataUnit.Megabyte)
+    addPart((Int64)ByteSize.BytesInKilobyte*ByteSize.BitsInByte, DataUnit.Kilobyte)
     addPart(ByteSize.BitsInByte, DataUnit.Byte)
     addPart(1, DataUnit.Bit)
     return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign:null , string.Join(separator, parts))
@@ -137,7 +137,7 @@ type ByteSizeExtensions export{
       builtInFormatter=null
     }
     var isNegative=input.Bits<0
-    var remainingBits=isNegative?(Int64)+1:(Int64)
+    var remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
     var units=unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits:BinaryCompositeUnits
     if remainingBits==0{
       return string.Concat("0 ", toWords?humanizeUnit(DataUnit.Bit, 0):ByteSize.BitSymbol)
@@ -147,7 +147,7 @@ type ByteSizeExtensions export{
       if parts.Count>=precision{
         break
       }
-      var bitsPerUnit=(Int64)*ByteSize.BitsInByte
+      var bitsPerUnit=(Int64)unit.Bytes*ByteSize.BitsInByte
       var count=remainingBits/bitsPerUnit
       if count==0{
         continue
@@ -170,7 +170,7 @@ type ByteSizeExtensions export{
       parts.Add(string.Concat(count.ToString(formatProvider), " ", toWords?humanizeUnit(dataUnit, count):symbol))
       remainingBits%=bitsPerUnit
     }
-    fn humanizeUnit(dataUnit DataUnit, count Int64){builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol:false ):formatter.DataUnitHumanize(dataUnit, count, toSymbol:false )}
+    fn humanizeUnit(dataUnit DataUnit, count Int64) String{builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol:false ):formatter.DataUnitHumanize(dataUnit, count, toSymbol:false )}
   }
   type CompositeUnit{
   }

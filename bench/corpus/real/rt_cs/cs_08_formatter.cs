@@ -10,21 +10,21 @@ public class DefaultFormatter
         phraseTable=LocalePhraseTableCatalog.Resolve(culture)??throw new InvalidOperationException("The generated locale phrase tables are missing the required English fallback.");
     }
     DefaultFormatter(string localeCode) { }
-    string DateHumanize_Now() =>
+    internal string DateHumanize_Now() =>
         phraseTable.DateNow??"now";
-    string DateHumanize_Today(string now) =>
+    internal string DateHumanize_Today(string now) =>
         now==(phraseTable.DateNow??"now")?phraseTable.DateToday??now: now;
-    string DateHumanize_Never() =>
+    internal string DateHumanize_Never() =>
         phraseTable.DateNever??"never";
-    string DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, int unit) =>
+    internal string DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, int unit) =>
         TryFormatDateFromPhraseTable(timeUnit, timeUnitTense, unit, out var result)?result: throw new InvalidOperationException($"Missing generated relative-date phrase for '{Culture.Name}' and unit '{timeUnit}'.");
-    string TimeSpanHumanize_Zero() =>
+    internal string TimeSpanHumanize_Zero() =>
         phraseTable.TimeSpanZero??"no time";
-    string TimeSpanHumanize(TimeUnit timeUnit, int unit, bool toWords = false ) =>
+    internal string TimeSpanHumanize(TimeUnit timeUnit, int unit, bool toWords = false ) =>
         TryFormatTimeSpanFromPhraseTable(timeUnit, unit, toWords, out var result)?result: throw new InvalidOperationException($"Missing generated time-span phrase for '{Culture.Name}' and unit '{timeUnit}'.");
-    string TimeSpanHumanizeWithFractionalSeconds(decimal seconds, bool toSymbols)
+    internal string TimeSpanHumanizeWithFractionalSeconds(decimal seconds, bool toSymbols)
     {
-        "opaque:#if NET8_0_OR_GREATER\n        ArgumentOutOfRangeException.ThrowIfNegative(seconds);\n#else\n        if (seconds < 0)\n            throw new ArgumentOutOfRangeException(nameof(seconds));\n#endif";
+        /* opaque */
         var visibleSeconds = decimal.Parse(seconds.ToString("0.#######", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
         var countValue = visibleSeconds.ToString("0.#######", LocaleNumberFormattingOverrides.GetFormattingNumberFormat(Culture));
         var category = ValidateFractionalSecondGrammar(visibleSeconds, toSymbols);
@@ -43,7 +43,7 @@ public class DefaultFormatter
         var form = GetFractionalTimeSpanPhraseForm(visibleSeconds, category);
         return RenderCountedPhrase(multiple, ResolveTimeSpanPhraseForms(multiple.Forms, form), countValue, GetTimeSpanPhraseSecondaryPlaceholder(TimeUnit.Second, visibleSeconds, false ));
     }
-    CardinalPluralCategory ValidateFractionalSecondGrammar(decimal seconds, bool toSymbols)
+    internal CardinalPluralCategory ValidateFractionalSecondGrammar(decimal seconds, bool toSymbols)
     {
         if (!LocalizedInflectionCatalog.TrySelectCategory(Culture, seconds, out var category))
         {
@@ -55,17 +55,17 @@ public class DefaultFormatter
         }
         return category;
     }
-    string TimeSpanHumanize(TimeUnit timeUnit, int unit, GrammaticalCase grammaticalCase)
+    internal string TimeSpanHumanize(TimeUnit timeUnit, int unit, GrammaticalCase grammaticalCase)
     {
         if (GetType().Assembly!=typeof (DefaultFormatter).Assembly)
         {
             throw new NotSupportedException($"Custom formatter type '{GetType().FullName}' must explicitly implement {nameof(IGrammaticalCaseTimeSpanFormatter)} to support grammatical-case-aware durations.");
         }
-        if ((UInt)>(UInt))
+        if ((uint)grammaticalCase>(uint)GrammaticalCase.Causal)
         {
             throw new ArgumentOutOfRangeException(nameof (grammaticalCase), grammaticalCase, "Unsupported grammatical case.");
         }
-        if ((UInt)>(UInt))
+        if ((uint)timeUnit>(uint)TimeUnit.Year)
         {
             throw new ArgumentOutOfRangeException(nameof (timeUnit), timeUnit, "Unsupported time unit.");
         }
@@ -82,7 +82,7 @@ public class DefaultFormatter
         {
             throw new NotSupportedException($"Culture '{Culture.Name}' does not support grammatical case '{grammaticalCase}' for duration phrases.");
         }
-        var unitOverlay = caseOverlay.Units[(Int)];
+        var unitOverlay = caseOverlay.Units[(int)timeUnit];
         return unitOverlay.Kind switch
         {
             LocalizedDurationCaseUnitKind.SameAsNominative => FormatCaseAwareNominative(timeUnit, unit),
@@ -91,11 +91,11 @@ public class DefaultFormatter
             _ => FormatCaseAwareTimeSpanPhrase(timeUnit, unit, unitOverlay.Phrase!.Value)
         };
     }
-    string TimeSpanHumanize_Age()
+    internal string TimeSpanHumanize_Age()
     {
-        return phraseTable.TimeSpanAge??$"{0}";
+        return phraseTable.TimeSpanAge??$"{{0}}";
     }
-    string DataUnitHumanize(DataUnit dataUnit, double count, bool toSymbol = true )
+    internal string DataUnitHumanize(DataUnit dataUnit, double count, bool toSymbol = true )
     {
         if (TryFormatDataUnitFromPhraseTable(dataUnit, count, toSymbol, out var generated))
         {
@@ -107,7 +107,7 @@ public class DefaultFormatter
         }
         throw new InvalidOperationException($"Missing generated data-unit phrase for '{Culture.Name}' and unit '{dataUnit}'.");
     }
-    string TimeUnitHumanize(TimeUnit timeUnit)
+    internal string TimeUnitHumanize(TimeUnit timeUnit)
     {
         if (phraseTable.TryGetTimeUnitPhrase(timeUnit, out var generatedPhrase)&&generatedPhrase.Symbol is {} generatedSymbol)
         {
@@ -115,49 +115,49 @@ public class DefaultFormatter
         }
         throw new InvalidOperationException($"Missing generated time-unit phrase for '{Culture.Name}' and unit '{timeUnit}'.");
     }
-    string NumberToWords(TimeUnit unit, int number, CultureInfo culture) =>
+    internal string NumberToWords(TimeUnit unit, int number, CultureInfo culture) =>
         number.ToWords(culture);
-    GrammaticalGender? GetTimeUnitGender(TimeUnit unit) =>
+    internal GrammaticalGender? GetTimeUnitGender(TimeUnit unit) =>
         null ;
-    FormatterNumberForm GetDatePhraseForm(TimeUnit unit, Tense tense, int number) =>
+    internal FormatterNumberForm GetDatePhraseForm(TimeUnit unit, Tense tense, int number) =>
         Math.Abs(number)==1?FormatterNumberForm.Singular: FormatterNumberForm.Default;
-    FormatterNumberForm GetTimeSpanPhraseForm(TimeUnit unit, int number, bool toWords) =>
+    internal FormatterNumberForm GetTimeSpanPhraseForm(TimeUnit unit, int number, bool toWords) =>
         Math.Abs(number)==1?FormatterNumberForm.Singular: FormatterNumberForm.Default;
-    FormatterNumberForm GetFractionalTimeSpanPhraseForm(decimal seconds, CardinalPluralCategory category) =>
+    internal FormatterNumberForm GetFractionalTimeSpanPhraseForm(decimal seconds, CardinalPluralCategory category) =>
         category==CardinalPluralCategory.One?FormatterNumberForm.Singular: FormatterNumberForm.Default;
-    FormatterNumberForm GetCaseAwareTimeSpanPhraseForm(TimeUnit unit, int number) =>
+    internal FormatterNumberForm GetCaseAwareTimeSpanPhraseForm(TimeUnit unit, int number) =>
         LocaleDurationCaseTableCatalog.Resolve(Culture)is {} table&&table.NumberDetector!=FormatterNumberDetectorKind.None?ProfiledFormatter.DetectNumberForm(number, table.NumberDetector): GetTimeSpanPhraseForm(unit, number, false );
-    FormatterNumberForm GetDataUnitPhraseForm(DataUnit dataUnit, double count) =>
+    internal FormatterNumberForm GetDataUnitPhraseForm(DataUnit dataUnit, double count) =>
         Math.Abs(count)==1d?FormatterNumberForm.Singular: FormatterNumberForm.Default;
-    FormatterNumberForm GetDataUnitPhraseForm(DataUnit dataUnit, decimal count, CardinalPluralCategory category) =>
+    internal FormatterNumberForm GetDataUnitPhraseForm(DataUnit dataUnit, decimal count, CardinalPluralCategory category) =>
         category==CardinalPluralCategory.One?FormatterNumberForm.Singular: FormatterNumberForm.Default;
-    string GetDataUnitPhrasePrefix(DataUnit dataUnit, decimal count, CardinalPluralCategory category) =>
+    internal string GetDataUnitPhrasePrefix(DataUnit dataUnit, decimal count, CardinalPluralCategory category) =>
         string.Empty;
-    string ResolveDatePhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
+    internal string ResolveDatePhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
         forms.Resolve(form);
-    string ResolveTimeSpanPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
+    internal string ResolveTimeSpanPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
         forms.Resolve(form);
-    string ResolveCaseAwareTimeSpanPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
+    internal string ResolveCaseAwareTimeSpanPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
         LocaleDurationCaseTableCatalog.Resolve(Culture)is {} table&&table.NumberDetector!=FormatterNumberDetectorKind.None?ProfiledFormatter.ResolveProfiledPhraseForms(forms, form, table.NumberDetector): ResolveTimeSpanPhraseForms(forms, form);
-    string ResolveDataUnitPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
+    internal string ResolveDataUnitPhraseForms(LocalizedPhraseForms forms, FormatterNumberForm form) =>
         forms.Resolve(form);
-    bool ShouldUseDatePhraseTable(TimeUnit unit, Tense tense, int count, LocalizedDatePhrase phrase) =>
+    internal bool ShouldUseDatePhraseTable(TimeUnit unit, Tense tense, int count, LocalizedDatePhrase phrase) =>
         true ;
-    bool ShouldUseTimeSpanPhraseTable(TimeUnit unit, int count, bool toWords, LocalizedTimeSpanPhrase phrase) =>
+    internal bool ShouldUseTimeSpanPhraseTable(TimeUnit unit, int count, bool toWords, LocalizedTimeSpanPhrase phrase) =>
         true ;
-    bool ShouldUseDatePhraseTemplate(TimeUnit unit, Tense tense, int count, LocalizedDatePhrase phrase) =>
+    internal bool ShouldUseDatePhraseTemplate(TimeUnit unit, Tense tense, int count, LocalizedDatePhrase phrase) =>
         false ;
-    bool ShouldAppendImplicitDataUnitPluralSuffix(DataUnit dataUnit, double count, FormatterNumberForm form, LocalizedPhraseForms forms, PhraseTemplate? template) =>
+    internal bool ShouldAppendImplicitDataUnitPluralSuffix(DataUnit dataUnit, double count, FormatterNumberForm form, LocalizedPhraseForms forms, PhraseTemplate? template) =>
         count>1&&form==FormatterNumberForm.Default&&forms.Singular is null &&template is null ;
-    bool ShouldAppendImplicitDataUnitPluralSuffixExact(FormatterNumberForm form, LocalizedPhraseForms forms) =>
+    internal bool ShouldAppendImplicitDataUnitPluralSuffixExact(FormatterNumberForm form, LocalizedPhraseForms forms) =>
         form==FormatterNumberForm.Default&&forms is {Singular: null, Dual: null, Paucal: null, Plural: null };
-    string TransformDataUnitResult(DataUnit dataUnit, double count, FormatterNumberForm form, string result, LocalizedPhraseForms forms, PhraseTemplate? template) =>
+    internal string TransformDataUnitResult(DataUnit dataUnit, double count, FormatterNumberForm form, string result, LocalizedPhraseForms forms, PhraseTemplate? template) =>
         result;
-    string GetDatePhraseSecondaryPlaceholder(TimeUnit unit, Tense tense, int count) =>
+    internal string GetDatePhraseSecondaryPlaceholder(TimeUnit unit, Tense tense, int count) =>
         string.Empty;
-    string GetTimeSpanPhraseSecondaryPlaceholder(TimeUnit unit, decimal count, bool toWords) =>
+    internal string GetTimeSpanPhraseSecondaryPlaceholder(TimeUnit unit, decimal count, bool toWords) =>
         string.Empty;
-    bool TryFormatDataUnitFromPhraseTable(DataUnit dataUnit, double count, bool toSymbol, out string result)
+    internal bool TryFormatDataUnitFromPhraseTable(DataUnit dataUnit, double count, bool toSymbol, out string result)
     {
         if (toSymbol)
         {
@@ -166,18 +166,18 @@ public class DefaultFormatter
         var form = GetDataUnitPhraseForm(dataUnit, count);
         return TryFormatDataUnitFromPhraseTable(dataUnit, count, form, toSymbol: false, exactCategory: null, out result);
     }
-    string DataUnitHumanizeExact(DataUnit dataUnit, decimal count, bool toSymbol)
+    internal string DataUnitHumanizeExact(DataUnit dataUnit, decimal count, bool toSymbol)
     {
         var magnitude = NormalizeDecimal(Math.Abs(count));
         if (!LocalizedInflectionCatalog.TrySelectCategory(Culture, magnitude, out var category))
         {
-            return DataUnitHumanize(dataUnit, (Float), toSymbol);
+            return DataUnitHumanize(dataUnit, (double)magnitude, toSymbol);
         }
         var form = GetDataUnitPhraseForm(dataUnit, magnitude, category);
-        var result = TryFormatDataUnitFromPhraseTable(dataUnit, (Float), form, toSymbol, category, out var phrase)?phrase: DataUnitHumanize(dataUnit, (Float), toSymbol);
+        var result = TryFormatDataUnitFromPhraseTable(dataUnit, (double)magnitude, form, toSymbol, category, out var phrase)?phrase: DataUnitHumanize(dataUnit, (double)magnitude, toSymbol);
         return GetDataUnitPhrasePrefix(dataUnit, magnitude, category)+result;
     }
-    bool TryFormatDataUnitFromPhraseTable(DataUnit dataUnit, double count, FormatterNumberForm form, bool toSymbol, CardinalPluralCategory? exactCategory, out string result)
+    internal bool TryFormatDataUnitFromPhraseTable(DataUnit dataUnit, double count, FormatterNumberForm form, bool toSymbol, CardinalPluralCategory? exactCategory, out string result)
     {
         result=null!;
         if (!phraseTable.TryGetDataUnitPhrase(dataUnit, out var phrase))
@@ -202,16 +202,16 @@ public class DefaultFormatter
         {
             result=RenderTemplate(template, FormatCountValue(count), result, string.Empty);
         }
-        else
-        {            "opaque:(";
+        else if (exactCategory is not null ?ShouldAppendImplicitDataUnitPluralSuffixExact(form, forms): ShouldAppendImplicitDataUnitPluralSuffix(dataUnit, count, form, forms, phrase.Template))
+        {            result+="s";
 
         }
         result=TransformDataUnitResult(dataUnit, count, form, result, forms, phrase.Template);
         return true ;
     }
-    decimal NormalizeDecimal(decimal value) =>
+    internal decimal NormalizeDecimal(decimal value) =>
         decimal.Parse(value.ToString("G29", CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture);
-    bool TryFormatDateFromPhraseTable(TimeUnit unit, Tense tense, int count, out string result)
+    internal bool TryFormatDateFromPhraseTable(TimeUnit unit, Tense tense, int count, out string result)
     {
         result=null!;
         if (count==0&&phraseTable.DateNow is {} now)
@@ -245,7 +245,7 @@ public class DefaultFormatter
         result=RenderCountedPhrase(multiple, ResolveDatePhraseForms(multiple.Forms, form), count.ToString(CultureInfo.CurrentCulture), GetDatePhraseSecondaryPlaceholder(unit, tense, count));
         return true ;
     }
-    bool TryFormatTimeSpanFromPhraseTable(TimeUnit unit, int count, bool toWords, out string result)
+    internal bool TryFormatTimeSpanFromPhraseTable(TimeUnit unit, int count, bool toWords, out string result)
     {
         result=null!;
         if (count==0&&toWords&&phraseTable.TimeSpanZero is {} zero)
@@ -264,7 +264,7 @@ public class DefaultFormatter
         result=FormatTimeSpanPhrase(unit, count, toWords, phrase);
         return true ;
     }
-    string FormatCaseAwareNominative(TimeUnit unit, int count)
+    internal string FormatCaseAwareNominative(TimeUnit unit, int count)
     {
         if (!phraseTable.TryGetTimeSpanPhrase(unit, out var phrase)||!ShouldUseTimeSpanPhraseTable(unit, count, false, phrase))
         {
@@ -272,7 +272,7 @@ public class DefaultFormatter
         }
         return FormatCaseAwareTimeSpanPhrase(unit, count, phrase);
     }
-    string FormatCaseAwareTimeSpanPhrase(TimeUnit unit, int count, LocalizedTimeSpanPhrase phrase)
+    internal string FormatCaseAwareTimeSpanPhrase(TimeUnit unit, int count, LocalizedTimeSpanPhrase phrase)
     {
         if (count==1&&(phrase.SingleWordsVariant??phrase.Single)is {} single)
         {
@@ -285,7 +285,7 @@ public class DefaultFormatter
         var form = GetCaseAwareTimeSpanPhraseForm(unit, count);
         return RenderCountedPhrase(multiple, ResolveCaseAwareTimeSpanPhraseForms(multiple.Forms, form), count.ToString(Culture), GetTimeSpanPhraseSecondaryPlaceholder(unit, count, false ));
     }
-    string FormatTimeSpanPhrase(TimeUnit unit, int count, bool toWords, LocalizedTimeSpanPhrase phrase)
+    internal string FormatTimeSpanPhrase(TimeUnit unit, int count, bool toWords, LocalizedTimeSpanPhrase phrase)
     {
         if (count==1)
         {
@@ -303,11 +303,11 @@ public class DefaultFormatter
         var form = GetTimeSpanPhraseForm(unit, count, toWords);
         return RenderCountedPhrase(countedPhrase, ResolveTimeSpanPhraseForms(countedPhrase.Forms, form), FormatCountValue(unit, count, toWords), GetTimeSpanPhraseSecondaryPlaceholder(unit, count, toWords));
     }
-    string FormatCountValue(TimeUnit unit, int number, bool toWords) =>
+    internal string FormatCountValue(TimeUnit unit, int number, bool toWords) =>
         toWords?NumberToWords(unit, number, Culture): number.ToString(CultureInfo.CurrentCulture);
-    string FormatCountValue(double number) =>
+    internal string FormatCountValue(double number) =>
         number.ToString(CultureInfo.CurrentCulture);
-    string RenderCountedPhrase(LocalizedCountedPhrase phrase, string unitText, string countValue, string secondaryPlaceholder)
+    internal string RenderCountedPhrase(LocalizedCountedPhrase phrase, string unitText, string countValue, string secondaryPlaceholder)
     {
         if (phrase.CountPlacement==PhraseCountPlacement.None)
         {
@@ -327,18 +327,18 @@ public class DefaultFormatter
             _ => RenderPattern(renderedUnit, countValue, secondaryPlaceholder)
         };
     }
-    string RenderTemplate(PhraseTemplate template, string countValue, string unitText, string secondaryPlaceholder) =>
-        template.Template.Replace($"{count}", countValue).Replace($"{unit}", unitText).Replace($"{prep}", secondaryPlaceholder).Replace($"{value}", unitText).Replace($"{0}", countValue);
-    string RenderPattern(string? pattern, string countValue, string secondaryPlaceholder)
+    internal string RenderTemplate(PhraseTemplate template, string countValue, string unitText, string secondaryPlaceholder) =>
+        template.Template.Replace($"{{count}}", countValue).Replace($"{{unit}}", unitText).Replace($"{{prep}}", secondaryPlaceholder).Replace($"{{value}}", unitText).Replace($"{{0}}", countValue);
+    internal string RenderPattern(string? pattern, string countValue, string secondaryPlaceholder)
     {
         if (string.IsNullOrEmpty(pattern))
         {
             return pattern??string.Empty;
         }
         var resolvedPattern = pattern!;
-        return resolvedPattern.Replace($"{count}", countValue).Replace($"{prep}", secondaryPlaceholder).Replace($"{0}", countValue).Replace($"{1}", secondaryPlaceholder).Trim();
+        return resolvedPattern.Replace($"{{count}}", countValue).Replace($"{{prep}}", secondaryPlaceholder).Replace($"{{0}}", countValue).Replace($"{{1}}", secondaryPlaceholder).Trim();
     }
-    string JoinPhraseParts(string? first, string? second, string? third, string? fourth)
+    internal string JoinPhraseParts(string? first, string? second, string? third, string? fourth)
     {
         var partCount = 0;
         var totalLength = 0;
@@ -361,16 +361,16 @@ public class DefaultFormatter
         AppendPhrasePart(builder, fourth);
         return builder.ToString();
     }
-    void MeasurePhrasePart(string? part, ref int partCount, ref int totalLength)
+    internal void MeasurePhrasePart(string? part, ref int partCount, ref int totalLength)
     {
         if (string.IsNullOrWhiteSpace(part))
         {
             return ;
         }
         partCount++;
-        return totalLength+=part!.Length;
+        totalLength+=part!.Length;
     }
-    string FirstPhrasePart(string? first, string? second, string? third, string? fourth)
+    internal string FirstPhrasePart(string? first, string? second, string? third, string? fourth)
     {
         if (!string.IsNullOrWhiteSpace(first))
         {
@@ -382,7 +382,7 @@ public class DefaultFormatter
         }
         return !string.IsNullOrWhiteSpace(third)?third!: fourth!;
     }
-    void AppendPhrasePart(StringBuilder builder, string? part)
+    internal void AppendPhrasePart(StringBuilder builder, string? part)
     {
         if (string.IsNullOrWhiteSpace(part))
         {
@@ -392,6 +392,6 @@ public class DefaultFormatter
         {
             builder.Append(" ");
         }
-        return builder.Append(part);
+        builder.Append(part);
     }
 }

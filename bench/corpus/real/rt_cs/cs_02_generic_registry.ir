@@ -8,7 +8,7 @@ type LocaliserRegistry export{
     var cultureInfo=culture??CultureInfo.CurrentCulture
     return cultureSpecificCache.GetValue(cultureInfo, c=>new ()).Value!
   }
-  fn Register(localeCode String, localiser TLocaliser) void{
+  fn Register(localeCode String, localiser TLocaliser){
     lock lockObject{
       if frozenLocalisers !=null{
         throw new InvalidOperationException("Cannot register localisers after the registry has been used.")
@@ -16,7 +16,7 @@ type LocaliserRegistry export{
       localisersBuilder[localeCode]=_=>localiser
     }
   }
-  fn Register(localeCode String, localiser Func<CultureInfo,TLocaliser>) void{
+  fn Register(localeCode String, localiser Func<CultureInfo,TLocaliser>){
     lock lockObject{
       if frozenLocalisers !=null{
         throw new InvalidOperationException("Cannot register localisers after the registry has been used.")
@@ -29,7 +29,7 @@ type LocaliserRegistry export{
       return [..localisersBuilder.Keys.OrderBy(staticlocale=>locale, StringComparer.Ordinal)]
     }
   }
-  fn UseGeneratedCultureResolver() void{
+  fn UseGeneratedCultureResolver(){
     lock lockObject{
       if frozenLocalisers !=null{
         throw new InvalidOperationException("Cannot change culture resolution after the registry has been used.")

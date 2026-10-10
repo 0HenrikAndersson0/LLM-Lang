@@ -321,23 +321,23 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v5.4 (2026-10-10, latest)** — **5.6 leg-1 round-trip: canon identity 9/9
-  + re-emit 93 → <20.** Nine more reader/emitter fixes this pass (arg
-  wrappers descend all children incl. out-args; string-payload contents;
-  verbatim structural syms; keyword-verbatim→Ident; C#-for part fields;
-  `switch_core` arm extraction — arms now survive the reader; interface
-  kind canon-print (`type X interface{`, reparse-stable) + interface
-  signature-row emit; trailing-switch subject strips leading `return`;
-  designator-split excludes statement keywords; void-ret case-insensitive
-  filter; `?`-suffix ternary split; opaque-fragment statement drop). The
-  remaining 327 dotnet diagnostics: ~311 = the stub-world MEMBER gap by
-  gate design (types resolve, members don't — the corpus compiles inside
-  the real Humanizer lib); ~16 recorded reader rows in
-  `bench/results-cs-diff.md` (§5.6) for the next pass: cast operand
-  loss, `#if` capture emission, `opaque:(` fragment rows, interface
-  members with bodies, void-tail CS0127 ×2, static-ctor reachability,
-  init-order CS0236. Suite green (50+2+7). **Next pass: those ~16 rows →
-  syntax-clean → behavior leg + 5.6 report; then 5.5 loop test.**
+- **v5.5 (2026-10-10, latest)** — **5.6 re-emit leg syntax-clean.** The
+  round-trip gate closes round 1: 93 → **0 syntax-class rows**; 215
+  remaining diagnostics root-caused — 207 = the stub-world MEMBER gap by
+  gate design (types resolve, members don't; emitted cross-file calls now
+  carry the internal-default and resolve like the originals), 8 = the
+  char-vs-string canon row (C# `'0'` chars canon to Str; recorded as a
+  design-limit row for the fidelity doc). 13 more fixes this pass (cast
+  operand fields, void-ret case filter, else-block truncation — the c-sharp
+  grammar's `alternative` field holds the block directly, else-if conds,
+  local-fn access-modifier prohibition (`fn_sig(type_ctx, in_static)`),
+  local-fn `type`-field rets, static-host members, primary-ctor params
+  (reader + canon print — the fixture row shape), property computed rows,
+  **data-brace canon-escape `{{…}}`** (the C# reader distinguishes
+  interpolated strings from literals; the emit restores literal braces),
+  opaque-fragment statement drops). Suite green (50+2+7). **Next: the
+  behavior leg + 5.6 report, then 5.5 (dotnet-run loop) and the fidelity
+  doc addendum.**
 - **v5.2 (2026-10-10, later)** — **5.4 first pass (◐):** real-corpus emit
   under `dotnet build` — structure-compiles 9/9 (syntax phase) via a 35-type
   stub world (the corpus is Humanizer-library fragments; member-level

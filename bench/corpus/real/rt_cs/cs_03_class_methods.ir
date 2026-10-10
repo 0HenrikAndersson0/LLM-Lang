@@ -37,7 +37,7 @@ type DefaultCollectionFormatter{
       else []
     }
   }
-  fn AddDisplayString(items List<String>, item String?) void{
+  fn AddDisplayString(items List<String>, item String?){
     if string.IsNullOrWhiteSpace(item){
       return
     }
@@ -52,7 +52,7 @@ type DefaultCollectionFormatter{
       return items[0]
     }
     var conjunctionFormat=GetConjunctionFormatString(count)
-    if conjunctionFormat=="{0} {1} {2}"{
+    if conjunctionFormat=="{{0}} {{1}} {{2}}"{
       return count==2?string.Concat(items[0], " ", separator, " ", items[1]):string.Concat(JoinLeadingItems(items), " ", separator, " ", items[^1])
     }
     return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1])
@@ -70,5 +70,5 @@ type DefaultCollectionFormatter{
     }
     return builder.ToString()
   }
-  fn GetConjunctionFormatString(itemCount Int) String{"{0} {1} {2}"}
+  fn GetConjunctionFormatString(itemCount Int) String{"{{0}} {{1}} {{2}}"}
 }

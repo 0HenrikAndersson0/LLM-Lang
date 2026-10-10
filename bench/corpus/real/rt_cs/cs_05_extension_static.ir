@@ -19,13 +19,13 @@ type MetricNumeralExtensions export{
     if !formats.HasValue&&!decimals.HasValue{
       return BuildDefaultRepresentation(input)
     }
-    return ((Float)).ToMetric(formats, decimals)
+    return ((Float)input).ToMetric(formats, decimals)
   }
   fn BuildDefaultRepresentation(input Int) String{
     if input==0{
       return input.ToString()
     }
-    var absolute=Math.Abs((Int64))
+    var absolute=Math.Abs((Int64)input)
     var nfi=LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
     if absolute<1_000{
       return input.ToString(nfi)
@@ -81,6 +81,8 @@ type MetricNumeralExtensions export{
       return number*Math.Pow(10, exponent)
     }else{
       var indexInNegative=Symbols[1].IndexOf(last)
+      var exponent=(indexInNegative+1)*3.0
+      return number*Math.Pow(10, -exponent)
 
     }
   }
@@ -126,8 +128,26 @@ type MetricNumeralExtensions export{
       fractionalPartCharacters=fractionalPart.ToString().PadLeft(exponent, "0").ToCharArray()
       if !decimals.HasValue||(decimals>=fractionalPartCharacters.Length){
         decimals=fractionalPartCharacters.Length
-      }else{
-        "opaque:("
+      }else if fractionalPartCharacters[decimals.Value]>="5"{
+        var isExactlyAtMidpoint=(fractionalPartCharacters[decimals.Value]=="5")&&(fractionalPartCharacters.AsSpan().Slice(decimals.Value+1).IndexOfAnyExcept("0")<0)
+        var shouldRoundUp: Bool
+        if !isExactlyAtMidpoint{
+          shouldRoundUp=true
+        }else{
+          var precedingDigit=fractionalPartCharacters[decimals.Value-1]-"0"
+          var precedingDigitIsOdd=(precedingDigit&1)!=0
+          shouldRoundUp=precedingDigitIsOdd
+
+        }
+        if shouldRoundUp{
+          for var i=decimals.Value-1;i>=0;i--{
+            if fractionalPartCharacters[i]<"9"{
+              fractionalPartCharacters[i]++
+              break
+            }
+            fractionalPartCharacters[i]="0"
+          }
+        }
 
       }
       while (decimals>0)&&(fractionalPartCharacters[decimals.Value-1]=="0"){
@@ -140,8 +160,8 @@ type MetricNumeralExtensions export{
       if divisor>1{
         if fractionalPart>roundingPoint{
           number+=Math.Sign(number)
-        }else{
-          "opaque:("
+        }else if fractionalPart==roundingPoint{
+          number+=Math.Sign(number%2)
 
         }
         if Math.Abs(number)==1000{
@@ -156,11 +176,15 @@ type MetricNumeralExtensions export{
       return representation+space+unitText
     }else{
       var space=formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ":string.Empty
+      var representation=number.ToString(nfi)+nfi.NumberDecimalSeparator+new string(fractionalPartCharacters, 0, decimals.Value)+(keepTrailingZeros&&requestedDecimals>decimals?new string("0", requestedDecimals.Value-decimals.Value):string.Empty)
+      var displayedNumber=decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber:number
+      var unitText=GetUnitText(scale, formats, displayedNumber)
+      return representation+space+unitText
 
     }
   }
   fn BuildRepresentation(input Float, formats MetricNumeralFormats?, decimals Int?) String{
-    var exponent=(Int)
+    var exponent=(Int)Math.Floor(Math.Log10(Math.Abs(input))/3)
     if !exponent.Equals(0){
       return BuildMetricRepresentation(input, exponent, formats, decimals)
     }
@@ -186,7 +210,7 @@ type MetricNumeralExtensions export{
     }
     var nfi=LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture)
     var representation=ShouldKeepTrailingZeros(formats, decimals)?number.ToString("F{decimals.GetValueOrDefault()}", nfi):number.ToString("G15", nfi)
-    var displayedNumber=decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber:(Decimal)
+    var displayedNumber=decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber:(Decimal)number
     var unitText=GetUnitText(exponent, formats, displayedNumber)
     var space=formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ":string.Empty
     return representation+space+unitText
@@ -217,7 +241,7 @@ type MetricNumeralExtensions export{
     return symbol.ToString()
   }
   fn Float.IsOutOfRange(input: this Float) Bool{
-    fn outside(min Float, max Float){!(max>input&&input>min)}
+    fn outside(min Float, max Float) Bool{!(max>input&&input>min)}
     return (Math.Sign(input)==1&&outside(SmallLimit, BigLimit))||(Math.Sign(input)==-1&&outside(-BigLimit, -SmallLimit))
   }
   fn String.IsInvalidMetricNumeral(input: this String) Bool{

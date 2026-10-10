@@ -2,7 +2,7 @@ namespace Humanizer;
 
 public static class MetricNumeralExtensions
 {
-    static bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
+    internal static bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
     {
         if (!decimals.HasValue||!formats.HasValue||!formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros))
         {
@@ -14,28 +14,28 @@ public static class MetricNumeralExtensions
         }
         return true ;
     }
-    static string FormatLongWithTrailingZeros(long input, int decimals, NumberFormatInfo nfi) =>
+    internal static string FormatLongWithTrailingZeros(long input, int decimals, NumberFormatInfo nfi) =>
         decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string("0", decimals): input.ToString(nfi);
-    static double FromMetric(this string input)
+    internal static double FromMetric(this string input)
     {
         input=CleanRepresentation(input);
         return BuildNumber(input, input[^1]);
     }
-    static string ToMetric(this int input, MetricNumeralFormats? formats = null , int? decimals = null )
+    internal static string ToMetric(this int input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
         if (!formats.HasValue&&!decimals.HasValue)
         {
             return BuildDefaultRepresentation(input);
         }
-        return ((Float)).ToMetric(formats, decimals);
+        return ((double)input).ToMetric(formats, decimals);
     }
-    static string BuildDefaultRepresentation(int input)
+    internal static string BuildDefaultRepresentation(int input)
     {
         if (input==0)
         {
             return input.ToString();
         }
-        var absolute = Math.Abs((Int64));
+        var absolute = Math.Abs((long)input);
         var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
         if (absolute<1_000)
         {
@@ -51,7 +51,7 @@ public static class MetricNumeralExtensions
         }
         return (input/1_000_000_000d).ToString("G15", nfi)+"G";
     }
-    static string ToMetric(this long input, MetricNumeralFormats? formats = null , int? decimals = null )
+    internal static string ToMetric(this long input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
         if (input.Equals(0))
         {
@@ -65,7 +65,7 @@ public static class MetricNumeralExtensions
         }
         return BuildRepresentation(input, formats, decimals);
     }
-    static string ToMetric(this double input, MetricNumeralFormats? formats = null , int? decimals = null )
+    internal static string ToMetric(this double input, MetricNumeralFormats? formats = null , int? decimals = null )
     {
         if (input.Equals(0))
         {
@@ -83,7 +83,7 @@ public static class MetricNumeralExtensions
         }
         return BuildRepresentation(input, formats, decimals);
     }
-    static string CleanRepresentation(string input)
+    internal static string CleanRepresentation(string input)
     {
         ArgumentNullException.ThrowIfNull(input);
         input=input.Trim();
@@ -94,9 +94,9 @@ public static class MetricNumeralExtensions
         }
         return input.Replace(" ", string.Empty);
     }
-    static double BuildNumber(string input, Char last) =>
+    internal static double BuildNumber(string input, char last) =>
         char.IsLetter(last)?BuildMetricNumber(input, last): double.Parse(input);
-    static double BuildMetricNumber(string input, Char last)
+    internal static double BuildMetricNumber(string input, char last)
     {
         var number = double.Parse(input[..^1]);
         var indexInPositive = Symbols[0].IndexOf(last);
@@ -107,12 +107,14 @@ public static class MetricNumeralExtensions
         }
         else
         {            var indexInNegative = Symbols[1].IndexOf(last);
+            var exponent = (indexInNegative+1)*3.0;
+            return number*Math.Pow(10, -exponent);
 
         }
     }
-    static string ReplaceNameBySymbol(string input) =>
+    internal static string ReplaceNameBySymbol(string input) =>
         UnitPrefixes.Aggregate(input, current => current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()));
-    static string BuildRepresentation(long input, MetricNumeralFormats? formats, int? decimals)
+    internal static string BuildRepresentation(long input, MetricNumeralFormats? formats, int? decimals)
     {
         var number = Math.Abs(input/10);
         var exponent = 0;
@@ -131,7 +133,7 @@ public static class MetricNumeralExtensions
         var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?" ": string.Empty;
         return representation+space;
     }
-    static string BuildMetricRepresentation(long input, int scale, MetricNumeralFormats? formats, int? decimals)
+    internal static string BuildMetricRepresentation(long input, int scale, MetricNumeralFormats? formats, int? decimals)
     {
         var exponent = scale*3;
         var divisor = 1L;
@@ -163,8 +165,31 @@ public static class MetricNumeralExtensions
             {
                 decimals=fractionalPartCharacters.Length;
             }
-            else
-            {                "opaque:(";
+            else if (fractionalPartCharacters[decimals.Value]>="5")
+            {                var isExactlyAtMidpoint = (fractionalPartCharacters[decimals.Value]=="5")&&(fractionalPartCharacters.AsSpan().Slice(decimals.Value+1).IndexOfAnyExcept("0")<0);
+                bool shouldRoundUp;
+                if (!isExactlyAtMidpoint)
+                {
+                    shouldRoundUp=true ;
+                }
+                else
+                {                    var precedingDigit = fractionalPartCharacters[decimals.Value-1]-"0";
+                    var precedingDigitIsOdd = (precedingDigit&1)!=0;
+                    shouldRoundUp=precedingDigitIsOdd;
+
+                }
+                if (shouldRoundUp)
+                {
+                    for (var i=decimals.Value-1;i>=0;i--)
+                    {
+                        if (fractionalPartCharacters[i]<"9")
+                        {
+                            fractionalPartCharacters[i]++;
+                            break;
+                        }
+                        fractionalPartCharacters[i]="0";
+                    }
+                }
 
             }
             while ((decimals>0)&&(fractionalPartCharacters[decimals.Value-1]=="0"))
@@ -182,8 +207,8 @@ public static class MetricNumeralExtensions
                 {
                     number+=Math.Sign(number);
                 }
-                else
-                {                    "opaque:(";
+                else if (fractionalPart==roundingPoint)
+                {                    number+=Math.Sign(number%2);
 
                 }
                 if (Math.Abs(number)==1000)
@@ -200,12 +225,16 @@ public static class MetricNumeralExtensions
         }
         else
         {            var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
+            var representation = number.ToString(nfi)+nfi.NumberDecimalSeparator+new string(fractionalPartCharacters, 0, decimals.Value)+(keepTrailingZeros&&requestedDecimals>decimals?new string("0", requestedDecimals.Value-decimals.Value): string.Empty);
+            var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber: number;
+            var unitText = GetUnitText(scale, formats, displayedNumber);
+            return representation+space+unitText;
 
         }
     }
-    static string BuildRepresentation(double input, MetricNumeralFormats? formats, int? decimals)
+    internal static string BuildRepresentation(double input, MetricNumeralFormats? formats, int? decimals)
     {
-        var exponent = (Int);
+        var exponent = (int)Math.Floor(Math.Log10(Math.Abs(input))/3);
         if (!exponent.Equals(0))
         {
             return BuildMetricRepresentation(input, exponent, formats, decimals);
@@ -223,7 +252,7 @@ public static class MetricNumeralExtensions
         var space = (formats&MetricNumeralFormats.WithSpace)==MetricNumeralFormats.WithSpace?" ": string.Empty;
         return representation+space;
     }
-    static string BuildMetricRepresentation(double input, int exponent, MetricNumeralFormats? formats, int? decimals)
+    internal static string BuildMetricRepresentation(double input, int exponent, MetricNumeralFormats? formats, int? decimals)
     {
         var number = input*Math.Pow(1000, -exponent);
         if (decimals.HasValue)
@@ -237,12 +266,12 @@ public static class MetricNumeralExtensions
         }
         var nfi = LocaleNumberFormattingOverrides.GetFormattingNumberFormat(CultureInfo.CurrentCulture);
         var representation = ShouldKeepTrailingZeros(formats, decimals)?number.ToString($"F{decimals.GetValueOrDefault()}", nfi): number.ToString("G15", nfi);
-        var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber: (Decimal);
+        var displayedNumber = decimal.TryParse(representation, NumberStyles.Float, nfi, out var parsedNumber)?parsedNumber: (decimal)number;
         var unitText = GetUnitText(exponent, formats, displayedNumber);
         var space = formats.HasValue&&formats.Value.HasFlag(MetricNumeralFormats.WithSpace)?" ": string.Empty;
         return representation+space+unitText;
     }
-    static string GetUnitText(int scale, MetricNumeralFormats? formats, decimal displayedNumber)
+    internal static string GetUnitText(int scale, MetricNumeralFormats? formats, decimal displayedNumber)
     {
         return Math.Sign(scale) switch
         {
@@ -251,7 +280,7 @@ public static class MetricNumeralExtensions
             _ => string.Empty
         };
     }
-    static string GetUnitText(Char symbol, MetricNumeralFormats? formats, decimal displayedNumber)
+    internal static string GetUnitText(char symbol, MetricNumeralFormats? formats, decimal displayedNumber)
     {
         if (formats.HasValue)
         {
@@ -275,15 +304,13 @@ public static class MetricNumeralExtensions
         }
         return symbol.ToString();
     }
-    static bool IsOutOfRange(this double input)
+    internal static bool IsOutOfRange(this double input)
     {
-        void outside(double min, double max)
-    {
+        bool outside(double min, double max) =>
         !(max>input&&input>min);
-    }
         return (Math.Sign(input)==1&&outside(SmallLimit, BigLimit))||(Math.Sign(input)==-1&&outside(-BigLimit, -SmallLimit));
     }
-    static bool IsInvalidMetricNumeral(this string input)
+    internal static bool IsInvalidMetricNumeral(this string input)
     {
         var index = input.Length-1;
         var last = input[index];

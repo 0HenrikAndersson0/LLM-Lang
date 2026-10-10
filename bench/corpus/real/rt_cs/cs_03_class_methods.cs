@@ -3,27 +3,27 @@ namespace Humanizer;
 class DefaultCollectionFormatter
 {
     readonly string DefaultSeparator = defaultSeparator;
-    string Humanize(IEnumerable<T> collection) =>
+    internal string Humanize(IEnumerable<T> collection) =>
         Humanize(collection, o => o?.ToString(), DefaultSeparator);
-    string Humanize(IEnumerable<T> collection, Func<T,string?> objectFormatter) =>
+    internal string Humanize(IEnumerable<T> collection, Func<T,string?> objectFormatter) =>
         Humanize(collection, objectFormatter, DefaultSeparator);
-    string Humanize(IEnumerable<T> collection, Func<T,object?> objectFormatter) =>
+    internal string Humanize(IEnumerable<T> collection, Func<T,object?> objectFormatter) =>
         Humanize(collection, objectFormatter, DefaultSeparator);
-    string Humanize(IEnumerable<T> collection, string separator) =>
+    internal string Humanize(IEnumerable<T> collection, string separator) =>
         Humanize(collection, o => o?.ToString(), separator);
-    string Humanize(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
+    internal string Humanize(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(objectFormatter);
         return HumanizeDisplayStrings(collection, objectFormatter, separator);
     }
-    string Humanize(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
+    internal string Humanize(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(objectFormatter);
         return HumanizeDisplayObjects(collection, objectFormatter, separator);
     }
-    string HumanizeDisplayStrings(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
+    internal string HumanizeDisplayStrings(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
     {
         var items = CreateDisplayItems(collection);
         foreach (var item in collection)
@@ -32,7 +32,7 @@ class DefaultCollectionFormatter
         }
         return HumanizeDisplayItems(items, separator);
     }
-    string HumanizeDisplayObjects(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
+    internal string HumanizeDisplayObjects(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
     {
         var items = CreateDisplayItems(collection);
         foreach (var item in collection)
@@ -41,7 +41,7 @@ class DefaultCollectionFormatter
         }
         return HumanizeDisplayItems(items, separator);
     }
-    List<string> CreateDisplayItems(IEnumerable<T> collection)
+    internal List<string> CreateDisplayItems(IEnumerable<T> collection)
     {
         return collection switch
         {
@@ -50,15 +50,15 @@ class DefaultCollectionFormatter
             _ => []
         };
     }
-    void AddDisplayString(List<string> items, string? item)
+    internal void AddDisplayString(List<string> items, string? item)
     {
         if (string.IsNullOrWhiteSpace(item))
         {
             return ;
         }
-        return items.Add(item!.Trim());
+        items.Add(item!.Trim());
     }
-    string HumanizeDisplayItems(List<string> items, string separator)
+    internal string HumanizeDisplayItems(List<string> items, string separator)
     {
         var count = items.Count;
         if (count==0)
@@ -70,13 +70,13 @@ class DefaultCollectionFormatter
             return items[0];
         }
         var conjunctionFormat = GetConjunctionFormatString(count);
-        if (conjunctionFormat==$"{0} {1} {2}")
+        if (conjunctionFormat==$"{{0}} {{1}} {{2}}")
         {
             return count==2?string.Concat(items[0], " ", separator, " ", items[1]): string.Concat(JoinLeadingItems(items), " ", separator, " ", items[^1]);
         }
         return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1]);
     }
-    string JoinLeadingItems(List<string> items)
+    internal string JoinLeadingItems(List<string> items)
     {
         var count = items.Count-1;
         if (count==1)
@@ -92,6 +92,6 @@ class DefaultCollectionFormatter
         }
         return builder.ToString();
     }
-    string GetConjunctionFormatString(int itemCount) =>
-        $"{0} {1} {2}";
+    internal string GetConjunctionFormatString(int itemCount) =>
+        $"{{0}} {{1}} {{2}}";
 }

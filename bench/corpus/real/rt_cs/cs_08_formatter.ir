@@ -44,10 +44,10 @@ type DefaultFormatter export{
     if GetType().Assembly !=typeof (DefaultFormatter).Assembly{
       throw new NotSupportedException("Custom formatter type '{GetType().FullName}' must explicitly implement {nameof(IGrammaticalCaseTimeSpanFormatter)} to support grammatical-case-aware durations.")
     }
-    if (UInt)>(UInt){
+    if (UInt)grammaticalCase>(UInt)GrammaticalCase.Causal{
       throw new ArgumentOutOfRangeException(nameof(grammaticalCase), grammaticalCase, "Unsupported grammatical case.")
     }
-    if (UInt)>(UInt){
+    if (UInt)timeUnit>(UInt)TimeUnit.Year{
       throw new ArgumentOutOfRangeException(nameof(timeUnit), timeUnit, "Unsupported time unit.")
     }
     var table=LocaleDurationCaseTableCatalog.Resolve(Culture)??throw new NotSupportedException($"Culture '{Culture.Name}' has no grammatical-case classification for duration phrases.")
@@ -60,7 +60,7 @@ type DefaultFormatter export{
     if !table.TryGetCase(grammaticalCase, out var caseOverlay){
       throw new NotSupportedException("Culture '{Culture.Name}' does not support grammatical case '{grammaticalCase}' for duration phrases.")
     }
-    var unitOverlay=caseOverlay.Units[(Int)]
+    var unitOverlay=caseOverlay.Units[(Int)timeUnit]
     return unitOverlay.Kind switch{
       LocalizedDurationCaseUnitKind.SameAsNominative FormatCaseAwareNominative(timeUnit, unit)
       LocalizedDurationCaseUnitKind.NotApplicable throw new NotSupportedException($"Culture '{Culture.Name}' does not apply grammatical case '{grammaticalCase}' to duration unit '{timeUnit}'.")
@@ -69,7 +69,7 @@ type DefaultFormatter export{
     }
   }
   fn TimeSpanHumanize_Age() String{
-    return phraseTable.TimeSpanAge??"{0}"
+    return phraseTable.TimeSpanAge??"{{0}}"
   }
   fn DataUnitHumanize(dataUnit DataUnit, count Float, toSymbol: Bool = true) String{
     if TryFormatDataUnitFromPhraseTable(dataUnit, count, toSymbol, out var generated){
@@ -117,10 +117,10 @@ type DefaultFormatter export{
   fn DataUnitHumanizeExact(dataUnit DataUnit, count Decimal, toSymbol Bool) String{
     var magnitude=NormalizeDecimal(Math.Abs(count))
     if !LocalizedInflectionCatalog.TrySelectCategory(Culture, magnitude, out var category){
-      return DataUnitHumanize(dataUnit, (Float), toSymbol)
+      return DataUnitHumanize(dataUnit, (Float)magnitude, toSymbol)
     }
     var form=GetDataUnitPhraseForm(dataUnit, magnitude, category)
-    var result=TryFormatDataUnitFromPhraseTable(dataUnit, (Float), form, toSymbol, category, out var phrase)?phrase:DataUnitHumanize(dataUnit, (Float), toSymbol)
+    var result=TryFormatDataUnitFromPhraseTable(dataUnit, (Float)magnitude, form, toSymbol, category, out var phrase)?phrase:DataUnitHumanize(dataUnit, (Float)magnitude, toSymbol)
     return GetDataUnitPhrasePrefix(dataUnit, magnitude, category)+result
   }
   fn TryFormatDataUnitFromPhraseTable(dataUnit DataUnit, count Float, form FormatterNumberForm, toSymbol Bool, exactCategory CardinalPluralCategory?, result: out String) Bool{
@@ -141,8 +141,8 @@ type DefaultFormatter export{
     result=ResolveDataUnitPhraseForms(forms, form)
     if phrase.Template is {}template{
       result=RenderTemplate(template, FormatCountValue(count), result, string.Empty)
-    }else{
-      "opaque:("
+    }else if exactCategory is not null ?ShouldAppendImplicitDataUnitPluralSuffixExact(form, forms):ShouldAppendImplicitDataUnitPluralSuffix(dataUnit, count, form, forms, phrase.Template){
+      result+="s"
 
     }
     result=TransformDataUnitResult(dataUnit, count, form, result, forms, phrase.Template)
@@ -239,13 +239,13 @@ type DefaultFormatter export{
       else RenderPattern(renderedUnit, countValue, secondaryPlaceholder)
     }
   }
-  fn RenderTemplate(template PhraseTemplate, countValue String, unitText String, secondaryPlaceholder String) String{template.Template.Replace("{count}", countValue).Replace("{unit}", unitText).Replace("{prep}", secondaryPlaceholder).Replace("{value}", unitText).Replace("{0}", countValue)}
+  fn RenderTemplate(template PhraseTemplate, countValue String, unitText String, secondaryPlaceholder String) String{template.Template.Replace("{{count}}", countValue).Replace("{{unit}}", unitText).Replace("{{prep}}", secondaryPlaceholder).Replace("{{value}}", unitText).Replace("{{0}}", countValue)}
   fn RenderPattern(pattern String?, countValue String, secondaryPlaceholder String) String{
     if string.IsNullOrEmpty(pattern){
       return pattern??string.Empty
     }
     var resolvedPattern=pattern!
-    return resolvedPattern.Replace("{count}", countValue).Replace("{prep}", secondaryPlaceholder).Replace("{0}", countValue).Replace("{1}", secondaryPlaceholder).Trim()
+    return resolvedPattern.Replace("{{count}}", countValue).Replace("{{prep}}", secondaryPlaceholder).Replace("{{0}}", countValue).Replace("{{1}}", secondaryPlaceholder).Trim()
   }
   fn JoinPhraseParts(first String?, second String?, third String?, fourth String?) String{
     var partCount=0
@@ -267,7 +267,7 @@ type DefaultFormatter export{
     AppendPhrasePart(builder, fourth)
     return builder.ToString()
   }
-  fn MeasurePhrasePart(part String?, partCount: ref Int, totalLength: ref Int) void{
+  fn MeasurePhrasePart(part String?, partCount: ref Int, totalLength: ref Int){
     if string.IsNullOrWhiteSpace(part){
       return
     }
@@ -283,7 +283,7 @@ type DefaultFormatter export{
     }
     return !string.IsNullOrWhiteSpace(third)?third!:fourth!
   }
-  fn AppendPhrasePart(builder StringBuilder, part String?) void{
+  fn AppendPhrasePart(builder StringBuilder, part String?){
     if string.IsNullOrWhiteSpace(part){
       return
     }

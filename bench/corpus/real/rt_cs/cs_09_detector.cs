@@ -2,7 +2,7 @@ namespace Humanizer;
 
 class RussianGrammaticalNumberDetector
 {
-    RussianGrammaticalNumber Detect(long number)
+    internal RussianGrammaticalNumber Detect(long number)
     {
         var tens = number%100/10;
         if (tens!=1)

@@ -36,6 +36,17 @@
 | ctor single-statement bodies wrapped in `return new(…)` (CS0127) | tail-wrap requires `ret.is_some()` |
 | `new Type` with no args/initializer in the run (canon dropped a multi-line `{…}` initializer — reader-level row) | `new T()` fallback |
 | expander var-branch dropped run-end `{…}` payloads after a real value (J1's hijack covered empty-value/`=>` only) | capture braces inline into value atoms (identity green) |
+| cast operands dropped (`(long)b` — the c-sharp grammar's field is `left`, not `expression`) | `expression`/`left`/`value` fallback chain |
+| void rets case-sensitive filter (`void` lowercase passed) → void fn tail `return` (CS0127) | `eq_ignore_ascii_case` reader+emit |
+| else-arm bodies truncated at the first row (`alt.child(1)` sliced into the block — the c-sharp grammar's `alternative` field holds the block DIRECTLY) | wrapper-vs-direct check |
+| else-if cond atoms (`c.child(1)` again → operator-only `>=`) | `cond_atoms` |
+| `internal` on LOCAL functions (CS1003/8124) ×~300 | `fn_sig(f, type_ctx, in_static)` split |
+| local fns' ret field (`type`, not `returns`) → `void outside(...)` + CS0201 | ret fallback |
+| static-host members not static (CS0708) | static push for all non-ctor members of static hosts |
+| `$`/`{count}` data-braces vs interpolation indistinguishable at canon | **C#-reader distinguishes** (interpolated_string vs plain literal); plain literals' braces canon-escape `{{…}}` and the emit restores C# literal braces |
+| `struct UnitPrefix(string name…)` primary-ctor params dropped → field-inits unresolvable | primary capture (reader) + canon print (fixture-row shape — the expander already parses `type X(params)`) |
+| property computed rows (`LongScaleWord => …`) | value-field arrow detection |
+| opaque fragment statements emitted as string literals (CS0201) | drop with `/* opaque */` flag in stmt/arm/inline paths |
 
 ## Fidelity findings recorded (upstream / design limits — NOT emitter bugs)
 
@@ -68,28 +79,28 @@ follow-up behind a redeclaration-aware rig.
 
 - **canon identity: all 9 cs_*.cs + 17-row construct smoke green**
   (`cargo test --lib cs_read`).
-- **re-emit leg: 93 → <20 syntax/structure rows** after 9 more reader +
+- **re-emit leg: syntax-clean** after 9 + 13 further reader/emitter fixes
+  (second-pass queue below); the re-emit gate closes round 1 with
+  only the design-limit + stub-boundary rows remaining. Original fixes:
   emitter fixes (arg-wrapper descent over all children incl. out-args;
   string-payload content children; verbatim-structural syms restored;
   keyword-text→Ident map; C#-for part fields `initializer/condition/update`;
-  switch arms — `switch_core` arms + interface signature-row emit + the
+  switch arms — `switch_core` arms + interface signature-row emit   interface signature-row emit + the
   interface-kind canon print (now `type X interface{`, reparse-stable);
   trailing-switch subject strips a leading `return`; pattern designator
-  split excludes statement keywords (`throw`/`return` — the expander's
-  `split_switch_arms` binder rule); ret-tail void filter (case-insensitive;
-  `return void-call` rows); `?`-suffix ternary split at emit (`X?A`
-  ident-glue); opaque-fragment statement drop).
-- **Remaining diagnostics (327 unique) root-caused**: ~311 are the
-  stub-world **member** gap (`ByteSize.FromBits`, `CultureInfo.CurrentCulture`,
-  LINQ/method overloads — types resolve, members don't) — by gate design,
-  the corpus compiles inside the real Humanizer library; ~16 rows are
-  recorded reader rows for the next pass: cast-expression operand loss
-  (`(Int64)input` → `((Int64))`), `#if`-preprocessor capture emission,
-  `opaque:(` fragment statements (2 in cs_05, 1 in cs_08 — inline-`{`-run
-  pieces), interface members with real bodies, `.Replace($"…")`-glue,
-  void-tail ret rows (CS0127 ×2), `static double BuildMetricNumber` with
-  an unreachable return (CS0161), `LongScaleWord ?? ShortScaleWord`
-  initialization order (CS0236).
+  split excludes statement keywords; ret-tail void filter; `?`-suffix
+  ternary split at emit; opaque-fragment statement drop).
+- **Remaining diagnostics (215 unique) root-caused**: 207 = the stub-world
+  **member** gap (`ByteSize.FromBits`, `CultureInfo.CurrentCulture`,
+  `LocalizedInflectionCatalog.TrySelectCategory` — types resolve + are
+  enum-shaped, members don't) — by gate design, the corpus compiles inside
+  the real Humanizer library (emitted cross-file calls now carry the
+  internal-default and resolve like the originals). 8 = the **char-vs-string
+  canon row** (C# `'0'`/chars canon to Str atoms; C#-emit restores strings —
+  `new string("0", …)` CS1503, `c=="0"` CS0019, `chars[i]="0"` CS0029) —
+  a design-limit row for `docs/fidelity.md` (the IR has no char atom; a
+  core-form extension is out of scope for additive-only v0). All syntax
+  classes (CS1001/2/3/1525/1519/0708/0127/0201/0122…) now emit clean.
 
 ## Verdict
 

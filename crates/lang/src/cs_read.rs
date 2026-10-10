@@ -193,6 +193,12 @@ impl<'a> CsReader<'a> {
             let direct = text(node, self.src);
             t = direct.trim_matches(|c| c == '"' || c == '@').to_string();
         }
+        // data-braces in plain literals: canon-escape `{{…}}` (the interp
+        // canon `x{e}y` is only produced by $-prefixed interpolated strings —
+        // the read distinguishes; the emit restores literals)
+        if t.contains('{') {
+            t = t.replace('{', "{{").replace('}', "}}");
+        }
         t
     }
 
@@ -476,7 +482,11 @@ impl<'a> CsReader<'a> {
                     v.push(Atom::Ident(self.type_text(t)));
                 }
                 v.push(Atom::Sym(")".into()));
-                if let Some(e) = node.child_by_field_name("expression") {
+                // operand field: c-sharp grammar names it `left` here
+                let operand = node.child_by_field_name("expression")
+                    .or_else(|| node.child_by_field_name("left"))
+                    .or_else(|| node.child_by_field_name("value"));
+                if let Some(e) = operand {
                     v.extend(self.atomize(e));
                 }
                 v
@@ -806,6 +816,21 @@ impl<'a> CsReader<'a> {
         if let Some(tp) = node.child_by_field_name("type_parameters") {
             name = format!("{name}{}", text(tp, self.src).replace(' ', ""));
         }
+        // primary constructor: `type X(params)` — the parameter_list child
+        // that is NOT a method's (type-level: sits directly on the declaration)
+        let mut primary = None;
+        {
+            let mut pc = node.walk();
+            if pc.goto_first_child() {
+                loop {
+                    if pc.node().kind() == "parameter_list" {
+                        primary = Some(self.param_pairs(pc.node()));
+                        break;
+                    }
+                    if !pc.goto_next_sibling() { break; }
+                }
+            }
+        }
         let mut bases = vec![];
         if let Some(bl) = node.child_by_field_name("bases") {
             let mut c = bl.walk();
@@ -854,7 +879,7 @@ impl<'a> CsReader<'a> {
         Core::Type(TypeDecl {
             name,
             kind: kind_hint.into(),
-            primary: None,
+            primary,
             bases,
             modifiers: self.modifiers_export(node),
             members,
@@ -865,7 +890,11 @@ impl<'a> CsReader<'a> {
     fn method_decl(&mut self, node: tree_sitter::Node<'a>, _in_type: bool) -> Core {
         let name = node.child_by_field_name("name").map(|n| text(n, self.src).to_string()).unwrap_or_default();
         let params = node.child_by_field_name("parameters").map(|p| self.param_pairs(p)).unwrap_or_default();
-        let ret = node.child_by_field_name("returns").map(|r| self.type_text(r)).filter(|t| !t.is_empty() && t != "Void");
+        let ret = node
+            .child_by_field_name("returns")
+            .or_else(|| node.child_by_field_name("type"))
+            .map(|r| self.type_text(r))
+            .filter(|t| !t.is_empty() && !t.eq_ignore_ascii_case("void"));
         let mut modifiers: Vec<String> = vec![];
         for m in self.modifiers_raw(node) {
             if m == "async" {
@@ -1038,7 +1067,8 @@ impl<'a> CsReader<'a> {
         // clause; descend to its expression (atomizing the clause itself
         // Verbatim-glues `=>`)
         if let Some(arrow) = node.child_by_field_name("value") {
-            let atoms = if arrow.kind() == "arrow_expression_clause" {
+            let is_arrow = arrow.kind() == "arrow_expression_clause";
+            let atoms = if is_arrow {
                 arrow.child(1).map(|e| self.atomize(e)).unwrap_or_default()
             } else {
                 self.atomize(arrow)
@@ -1168,14 +1198,18 @@ impl<'a> CsReader<'a> {
                 let body = node.child_by_field_name("consequence").map(|b| self.body_core(b)).unwrap_or(Body::Inline(vec![]));
                 let mut arms = vec![];
                 if let Some(alt) = node.child_by_field_name("alternative") {
-                    let body_n = alt.child(1).unwrap_or(alt);
+                    // the alternative field may hold the else_clause wrapper
+                    // or the block body directly (c-sharp grammar)
+                    let body_n = if alt.kind() == "else_clause" {
+                        alt.child(1).unwrap_or(alt)
+                    } else {
+                        alt
+                    };
                     match body_n.kind() {
                         "if_statement" => {
                             let mut p: Vec<Atom> = vec![Atom::Ident("else".into()), Atom::Ident("if".into())];
                             if let Some(c) = body_n.child_by_field_name("condition") {
-                                if let Some(inner) = c.child(1) {
-                                    p.extend(self.atomize(inner));
-                                }
+                                p.extend(self.cond_atoms(c));
                             }
                             arms.push(Arm {
                                 pattern: p,

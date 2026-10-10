@@ -10,14 +10,14 @@ public class LocaliserRegistry
     {
         this .defaultLocaliser=defaultLocaliser;
     }
-    TLocaliser ResolveForUiCulture() =>
+    internal TLocaliser ResolveForUiCulture() =>
         ResolveForCulture(CultureInfo.CurrentUICulture);
-    TLocaliser ResolveForCulture(CultureInfo? culture)
+    internal TLocaliser ResolveForCulture(CultureInfo? culture)
     {
         var cultureInfo = culture??CultureInfo.CurrentCulture;
         return cultureSpecificCache.GetValue(cultureInfo, c => new ()).Value!;
     }
-    void Register(string localeCode, TLocaliser localiser)
+    internal void Register(string localeCode, TLocaliser localiser)
     {
         lock (lockObject)
         {
@@ -28,7 +28,7 @@ public class LocaliserRegistry
             localisersBuilder[localeCode]=_ => localiser;
         }
     }
-    void Register(string localeCode, Func<CultureInfo,TLocaliser> localiser)
+    internal void Register(string localeCode, Func<CultureInfo,TLocaliser> localiser)
     {
         lock (lockObject)
         {
@@ -39,14 +39,14 @@ public class LocaliserRegistry
             localisersBuilder[localeCode]=localiser;
         }
     }
-    string[] GetRegisteredLocaleCodes()
+    internal string[] GetRegisteredLocaleCodes()
     {
         lock (lockObject)
         {
             return [..localisersBuilder.Keys.OrderBy(staticlocale => locale, StringComparer.Ordinal)];
         }
     }
-    void UseGeneratedCultureResolver()
+    internal void UseGeneratedCultureResolver()
     {
         lock (lockObject)
         {
@@ -57,7 +57,7 @@ public class LocaliserRegistry
             useGeneratedCultureResolver=true ;
         }
     }
-    Func<CultureInfo,TLocaliser> FindLocaliser(CultureInfo culture)
+    internal Func<CultureInfo,TLocaliser> FindLocaliser(CultureInfo culture)
     {
         var frozen = frozenLocalisers;
         if (frozen==null )

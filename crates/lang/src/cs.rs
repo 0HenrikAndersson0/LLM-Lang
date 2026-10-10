@@ -37,8 +37,13 @@ fn map_type(ty: &str) -> String {
         ("Int64", "long"),
         ("Decimal", "decimal"),
         ("Object", "object"),
-        ("Object?", "object?"),
         ("Void", "void"),
+        ("Byte", "byte"),
+        ("SByte", "sbyte"),
+        ("Short", "short"),
+        ("UShort", "ushort"),
+        ("UInt", "uint"),
+        ("Char", "char"),
     ];
     let mut out = String::with_capacity(ty.len());
     let bytes: Vec<char> = ty.chars().collect();
@@ -273,19 +278,29 @@ impl<'a> ExprCtx<'a> {
                             continue;
                         }
                     }
-                    // ir `?` suffix rides the ident (`X?A` lexes one ident);
-                    // when an operand follows, it is the TERNARY `?` — emit
-                    // the split (`x ? a : b`)
-                    if id.ends_with('?')
-                        && !id.ends_with("?.")
-                        && id.len() > 1
-                        && !is_csharp_keyword(id)
-                    {
-                        let head_w = &id[..id.len() - 1];
-                        out.push_str(head_w);
-                        out.push('?');
-                        i += 1;
-                        continue;
+                    // ir `?` rides idents (`X?A` lexes one ident; the
+                    // reader glues the ternary `?` into the previous word,
+                    // and even across it: `kt ? new` → `kt?new`). Emit the
+                    // split at the LAST `?` inside the ident.
+                    if let Some(q) = id.rfind('?') {
+                        if !is_csharp_keyword(id) && (q + 1 < id.len() || id.len() > 1) {
+                            let head_w = &id[..q];
+                            let tail = &id[q + 1..];
+                            out.push_str(head_w);
+                            out.push('?');
+                            if !tail.is_empty() {
+                                out.push_str(tail);
+                                if is_csharp_keyword(tail) {
+                                    out.push(' ');
+                                } else if matches!(atoms.get(i + 1), Some(a) if is_bare_operand_start(a)) {
+                                    out.push_str(&format!("({})", expr(&atoms[i + 1..])));
+                                    i = n;
+                                    continue;
+                                }
+                            }
+                            i += 1;
+                            continue;
+                        }
                     }
                     // `match` keyword inside expr runs (C# switch expr emits it)
                     // mid-run pattern keywords need a space BEFORE when the
@@ -531,8 +546,14 @@ fn stmts_csharp(sts: &[Core], level: usize, out: &mut String) -> Result<(), CsLo
         match st {
             Core::Expr(atoms, _) => {
                 out.push_str(&IND.repeat(level + 1));
-                out.push_str(&render_stmt_line(atoms));
-                out.push_str(";\n");
+                if atoms.len() == 1 && matches!(&atoms[0], Atom::Str(x) if x.starts_with("opaque:")) {
+                    // opaque fragment capture: not representable as a
+                    // statement (§8.1.3c) — flag, don't emit a string expr
+                    out.push_str("/* opaque */\n");
+                } else {
+                    out.push_str(&render_stmt_line(atoms));
+                    out.push_str(";\n");
+                }
             }
             Core::Var(v) => out.push_str(&local_var(v, level)),
             Core::Stmt { head, body, arms, .. } => {
@@ -545,7 +566,7 @@ fn stmts_csharp(sts: &[Core], level: usize, out: &mut String) -> Result<(), CsLo
             Core::Fn(f) => {
                 // local function
                 out.push_str(&IND.repeat(level + 1));
-                out.push_str(&fn_sig(f, false));
+                out.push_str(&fn_sig(f, false, false));
                 out.push_str(&render_body(&f.body, level, &f.ret)?);
                 out.push('\n');
             }
@@ -718,7 +739,11 @@ fn emit_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<S
                     } else {
                         format!("return {}", expr(b))
                     };
-                    s.push_str(&format!("\n{ind}{clause} {{ {txt}; }}"));
+                    if b.len() == 1 && matches!(&b[0], Atom::Str(k2) if k2.starts_with("opaque:")) {
+                        s.push_str(&format!("\n{ind}{clause} {{ /* opaque */ }}"));
+                    } else {
+                        s.push_str(&format!("\n{ind}{clause} {{ {txt}; }}"));
+                    }
                 }
                 Body::Inline(_) => s.push_str(&format!("\n{ind}{clause} {{}}")),
                 b => {
@@ -843,8 +868,13 @@ fn push_arm_body(b: &Body, mut s: String, level: usize) -> Result<String, CsLowe
         Body::Inline(x) if !x.is_empty() => {
             s.push('\n');
             s.push_str(&IND.repeat(level + 1));
-            s.push_str(&render_stmt_line(x));
-            s.push(';');
+            if x.len() == 1 && matches!(&x[0], Atom::Str(k) if k.starts_with("opaque:")) {
+                // opaque fragment rows are not representable statements (§8.1.3c)
+                s.push_str("/* opaque */");
+            } else {
+                s.push_str(&render_stmt_line(x));
+                s.push(';');
+            }
         }
         Body::Bare(v) | Body::Block(v) => {
             stmts_csharp(v, level, &mut s)?;
@@ -857,23 +887,36 @@ fn push_arm_body(b: &Body, mut s: String, level: usize) -> Result<String, CsLowe
 // ---------------------------------------------------------------------------
 // fn / ctor / type emission (§4)
 
-fn fn_sig(f: &FnDecl, in_static: bool) -> String {
+fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
+    
     let mut mods: Vec<String> = vec![];
     let is_ctor = f.modifiers.iter().any(|m| m == "ctor");
     let is_async = f.modifiers.iter().any(|m| m == "async");
-    if f.modifiers.iter().any(|m| m == "export") {
-        mods.push("public".into());
-    }
-    for m in &f.modifiers {
-        if matches!(m.as_str(), "sealed" | "abstract" | "override" | "virtual" | "static" | "extern") {
-            mods.push(m.clone());
+    if type_ctx {
+        if f.modifiers.iter().any(|m| m == "export") {
+            mods.push("public".into());
         }
-    }
-    if is_async {
-        mods.push("async".into());
-    }
-    if in_static && !is_ctor && !mods.iter().any(|m| m == "static") {
-        mods.push("static".into());
+        for m in &f.modifiers {
+            if matches!(m.as_str(), "sealed" | "abstract" | "override" | "virtual" | "static" | "extern") {
+                mods.push(m.clone());
+            }
+        }
+        if is_async {
+            mods.push("async".into());
+        }
+        // access nuance is a fidelity row (§1): non-export members get the
+        // internal default — member calls across files in the corpus
+        // assembly (cs_06 → cs_08.DataUnitHumanizeExact) resolve like the
+        // originals; local fns are emitted outside this branch (no access)
+        if !is_ctor && !f.modifiers.iter().any(|m| m == "export")
+            && !mods.iter().any(|m| m == "public" || m == "private" || m == "protected" || m == "internal")
+        {
+            mods.push("internal".into());
+        }
+        // C# static-class rule: every member of a static host is static
+        if in_static && !is_ctor {
+            mods.push("static".into());
+        }
     }
     let mut s = String::new();
     for m in &mods {
@@ -889,8 +932,15 @@ fn fn_sig(f: &FnDecl, in_static: bool) -> String {
             s.push_str("static ");
         }
         if let Some(r) = &f.ret {
-            s.push_str(&map_type(r));
-            s.push(' ');
+            let (rt, _) = split_default(r);
+            if rt.eq_ignore_ascii_case("void") {
+                s.push_str("void ");
+            } else {
+                s.push_str(&map_type(rt));
+                s.push(' ');
+            }
+        } else {
+            s.push_str("void ");
         }
         s.push_str(&f.name);
         let mut params = f.params.clone();
@@ -974,6 +1024,9 @@ fn render_body(b: &Body, level: usize, ret: &Option<String>) -> Result<String, C
         Body::Inline(a) if !a.is_empty() => {
             // single fused statement: expression-bodied method when it is a
             // plain expr, else a block with the statement(s)
+            if a.len() == 1 && matches!(&a[0], Atom::Str(k2) if k2.starts_with("opaque:")) {
+                return Ok(format!("\n{ind}{{\n{ind}    /* opaque */\n{ind}}}"));
+            }
             let lead = a.first().map(|x| match x { Atom::Ident(k) => k.clone(), _ => String::new() }).unwrap_or_default();
             if matches!(lead.as_str(), "return" | "throw" | "if" | "for" | "while" | "lock" | "match" | "try" | "var")
                 || a.iter().any(|x| matches!(x, Atom::Ident(kw) if kw == "await") && lead != "await")
@@ -1065,6 +1118,13 @@ fn render_body(b: &Body, level: usize, ret: &Option<String>) -> Result<String, C
 }
 
 fn stmts_from_inline(a: &[Atom], level: usize, out: &mut String, ret_gate: bool) -> Result<(), CsLowerError> {
+    if a.len() == 1 && matches!(&a[0], Atom::Str(x) if x.starts_with("opaque:")) {
+        // fragment capture — not representable inline; dropped with flag
+        let ind0 = IND.repeat(level);
+        out.push_str(&ind0);
+        out.push_str("/* opaque */\n");
+        return Ok(());
+    }
     let ind = IND.repeat(level);
     let lead = a.first().map(|x| match x { Atom::Ident(k) => k.clone(), _ => String::new() }).unwrap_or_default();
     // kw-led inline runs: split at depth-0 statement keywords (J2 shape)
@@ -1124,10 +1184,11 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
     for m in &t.members {
         match m {
             Core::Fn(f) => {
+                let static_host = is_static_class;
                 if t.kind == "interface" && matches!(&f.body, Body::Inline(a) if a.is_empty()) {
                     // interface member: signature row, no body
                     out.push_str(&IND.repeat(level + 1));
-                    out.push_str(&fn_sig(f, is_static_class));
+                    out.push_str(&fn_sig(f, true, is_static_class));
                     out.push_str(";\n");
                 } else if f.modifiers.iter().any(|x| x == "ctor") {
                     let mut f2 = f.clone();
@@ -1136,14 +1197,14 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
                     }
                     f2.name = t.name.clone();
                     out.push_str(&IND.repeat(level + 1));
-                    out.push_str(&fn_sig(&f2, false));
+                    out.push_str(&fn_sig(&f2, true, false));
                     out.push_str(&render_body(&f2.body, level + 1, &None)?);
                 } else {
                     let mut f2 = f.clone();
                     async_upgrade(&mut f2);
                     let body_ret = f2.ret.clone();
                     out.push_str(&IND.repeat(level + 1));
-                    out.push_str(&fn_sig(&f2, is_static_class));
+                    out.push_str(&fn_sig(&f2, true, is_static_class));
                     out.push_str(&render_body(&f.body, level + 1, &body_ret)?);
                 }
                 out.push('\n');
@@ -1411,7 +1472,7 @@ pub fn emit(core: &[Core]) -> Result<String, CsLowerError> {
                     }
                     async_upgrade(&mut f2);
                     out.push_str(&IND.repeat(1));
-                    out.push_str(&fn_sig(&f2, true));
+                    out.push_str(&fn_sig(&f2, true, true));
                     out.push_str(&render_body(&f2.body, 1, &ret)?);
                     out.push('\n');
                 }
