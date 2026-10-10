@@ -10,10 +10,63 @@ fraction of that spend. LLM-Lang is a dense, canonical, machine-native
 format for agent codegen — write features in the IR, transpile to the
 target, and round-trip existing code back to the IR for cheap reads.
 
-**Measured (Phase 0, 2026-10-03):** hand-rendered variant D IR costs
-**46.1% (o200k) / 46.2% (llama)** of real-world C#/JS sources — a ~54%
-one-shot token reduction, against the ≥30% north star. Golden-corpus
-syntax floor: 89.7% / 90.1% token counts vs the same code in C#/JS.
+## Install
+
+```
+cargo install irc
+```
+
+A self-contained Rust toolchain — no node/dotnet needed for authoring;
+only for *running* emitted code (node for `to-js` output, .NET 10 for
+`to-cs` output).
+
+## Getting started
+
+Write a feature in the IR (see `examples/` and `docs/tutorial.md`):
+
+```
+@1 @ns Examples.Compact
+
+export fn CompactLabel(String s) String{
+  var t=s.trim()
+  if t.length==0{return "-"}
+  return t.split(" ").filter(w=>w.length>0).map(w=>w[0].toUpperCase()).join("").slice(0,6)
+}
+```
+
+Emit to a target:
+
+```
+irc to-js feature.ir > feature.js        # runnable ESM
+irc to-cs  feature.ir > Feature.cs       # runnable .NET 10
+```
+
+Round-trip an existing codebase so an agent can read it densely:
+
+```
+irc from-js src/util.js  > util.ir       # the cheap canon
+# ... edit util.ir ...
+irc to-js   util.ir > src/util.js        # regenerate
+```
+
+Lint before committing — canon files must be print-stable:
+
+```
+irc verify feature.ir                    # exit 1 on drift/parse failure
+```
+
+Reference: `irc parse/expand` (debug views), `irc canon`, `irc from-cs`,
+`irc js-kinds`. The library (`ir-lang` crate) exposes the same pipeline
+programmatically.
+
+**Measured:** machine-generated canon (from-js/from-cs over the real
+corpus) scores **36.7% / 62.1%** of the original JS/C# source tokens
+(o200k; llama 37.7% / 62.5%) — 42% cheaper across both languages
+(`bench/results-6p1.md`). The Phase-0 hand-rendition headline was
+46.1% / 46.2%; the machine canon beats it because comments/formatting
+drop mechanically rather than by curation.
+
+## What's here
 
 ## What's here
 

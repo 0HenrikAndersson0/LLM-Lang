@@ -137,7 +137,20 @@ constraints drop — the full budget is `docs/fidelity.md`). What you read
 is the *value* of the file; what you write regenerates the file on
 either target.
 
-## 10. Loop workflow (agent-facing)
+## 10. Tooling
+
+```
+irc verify feature.ir        # the lint: canon identity (exit 1 on drift)
+irc parse feature.ir         # does the file read?
+irc to-js feature.ir         # emit ESM
+irc to-cs feature.ir         # emit .NET 10
+irc from-js src.js           # round-trip leg: existing code → canon
+```
+
+`verify` is the cheap CI gate: canon files are print-stable by contract,
+so any drift means the file would churn every tool round.
+
+## 11. Loop workflow (agent-facing)
 
 1. Emit the COMPLETE `.ir` file in one fenced `ir` block.
 2. The harness transpiles (`to-js`/`to-cs`), runs the rig, and feeds
