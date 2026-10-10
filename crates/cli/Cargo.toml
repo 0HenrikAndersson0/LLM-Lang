@@ -10,4 +10,4 @@ name = "irc"
 path = "src/main.rs"
 
 [dependencies]
-ir-lang = { path = "../lang" }
+ir-lang = { path = "../lang", version = "0.1.0" }
