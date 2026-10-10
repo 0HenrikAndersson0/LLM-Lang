@@ -6,3 +6,9 @@ target/
 bench/corpus/real/ir/*.js
 bench/corpus/real/ir/*.map.json
 bench/scripts/behavior/build/
+
+# dotnet build outputs (the loop's cs worlds)
+bin/
+obj/
+*.user
+t.csproj
