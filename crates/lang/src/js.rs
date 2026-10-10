@@ -815,14 +815,39 @@ fn emit_for(head: &[Atom], body: &Body, _arms: &[Arm], level: usize) -> Result<S
 
 fn emit_if(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<String, JsLowerError> {
     let ind = indent(level);
-    let cond = expr(&head[1..]);
+    let empty_inline = matches!(body, Body::Inline(x) if x.is_empty());
     // then-arm consumption (split_glued_if convention: arms[0] with an empty
     // pattern IS the then-block when the stmt body is empty-inline)
-    let empty_inline = matches!(body, Body::Inline(x) if x.is_empty());
     let (body, arms): (&Body, &[Arm]) = if empty_inline && !arms.is_empty() && arms[0].pattern.is_empty() {
         (&arms[0].body, &arms[1..])
     } else {
         (body, arms)
+    };
+    // statement tail in a braceless single-line if (`if (c) return "-"` —
+    // models write this idiom): the reader glued the tail into the head run;
+    // split at the first depth-0 statement keyword — the tail IS the
+    // then-arm (emission-side; canon identity unaffected)
+    let (cond, body): (String, &Body) = {
+        let mut depth = 0i32;
+        let mut split = None;
+        for (k, a) in head.iter().enumerate().skip(1) {
+            match a {
+                Atom::Sym(sx) if sx == "(" || sx == "[" || sx == "{" => depth += 1,
+                Atom::Sym(sx) if sx == ")" || sx == "]" || sx == "}" => depth -= 1,
+                Atom::Ident(x) if depth == 0 && STMT_BEGIN.contains(&x.as_str()) => {
+                    split = Some(k);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        match (split, empty_inline) {
+            (Some(k), true) => (
+                expr(&head[1..k]),
+                &Body::Inline(head[k..].to_vec()),
+            ),
+            _ => (expr(&head[1..]), body),
+        }
     };
     let mut s = format!("{}if ({}) {}", ind, cond, emit_stmt_body_js(body, level)?);
     for a in arms {
@@ -1582,7 +1607,9 @@ fn dedup_spaces(s: &str) -> String {
 }
 
 /// keywords that BEGIN a statement run inside inline atom runs (J2)
-const STMT_BEGIN: &[&str] = &["var", "const", "volatile", "let", "return", "throw", "if"];
+const STMT_BEGIN: &[&str] = &[
+    "var", "const", "volatile", "let", "return", "throw", "if", "for", "while",
+];
 
 /// split an atom run into statement runs at depth-0 statement keywords
 /// (braces/brackets/parens shield interior keywords)
@@ -1824,6 +1851,114 @@ fn stmtify_piece(p: &[Atom], terminal: bool) -> Option<String> {
                 }
             }
             Some(s)
+        }
+        "while" if p.len() >= 3 => {
+            // run-piece while: `while (c){block}` | `while (c) stmt` —
+            // mirrors emit_stmt's while (structured path) for atom runs
+            let bo = {
+                let mut d = 0i32;
+                let mut bo = None;
+                for (k, a) in p.iter().enumerate().skip(1) {
+                    if let Atom::Sym(sx) = a {
+                        match sx.as_str() {
+                            "(" | "[" => d += 1,
+                            ")" | "]" => d -= 1,
+                            "{" if d == 0 => {
+                                bo = Some(k);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                bo
+            };
+            match bo {
+                Some(k) => {
+                    let cond = expr(&p[1..k]);
+                    let close = {
+                        let mut j = k + 1;
+                        let _ = bracket_slice(p, &mut j, '}');
+                        if j < p.len() { Some(j) } else { None }
+                    }?;
+                    let body_txt = brace_block_js(&p[k + 1..close])?;
+                    let tail = if close + 1 < p.len() {
+                        stmtify_piece(&p[close + 1..], false)?
+                    } else {
+                        String::new()
+                    };
+                    Some(format!("while ({cond}) {body_txt}{tail}"))
+                }
+                None => {
+                    // braceless while with an inline tail body; with no
+                    // group condition we take the single next atom — anything
+                    // more complex should use braces (falls back to None)
+                    let Some(cond_atoms) = p.get(1..2) else { return None };
+                    let cond = expr(cond_atoms);
+                    let tail = stmtify_piece(&p[2..], false)?;
+                    Some(format!("while ({cond}) {tail}"))
+                }
+            }
+        }
+        "for" if p.len() >= 3 => {
+            // run-piece for, mirroring emit_for's structured shapes:
+            // `for x in xs{block}` | `for i in 0..len{block}` | C-style
+            let body_at = {
+                // first `{` at run depth (lambda/call braces nest deeper)
+                let mut d = 0i32;
+                let mut at = None;
+                for (k, a) in p.iter().enumerate().skip(1) {
+                    match a {
+                        Atom::Sym(sx) if sx == "(" || sx == "[" => d += 1,
+                        Atom::Sym(sx) if sx == ")" || sx == "]" => d -= 1,
+                        Atom::Sym(sx) if sx == "{" && d == 0 => {
+                            at = Some(k);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                at
+            };
+            let (pre, body_txt) = match body_at {
+                Some(k) => {
+                    let close = {
+                        let mut j = k + 1;
+                        let _ = bracket_slice(p, &mut j, '}');
+                        if j < p.len() { Some(j) } else { None }
+                    }?;
+                    (&p[1..k], brace_block_js(&p[k + 1..close])?)
+                }
+                None => (&p[1..], "{}\n".trim().to_string()),
+            };
+            // C-style: `;` segments at run depth
+            if let Some(s1) = pre.iter().position(|a| matches!(a, Atom::Sym(s) if s == ";")) {
+                let after1 = &pre[s1 + 1..];
+                if let Some(s2) = after1.iter().position(|a| matches!(a, Atom::Sym(s) if s == ";")) {
+                    let (init_a, cond_a, step_a) = (&pre[..s1], &after1[..s2], &after1[s2 + 1..]);
+                    let init = match init_a {
+                        [Atom::Ident(v), Atom::Sym(s), ..] if s == "=" => {
+                            format!("let {v} = {}", expr(&init_a[2..]))
+                        }
+                        other => expr(other),
+                    };
+                    return Some(format!("for ({init}; {}; {}) {body_txt}", expr(cond_a), expr(step_a)));
+                }
+            }
+            let in_i = pre.iter().position(|a| matches!(a, Atom::Ident(x) if x == "in"));
+            let Some(in_i) = in_i else { return None };
+            let var = match pre[in_i - 1] {
+                Atom::Ident(ref v) => v.clone(),
+                _ => return None,
+            };
+            let it = &pre[in_i + 1..];
+            if let Some(di) = it.iter().position(|a| matches!(a, Atom::Sym(s) if s == "..")) {
+                let lo = expr(&it[..di]);
+                let hi = expr(&it[di + 1..]);
+                Some(format!("for (let {var} = {lo}; {var} < {hi}; {var}++) {body_txt}"))
+            } else {
+                Some(format!("for (const {var} of {}) {body_txt}", expr(it)))
+            }
         }
         _ => None,
     }

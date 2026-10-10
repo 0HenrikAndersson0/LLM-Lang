@@ -113,4 +113,4 @@ Follow the guide: real JS runtime (ESM), no C#-isms, explicit `return` inside tr
 
 ## Reply
 
-(complete .ir file in one fenced ir block)
+(complete ir file in one fenced ir block)

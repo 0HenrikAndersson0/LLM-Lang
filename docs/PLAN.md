@@ -112,8 +112,8 @@ pipeline token number measured.
 | J2 | Inline atom runs: statement-ify lambda bodies / if-expressions (emitter + expander classification; surface text unchanged ⇒ bench-neutral) | tsc failures js_04/js_05 closed | ☑ — glued `if c{a}else{b}` chains split (split_glued_if chain-aware; then-arm consumption in printer+emitter; `}else{…}` close-line brace-glue stabilized in R8); dot-chain continuation absorption (reader R2 at child level, R1-rules while unbalanced); arrow-block statement-ification at emit (`split_stmt_runs`/`stmtify_piece` + terminal-expr→return); callee-generics erasure; bare-`let`→`var mut` canon re-stabilization. Tests split/stmtify with constructed atoms |
 | J3 | Gap rows: `export {…} from`/`export type *` re-exports, generics-in-expr erasure, value-match arms (bool/ident-literal) | tsc 7/7 on TS corpus | ☑ **tsc 7/7** — `Core::Reexport` additive core form (canon prints the line; JS drops `type`); callee-generics erased at emit; typed-var `=`-consumption bug + empty-objlit + fused-`>=` tolerance fixed; bool/null literal arms split. Still accepted-v0: value-position match arms stay statement-shaped (guide teaches explicit `return`); non-keyword-led inline statement pieces (see js-target.md §7) |
 | J4 | Real module imports: `@use` with named imports (usage-inferred) so multi-file features transpile + run | rig over 2 linked feature files | ☐ |
-| J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ◐ — task_03 (Tidy: chained pipelines + block lambdas + camelize) run on qwen2.5-coder:7b ×6 attempts (valid JS by round 1 after the braceless-ternary fix; 2 failures-to-repair classes: value-fail near-misses — first word not lowercased on untrimmed split / capitalization inverted; temp-0 verbatim-repeat pathology — adapter now samples repair rounds + sends a repetition nudge); qwen3.5:9b (thinking model: empty content without `think:false` — adapter handles; Pythonism drafts + unindented lines = structural failures); gemma4:12b — socket time-out at 300s/round, retry next session (timeout raised to 600s). Repair-loop harness hardening landed: value-fail feedback now includes the numbered IR + got/expected per case |
-| J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ☐ |
+| J5 | Loop depth: task_03/04 on new idioms; unseeded-repair target; qwen3.5:9b + gemma4:12b points | 2.7 evidence at 3 model scales | ◐ — **task_03 runs at 3 scales + agent-driven; two classes resolved, one open.** Post-fixer (v4.4): qwen2.5-coder:7b drafts now round-1 valid (was: braceless-if + for-run emitted as garbage — emitter truths, NOT model failures); remaining 7b failure class = value near-miss (first-word capitalize inverted in camelize, not repaired in 6 rounds; loop feedback shows got/expected + numbered IR but the error is semantic, not localized); qwen3.5:9b = structural (Pythonisms/unindented); gemma4:12b = operationally blocked on 16 GB (reasoning channel consumes the generation budget before content lands — adapter now falls back to the reasoning channel but runs stayed vacuous; ollama adapter gap, not language); agent-driven (file adapter): **task_03 PASS round 1 both worlds** (first task_03 IR pass ever) |
+| J6 | Whole-pipeline token measurement (footnote [1]): loop-transcript tokens vs C# baseline | the real north-star number | ◐ — **v1 measured (report_j6_pipeline.md): ≥30% whole-pipeline savings do NOT hold at small-feature scale.** Paired loop runs (same task+model; js baseline world = `--lang js`, no guide/no transpile): one-shot IR spends 206–316% of js per delivered feature (the guide + scaffolding); amortized over a session (guide once): 77–90% per feature, break-even S≈10–15, asymptotic savings ≈10–23%. Static compression survives on the WRITE side only (IR drafts 48–55% of js drafts on task_01; equal on task_02/03). One 6-round value-fail = 33× the js one-shot cost. Follow-ups: corpus-scale features, multi-feature-per-file tasks (the real agent-file amortization claim), leaner repair feedback |
 
 > Bench discipline unchanged: J2/J3 touch no surface text (emission-side and
 > classification only) — bench-neutral by the Core::Stmt precedent; any
@@ -294,6 +294,34 @@ Each phase exit is a verification act, not a checklist:
   identity holds on all 26; 26/26 node --check; behavior gate green.
   **Next session: J4 real import names → J5 loop depth → J6 whole-pipeline
   tokens.**
+- **v4.4 (2026-10-10)** — **J1-J6 day: three emitter truths + harness hardening + the J6 number.**
+  Loop-as-QA round 2: qwen2.5-coder:7b drafts exposed (1) braceless
+  single-line `if (c) return x` — the reader glues the statement into the
+  if-head run and the emitter wrapped it as a condition (`if ((c)return e)
+  {}`, runtime SyntaxError); (2) `for`/`while`-led run pieces emitted
+  VERBATIM (no lowering inside inline atom runs — `for i in 0..n{…}` shipped
+  raw, `""for iin 0..`). Both fixed additively (emission-side only, surface
+  unchanged — canon identity holds, 47 tests green, tsc gate clean, 16/16
+  node --check, behavior ALL MATCH): `emit_if` splits the cond-run at
+  depth-0 statement keywords (tail = then-arm); `stmtify_piece` gains
+  range-for/for-of/C-style-for/while; `STMT_BEGIN` += for/while.
+  Post-fixer evidence: task_01 7b cold PASS round 1 with the idiom.
+  Harness: `--lang js` baseline world (no guide/no transpile/no map; tasks
+  carry spec_js; js echo drafts); adapter catches socket/timeouts
+  (adapter-error instead of dying pre-report); LLM_NUM_PREDICT cap;
+  reasoning-channel fallback for content-empty thinking models (gemma4:12b
+  is operationally blocked on 16 GB — whole answer streams into
+  `reasoning`, ~2.9k tokens, content never lands). **J5 verdict at 3
+  scales**: post-fixer 7b = value near-miss only; qwen3.5:9b structural;
+  gemma op-block; agent-driven = task_03 PASS round 1 BOTH worlds (first
+  task_03 IR pass). **J6 v1 (report_j6_pipeline.md): the ≥30%
+  whole-pipeline number is falsified at small-feature scale** — one-shot
+  IR 206–316% of js per feature, amortized 77–90% (break-even S≈10–15);
+  write-side compression real (48–55%), loop scaffolding consumes it at
+  300-char feature scale; follow-ups: corpus-scale features,
+  multi-feature-per-file, leaner feedback. **Next session: J6 at
+  corpus-scale/multi-feature (re-measure or re-scope the north-star
+  framing), then Phase-4 open (4.1 tree-sitter).**
 - **v4.3 (2026-10-09, later)** — **J4 done** (`8526982`): `@use` with dotted
   usage lowers to a namespace import (`import * as Helpers …`) — the
   qualifier is a module object in ESM, so cross-module calls work verbatim;

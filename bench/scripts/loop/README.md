@@ -37,12 +37,31 @@ LLM_API_KEY=sk-… LLM_MODEL=gpt-5.1 python3 llm_loop.py run \
 LLM_BASE_URL=http://localhost:11434/v1 LLM_API_KEY=ollama LLM_MODEL=qwen2.5-coder:7b \
   LLM_NUM_CTX=16384 python3 llm_loop.py run \
   --task tasks/task_01_stringops.task.json --adapter openai --rounds 6
-```
 
 # real run — driven by hand/agent (harness waits on the reply file)
 python3 llm_loop.py run --task tasks/task_01_stringops.task.json \
   --adapter file --reply-file /tmp/reply.md
 # → do the transcript at runs/<id>_file_<stamp>/prompt-R01.md, write answer to /tmp/reply.md
+```
+
+## Baseline world (`--lang js`, J6 whole-pipeline measurement)
+
+Same loop, same tasks/cases/rig — but the model writes `feature.js`
+directly: **no guide, no transpile, no span map**. This is the baseline
+agent-file world (the model could have written JS in the first place);
+the spend comparison pairs each IR run against a js run of the same
+task+model. Tasks carry a `spec_js` mirror of the spec; the echo adapter
+is backed by `echo_draft_js`/`echo_fix_js`.
+
+```sh
+python3 llm_loop.py selftest --lang js
+LLM_BASE_URL=http://localhost:11434/v1 LLM_API_KEY=ollama LLM_MODEL=qwen2.5-coder:7b \
+  LLM_NUM_CTX=16384 python3 llm_loop.py run \
+  --task tasks/task_01_stringops.task.json --adapter openai --lang js --rounds 6
+
+# whole-pipeline token report (pairs ir vs js runs on task+model)
+bench/.venv/bin/python pipeline_tokens.py            # table to stdout
+bench/.venv/bin/python pipeline_tokens.py --json     # machine output
 ```
 
 ## Real-run findings (2026-10-09, ollama models)
@@ -62,11 +81,22 @@ Recorded in `runs/` per run; the operational findings so far:
 - **value-failures have no stack trace** (expected-vs-got only), so the
   span map can't localize; the feedback then includes the numbered IR +
   per-case got/expected.
+- **thinking models: content stays EMPTY when reasoning eats the budget**
+  (gemma4:12b streams ~2.9k tokens into `reasoning`, never reaches
+  `content`, `finish_reason=length`). The adapter falls back to the
+  reasoning text; `LLM_NUM_PREDICT=3072` bounds runaway generation. On a
+  16 GB machine use `LLM_NUM_CTX=8192` for 12b-class models (16384 makes
+  rounds glacial — unified-memory swapping).
+- **socket timeouts must not kill the loop**: a 600s in-flight request on
+  a busy server used to crash the harness pre-report; adapter errors are
+  now recorded as an `adapter-error` round and the run ends cleanly.
 - **task difficulty classes observed**: transpile-errors (repairable —
   models fix these well), value-fail near-misses (model-dependent; 7b
   iterated but didn't converge in 6 rounds on task_03), structural
   (Pythonisms / unindented lines from general — not code-tuned — models).
 
-Each run gets `runs/<task>_<adapter>_<stamp>/` with per-round transcripts,
-IR, emitted JS, the span map, the rig, and `report.md` (round table +
-verdict). The 2.7 deliverable is the real-model report(s) in this directory.
+Each run gets `runs/<task>_<adapter>[_-js]_<stamp>/` with per-round transcripts,
+IR (or the js feature), emitted JS, the span map (ir world only), the rig, and
+`report.md` (round table + verdict). The 2.7 deliverable is the real-model
+report(s) in this directory; `pipeline_tokens.py` is the J6 deliverable (spend
+over rounds actually spent, paired against the js baseline world).

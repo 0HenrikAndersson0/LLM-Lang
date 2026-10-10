@@ -187,8 +187,8 @@ Context:
   9       }
 ```
 
-Fix the problem and re-emit the COMPLETE corrected .ir file in one fenced ir block.
+Fix the problem and re-emit the COMPLETE corrected ir file in one fenced ir block.
 
 ## Reply
 
-(complete .ir file in one fenced ir block)
+(complete ir file in one fenced ir block)

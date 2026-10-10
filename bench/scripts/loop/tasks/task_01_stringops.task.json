@@ -4,6 +4,7 @@
   "guide": "teach.md",
   "requires": ["CompactLabel"],
   "spec": "# Task: CompactLabel\n\nWrite the complete .ir file (one fenced ir block) implementing exactly:\n\n```\nexport fn CompactLabel(String s) String\n```\n\nSemantics:\n1. trim surrounding whitespace from `s`\n2. if the result is empty, return `-`\n3. split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. take the first character of each word, uppercased\n5. concatenate those characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nFollow the guide: real JS runtime (ESM), no C#-isms, explicit `return` inside try/branches is safest.",
+  "spec_js": "# Task: CompactLabel\n\nWrite the complete .js module (one fenced js block) implementing exactly:\n\n```\nexport function CompactLabel(s)\n```\n\nSemantics:\n1. trim surrounding whitespace from `s`\n2. if the result is empty, return `-`\n3. split on single spaces; keep only nonempty words (runs of spaces collapse)\n4. take the first character of each word, uppercased\n5. concatenate those characters; if the result is longer than 6 characters, return its first 6 characters, otherwise the concatenation\n\nExample: `\"hello brave new world\"` -> `\"HBNW\"`; `\"\"` -> `\"-\"`.\n\nRuntime: real JS (ESM, plain V8 library only). The cases call `CompactLabel(s)` with the arguments listed below (7 cases: one arg, a String) — no CLI, no globals.",
   "cases": [
     ["CompactLabel", ["hello world"], "HW"],
     ["CompactLabel", ["hello brave new world"], "HBNW"],
@@ -14,5 +15,7 @@
     ["CompactLabel", ["  Multiple   Spaces   Here  "], "MSH"]
   ],
   "echo_draft": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w.toFirstUpper()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n",
-  "echo_fix": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w[0].toUpperCase()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n"
+  "echo_fix": "@1 @ns Bench.Task01\n\nexport fn CompactLabel(String s) String{\n  var t=s.trim()\n  if t.length==0{return \"-\"}\n  var ws=t.split(\" \").filter(w=>w.length>0)\n  var label=ws.map(w=>w[0].toUpperCase()).join(\"\")\n  return label.length>6 ? label.slice(0,6) : label\n}\n",
+  "echo_draft_js": "export function CompactLabel(s) {\n  const t = s.trim();\n  if (t.length === 0) return \"-\";\n  const ws = t.split(\" \").filter(w => w.length > 0);\n  const label = ws.map(w => w.toFirstUpper()).join(\"\");\n  return label.length > 6 ? label.slice(0, 6) : label;\n}\n",
+  "echo_fix_js": "export function CompactLabel(s) {\n  const t = s.trim();\n  if (t.length === 0) return \"-\";\n  const ws = t.split(\" \").filter(w => w.length > 0);\n  const label = ws.map(w => w[0].toUpperCase()).join(\"\");\n  return label.length > 6 ? label.slice(0, 6) : label;\n}\n"
 }
