@@ -1,7 +1,7 @@
 @1 @use domhandler @use domutils @use js
 
 export fn getParse(parser){
-  return (content, options, isDocument, context)=>{if typeof Buffer !=="undefined"&&Buffer.isBuffer(content){content=content.toString()}if typeof content==="string"{return parser(content, options, isDocument, context)}doc=content as AnyNode|"opaque:AnyNode[]"|Document if !Array.isArray(doc)&&checkIsDocument(doc){return doc}root=new Document([])update(doc, root)return root}
+  return (content, options, isDocument, context)=>{if typeof Buffer !=="undefined"&&Buffer.isBuffer(content){content=content.toString()}if typeof content==="string"{return parser(content, options, isDocument, context)}doc=content as AnyNode|Array<AnyNode>|Document if !Array.isArray(doc)&&checkIsDocument(doc){return doc}root=new Document([])update(doc, root)return root}
 }
 export fn update(newChilds: Array<AnyNode>|AnyNode, parent: ParentNode|null) ParentNode|null{
   var arr=Array.isArray(newChilds)?newChilds:[newChilds]

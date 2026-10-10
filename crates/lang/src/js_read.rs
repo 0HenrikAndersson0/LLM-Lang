@@ -1890,8 +1890,12 @@ impl<'a> JsReader<'a> {
                 }
                 v
             }
-            "generic_type" | "type_identifier" | "predefined_type" | "identifier" => {
-                vec![Atom::Ident(self.type_text(node))]
+            "generic_type" | "type_identifier" | "predefined_type" | "identifier"
+            | "array_type" | "lookup_type" | "object_type" => {
+                // signature-surface leaves spell through type_text (tight
+                // unions; Array<T>; lookup → member; object_type → empty)
+                let t = self.type_text(node);
+                if t.is_empty() { vec![] } else { vec![Atom::Ident(t)] }
             }
             "type_arguments" => {
                 let mut v = vec![Atom::Sym("<".into())];

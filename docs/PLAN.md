@@ -122,14 +122,14 @@ pipeline token number measured.
 
 ---
 
-## Phase 4 — Round-trip JS → IR (JS only in v4)
+## Phase 4 — Round-trip JS → IR (JS only in v4) — **EXITS 2026-10-10**
 
 **Goal:** Existing JS → lossy IR, meeting the §5 fidelity budget and the
 double-round-trip acceptance criterion (JS → IR → JS compiles and behaves
 identically). C# round-trip moves behind the C# target phase.
 
 **Exit:** double round-trip holds over the js_* corpus; actual §5 budget
-documented.
+documented. — **MET** (`bench/results-round-trip.md`; `docs/fidelity.md`).
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
@@ -137,8 +137,8 @@ documented.
 | 4.2 | IR-form coverage audit on js corpus: % of constructs representable in core+ sugar | coverage report | ☑ — `bench/results-coverage.md` + `bench/scripts/coverage_audit.py` (verdict table per kind, evidence rows via per-file histograms): **4398 nodes / 145 kinds over the 7 js_*.ts files; 2233 constructs the reader must map; 100.0% representable** — core 1576/51 kinds (direct core form or verbatim surface per hand renders: `new`, `typeof`, `delete`, `as`, `?.` all pass through), sugar 14/4 (templates→interpolation, `i++`→`+=`, fn-expr→arrow), signature 634/23 (types erased to signatures, §3/§6.6), `opaque type` capture 8/1 (js_02 union/template aliases, reconcile row 21 — bounded loss), grammar-gap 1 (ts grammar lacks `export type *`, construct = Core::Reexport). Comments dropped by design (§6.1). Reader (4.4) has no representability blockers |
 | 4.3 | Mapping table: JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☑ — js-target.md §8: capture design (verify-grounded: `Body::Opaque`, `opaque` modifier, `opaque:` atoms, `opaque{ raw }` bodies all exist in expander/printer; `opaque type` canon rows js_02.ir:5-9), capture rules (whole declaration/member, never partial expr; verbatim print identity), exhaustive capture sites, mapping table by audit bucket (core/verbatim incl. `new`/`typeof`/`delete`/`as`/`?.`; sugar canon: templates→interpolation, `i++`→`+=`, fn-expr→arrow; signature erasure incl. lookup-type member resolution; opaque = union/template aliases only; comments dropped by design), reader-side reclassification of the 2.4 accepted-v0 rows, ts-grammar ERROR fallback rule |
 | 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ☑ — `read_js` walk complete + `irc from-js` CLI; **canon identity: print(read(js)) ≡ print(expand(print(read(js)))) on all 7 js_*.ts files + 30 construct-row smoke** (`cargo test --lib roundtrip_tests`); re-classifications per §8.4/§8.2 — reexports→Reexport (named/type/star), alias split (interface-shaped vs `opaque type` union/template), overload signatures dropped, fn type-params dropped (expander reparse convention), type predicates→Bool, private-class members opaque-captured, `?.`/`as const`/lookup-type/cstyle-for→range canon; canon-shape truths documented in js-target §8.4 |
-| 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ◐ — **leg 1 green**: JS → IR canon → JS `node --check` **7/7** (first time js_04/05/06 pass any compile gate on machine canon) and behavior harness cases (js_01 22 + domEach side-effects, js_08 6 flattenOptions) **all match** vs originals. Remaining: tsc stricter gate on the TS corpus + full report incl. the 2.4 accepted-v0 reclassification diff-vs-hand row |
-| 4.6 | Document actual §5 budget (what was dropped in practice) | fidelity doc | ☐ |
+| 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ☑ — **`bench/results-round-trip.md`: both round-trip legs green.** node --check 7/7; **tsc stricter gate 7/7** (the Phase-2 forward pipeline managed 3/7 — the reader's CST-level classification closed the inline-run/re-export rows); canon stability re-verified; behavior via the J1 harness `RT_MODE=1` (mode added with per-mode stub sets; hand-mode unchanged): js_01 (22 + domEach side-effects), js_08 (8), linked control — **BEHAVIOR-MATCH all 3**; diff-vs-hand catalog split into printer conventions vs fidelity drops (→ fidelity doc); one additive reader fix found by the gate (`alias_body_atoms` union leaves) |
+| 4.6 | Document actual §5 budget (what was dropped in practice) | fidelity doc | ☑ — `docs/fidelity.md`: ✅ full statement/control-flow/expr surface incl. `?.`/`as const`/capture re-print; ◐ 16 recorded bounded rows (comments, types, fn type-params, overloads, fn-typed annotations, predicates→Bool, `@ns`, printer-surface kind/bases/generics drop, private members, destructured v0, postfix-`++` value forms); the 4.2 representability claim confirms in practice — 6/7 files zero captures, js_02 peaks at 8 alias rows |
 
 > [3] **`(opaque …)` passthrough:** unrepresentable members are captured
 > verbatim (spans + original text) and re-emitted untouched by the printer.
@@ -317,7 +317,19 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v4.10 (2026-10-10, latest)** — **4.4 done: JS reader + canon identity + re-emit gate.**
+- **v4.11 (2026-10-10, latest)** — **4.5 + 4.6 done — Phase 4 exits.**
+  Double round-trip JS → IR canon → JS: node --check **7/7**, **tsc 7/7**
+  (vs 3/7 forward in 2.4 — the reader closed the inline-run/re-export rows),
+  behavior via J1-harness `RT_MODE=1`: **3/3 subjects BEHAVIOR-MATCH** (hand
+  mode re-verified after the harness edit). Report
+  `bench/results-round-trip.md` (gate table, diff-vs-hand catalog split into
+  printer conventions vs fidelity drops, one additive reader fix the gate
+  found — `alias_body_atoms` union leaves). `docs/fidelity.md` (4.6): the
+  actual §6 budget in practice — 6/7 corpus files capture-free, js_02 peaks
+  at 8 `opaque type` alias rows; 16 bounded rows recorded; the double-trip
+  acceptance holds with that budget. **Phase 5 (C# target) now opens
+  (5.1 design note next).**
+- **v4.10 (2026-10-10, later)** — **4.4 done: JS reader + canon identity + re-emit gate.**
   `read_js` (js_read.rs, tree-sitter CST → Core) + `irc from-js`. The identity gate
   (canon → IR reader → expand → print) held after closing reader canon bugs (union
   tightness, lookup-type object, property-signature `?`, braceless if/for arms, bare

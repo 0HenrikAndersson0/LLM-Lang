@@ -314,6 +314,9 @@ rows stable). These are canon-shape truths, not design drift:
   inline onto the head (`for i in 0..len{fn(array[i], i)}`).
 - **`x?.y` reads the member's inline `optional_chain` child** and canon
   spells `?.` as two syms (lex-stable).
+- **Alias/`as` union leaves spell through `type_text`** (array/lookup/object
+  leaves included) — an as-union like `AnyNode | AnyNode[] | Document` stays
+  representable text instead of capturing (4.5 tsc-gate fix).
 - **`!==` needs a space before the operator in canon** — the frozen ident
   suffix rule (`x!`) makes glued `a!==` lex `a!` + `==`, which then drops
   the `!` at emit. `render_atoms` spaces before `!`-prefixed syms

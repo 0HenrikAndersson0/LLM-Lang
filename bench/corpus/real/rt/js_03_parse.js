@@ -4,7 +4,7 @@ import "./js.js";
 
 
 export function getParse(parser) {
-  return (content, options, isDocument, context)=>{ if (typeof Buffer!=="undefined"&&Buffer.isBuffer(content)) { content=content.toString(); } if (typeof content==="string") { return parser(content, options, isDocument, context); } doc=content"opaque:AnyNode[]"|Document; if (!Array.isArray(doc)&&checkIsDocument(doc)) { return doc; } root=new Document([]); update(doc, root); return root; };
+  return (content, options, isDocument, context)=>{ if (typeof Buffer!=="undefined"&&Buffer.isBuffer(content)) { content=content.toString(); } if (typeof content==="string") { return parser(content, options, isDocument, context); } doc=content; if (!Array.isArray(doc)&&checkIsDocument(doc)) { return doc; } root=new Document([]); update(doc, root); return root; };
 }
 
 export function update(newChilds, parent) {

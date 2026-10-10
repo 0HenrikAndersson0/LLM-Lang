@@ -10,6 +10,7 @@ as a third check (emit==orig but != expected flags rendition drift).
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,8 @@ SUBJECTS = [
         "id": "js_01_util",
         "bind_extra": ["domEach"],
         "stubs": ["domhandler", "cheerio"],
+        # round-trip canon aliases `./cheerio.js` → last-segment `js`
+        "rt_stubs": ["domhandler", "js"],
         "cases": [
             ["camelCase", ["data-bar"], "dataBar"],
             ["camelCase", ["foo_bar_baz"], "fooBarBaz"],
@@ -67,6 +70,8 @@ SUBJECTS = [
     {
         "id": "js_08_options",
         "stubs": ["cheerioselect", "domserializer", "domhandler", "htmlparser2", "parse5", "parse5treeadapter"],
+        # round-trip canon keeps the full import's last segments
+        "rt_stubs": ["cheerioselect", "domserializer", "domhandler", "htmlparser2", "parse5", "parse5htmlparser2treeadapter"],
         "cases": [
             ["flattenOptions", [None, {"a": 1}], {"a": 1}],
             ["flattenOptions", [{}, None], {"_useHtmlParser2": False}],
@@ -96,6 +101,8 @@ SUBJECTS = [
 ]
 
 
+RT_MODE = __import__("os").environ.get("RT_MODE") == "1"
+
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
@@ -106,15 +113,19 @@ def prepare(subject):
         shutil.rmtree(work)
     work.mkdir(parents=True)
     (work / "package.json").write_text('{"type":"module"}\n')
-    for stub in subject.get("stubs", []):
+    stub_key = "rt_stubs" if os.environ.get("RT_MODE") == "1" else "stubs"
+    for stub in subject.get(stub_key, subject.get("stubs", [])):
         sp = work / f"{stub}.js"
         sp.parent.mkdir(parents=True, exist_ok=True)
         sp.write_text("// behavior-harness stub: satisfies v0 side-effect import\n")
 
     def ir_path(name):
+        # RT_MODE=1: run the harness against 4.4 round-trip canon
+        # (bench/corpus/real/rt/) instead of the hand renditions (J1 mode)
+        base = "rt" if os.environ.get("RT_MODE") == "1" else "ir"
         if subject.get("tasks_lib"):
             return HERE / subject["tasks_lib"] / f"{name}.ir"
-        return REPO / "bench" / "corpus" / "real" / "ir" / f"{name}.ir"
+        return REPO / "bench" / "corpus" / "real" / base / f"{name}.ir"
 
     def emit(name):
         src = ir_path(name)
