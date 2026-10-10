@@ -6,6 +6,8 @@ members = ["crates/lang", "crates/cli"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "Tokenizer-optimized IR language for LLM codegen: write features in a dense canonical file, transpile to JS/C#, and round-trip existing code back for cheap agent reads"
+repository = "https://github.com/henrikandersson/LLM-Lang"
 
 [workspace.dependencies]
 proptest = "1"

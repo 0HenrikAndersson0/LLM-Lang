@@ -1,0 +1,18 @@
+@1 @ns Examples.Metric
+
+// Build a number from a Metric representation: "2k" -> 2000
+export fn BuildNumber(String input, Char last) Float{
+  char.IsLetter(last)?BuildMetricNumber(input, last):double.Parse(input)
+}
+
+export fn BuildMetricNumber(String input, Char last) Float{
+  var number=double.Parse(input[..^1])
+  var indexInPositive=Symbols[0].IndexOf(last)
+  if indexInPositive>=0{
+    var exponent=(indexInPositive+1)*3.0
+    return number*Math.Pow(10, exponent)
+  }
+  var indexInNegative=Symbols[1].IndexOf(last)
+  var exponent2=(indexInNegative+1)*3.0
+  return number*Math.Pow(10, -exponent2)
+}

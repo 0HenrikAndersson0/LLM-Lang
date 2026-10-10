@@ -3,7 +3,9 @@ name = "ir-lang"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Tokenizer-optimized IR language for LLM codegen: reader, expander, printers"
+description = "The IR library: reader (JS/TS/C# via tree-sitter), expander, canonical printer, JS/C# emitters"
+keywords = ["llm", "ir", "codegen", "transpiler", "tree-sitter"]
+categories = ["development-tools", "compilers"]
 
 [dependencies]
 proptest = { workspace = true }

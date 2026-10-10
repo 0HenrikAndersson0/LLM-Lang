@@ -3,7 +3,7 @@ name = "irc"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "CLI for the IR language: parse, expand, print"
+description = "irc — the IR toolchain CLI: parse, expand, to-js, to-cs, from-js, from-cs (round-trip)"
 
 [[bin]]
 name = "irc"

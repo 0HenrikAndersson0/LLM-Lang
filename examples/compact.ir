@@ -1,0 +1,13 @@
+@1 @ns Examples.Compact
+
+// CompactLabel: first letters of a label (JS idiom)
+export fn CompactLabel(String s) String{
+  var t=s.trim()
+  if t.length==0{return "-"}
+  return t.split(" ").filter(w=>w.length>0).map(w=>w[0].toUpperCase()).join("").slice(0,6)
+}
+
+// Take: first n items
+export fn Take(List<String> xs, Int n) List<String>{
+  xs.slice(0, n)
+}
