@@ -2,8 +2,10 @@ namespace Humanizer;
 
 public class DefaultFormatter
 {
-    readonly LocalePhraseTable PhraseTable = phraseTable;
-    readonly CultureInfo Culture;
+    readonly DefaultFormatter EnglishFallback = new (CultureInfo.GetCultureInfo("en"));
+    LocalePhraseTable phraseTable;
+    LocalePhraseTable PhraseTable => phraseTable;
+    CultureInfo Culture;
     DefaultFormatter(CultureInfo culture)
     {
         Culture=culture;

@@ -44,8 +44,101 @@ pub fn read_cs(src: &str) -> Result<Vec<Core>, CsReadError> {
             }
         }
     }
+    // mut-overlabel post-pass: canon keeps only export/const/volatile —
+    // fields whose names are ASSIGNED anywhere in the file are mutable for
+    // the C# emit (readonly + assignment = CS0191); `mut` rides the Var
+    // row (canon row `… var mut X` re-parses; the JS reader does the same
+    // over-label for let-declared locals)
+    let assigned = collect_assigned(&out);
+    overlabel_fields(&mut out, &assigned);
     out.insert(0, r.header_core());
     Ok(out)
+}
+
+/// assignment-target names anywhere in the core tree
+fn collect_assigned(core: &[Core]) -> Vec<String> {
+    let mut out = vec![];
+    for c in core {
+        assigned_in_core(c, &mut out);
+    }
+    out.dedup();
+    out
+}
+
+fn assigned_in_core(c: &Core, out: &mut Vec<String>) {
+    let atoms: Vec<Atom> = match c {
+        Core::Expr(atoms, _) => atoms.clone(),
+        Core::Stmt { head, body, arms, .. } => {
+            let mut hs = head.clone();
+            match body {
+                Body::Bare(v) | Body::Block(v) => {
+                    for st in v { assigned_in_core(st, out); }
+                }
+                Body::Inline(a) => hs.extend(a.clone()),
+                Body::Opaque(_) => {}
+            }
+            for a in arms {
+                if let Body::Bare(v) = &a.body {
+                    for st in v { assigned_in_core(st, out); }
+                }
+            }
+            assigned_in_core(&Core::Expr(hs, crate::expander::SPAN_SYNTH), out);
+            return;
+        }
+        Core::Var(v) => match &v.value { Some(a) => a.clone(), None => vec![] },
+        Core::Fn(f) => { assigned_in_core(&Core::Expr(Vec::new(), crate::expander::SPAN_SYNTH), out); match &f.body { Body::Bare(v) | Body::Block(v) => { for st in v { assigned_in_core(st, out); } }, Body::Inline(a) => { return assigned_in_atoms_in_place(a, out); }, _ => {} }; return; }
+        Core::Type(t) => {
+            for m in &t.members { assigned_in_core(m, out); }
+            return;
+        }
+        _ => return,
+    };
+    assigned_in_atoms_in_place(&atoms, out);
+}
+
+fn assigned_in_atoms_in_place(atoms: &[Atom], out: &mut Vec<String>) {
+    for (i, a) in atoms.iter().enumerate() {
+        if let Atom::Ident(name) = a {
+            if let Some(op) = atoms.get(i + 1) {
+                if matches!(op, Atom::Sym(sop) if matches!(sop.as_str(), "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=")) {
+                    out.push(name.clone());
+                }
+            }
+            // assignments at run-start or after structural prefixes
+            let _ = i;
+        }
+    }
+}
+
+fn overlabel_fields(core: &mut [Core], assigned: &[String]) {
+    for c in core.iter_mut() {
+        match c {
+            Core::Var(v) => {
+                if !v.modifiers.iter().any(|m| m == "mut")
+                    && assigned.iter().any(|x| x == &v.name)
+                {
+                    v.modifiers.push("mut".into());
+                }
+            }
+            Core::Type(t) => overlabel_fields(&mut t.members, assigned),
+            Core::Fn(f) => {
+                if let Body::Bare(v) | Body::Block(v) = &mut f.body {
+                    overlabel_fields(v, assigned);
+                }
+            }
+            Core::Stmt { body, arms, .. } => {
+                if let Body::Bare(v) | Body::Block(v) = body {
+                    overlabel_fields(v, assigned);
+                }
+                for a in arms {
+                    if let Body::Bare(v) | Body::Block(v) = &mut a.body {
+                        overlabel_fields(v, assigned);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 pub struct CsReadError {
@@ -380,7 +473,7 @@ impl<'a> CsReader<'a> {
                 }
                 if let Some(p) = params_node {
                     if p.kind() == "parameter_list" {
-                        if let Some(inner) = p.child(1) { v.extend(self.atomize(inner)); }
+                        v.extend(self.lambda_params_atoms(p));
                     } else {
                         v.extend(self.atomize(p));
                     }
@@ -431,14 +524,36 @@ impl<'a> CsReader<'a> {
                     v.extend(self.args_atoms(args));
                     v.push(Atom::Sym(")".into()));
                 }
+                // `new T { { key, value }, … }` dict-initializer entries —
+                // verbatim descent (round-initializer braces are data in
+                // canon; the emit re-renders them verbatim)
+                if let Some(init) = node.child_by_field_name("initializer") {
+                    // verbatim carries its own brace pair (initializer braces)
+                    let mut iv = vec![];
+                    self.verbatim_atoms(init, &mut iv);
+                    v.extend(iv);
+                }
                 v
             }
             "implicit_object_creation_expression" => {
-                let mut v = vec![Atom::Ident("new".into()), Atom::Sym("(".into())];
-                if let Some(args) = node.child_by_field_name("argument_list") {
-                    v.extend(self.args_atoms(args));
+                // `new(args)` — the argument_list child carries no field name
+                let mut v = vec![Atom::Ident("new".into())];
+                let mut nc = node.walk();
+                if nc.goto_first_child() {
+                    loop {
+                        if nc.node().kind() == "argument_list" {
+                            v.push(Atom::Sym("(".into()));
+                            v.extend(self.args_atoms(nc.node()));
+                            v.push(Atom::Sym(")".into()));
+                            break;
+                        }
+                        if !nc.goto_next_sibling() { break; }
+                    }
                 }
-                v.push(Atom::Sym(")".into()));
+                if !v.last().map(|a| matches!(a, Atom::Sym(sp) if sp == ")")).unwrap_or(false) {
+                    v.push(Atom::Sym("(".into()));
+                    v.push(Atom::Sym(")".into()));
+                }
                 v
             }
             "argument" => {
@@ -571,6 +686,40 @@ impl<'a> CsReader<'a> {
         Core::Stmt { head, body: Body::Inline(vec![]), arms, span }
     }
 
+    /// lambda parameter list → atoms: `(a, b)` (only the first parameter was
+    /// taken via child(1) — multi-param lambdas lost the rest; the expander
+    /// canon splits at emit)
+    fn lambda_params_atoms(&self, params_node: tree_sitter::Node) -> Vec<Atom> {
+        let mut v = vec![];
+        let mut c = params_node.walk();
+        let mut pc = 0usize;
+        v.push(Atom::Sym("(".into()));
+        if c.goto_first_child() {
+            loop {
+                let n = c.node();
+                if !matches!(n.kind(), "(" | ")" | "," | "comment") {
+                    if pc > 0 && !v.is_empty() {
+                        v.push(Atom::Sym(",".into()));
+                    }
+                    if n.kind() == "parameter" {
+                        // named params: the name ident
+                        if let Some(name) = n.child_by_field_name("name") {
+                            v.push(Atom::Ident(text(name, self.src).to_string()));
+                        } else {
+                            v.extend(self.atomize(n));
+                        }
+                    } else {
+                        v.extend(self.atomize(n));
+                    }
+                    pc += 1;
+                }
+                if !c.goto_next_sibling() { break; }
+            }
+        }
+        v.push(Atom::Sym(")".into()));
+        v
+    }
+
     /// pattern nodes → atoms (`{}-binder, relational, type patterns, `not`)
     fn pattern_atoms(&self, node: tree_sitter::Node) -> Vec<Atom> {
         match node.kind() {
@@ -622,6 +771,36 @@ impl<'a> CsReader<'a> {
 
     /// breadth leaf-walk fallback: every terminal word/sym atom
     fn verbatim_atoms(&self, node: tree_sitter::Node, v: &mut Vec<Atom>) {
+        // character literals: wrapper nodes with quote-char children — canon
+        // is the Str form (the descent into quote-syms produces `'a'` rows
+        // that re-lex differently on round 2)
+        if node.kind() == "character_literal" {
+            let t = text(node, self.src);
+            v.push(Atom::Str(t.trim_matches(|c| c == '\'').replace("\\'", "'").to_string()));
+            return;
+        }
+        if node.kind() == "string_literal" {
+            // canon as Str (the quote-char leaves would glue `""…""` rows)
+            let sub = node.walk();
+            let sub_node = sub.node();
+            let t = if sub_node.child_count() > 2 {
+                let mut acc = String::new();
+                let mut cc = node.walk();
+                if cc.goto_first_child() {
+                    loop {
+                        if cc.node().kind() == "string_literal_content" {
+                            acc.push_str(text(cc.node(), self.src));
+                        }
+                        if !cc.goto_next_sibling() { break; }
+                    }
+                }
+                acc
+            } else {
+                text(node, self.src).trim_matches('"').to_string()
+            };
+            v.push(Atom::Str(t));
+            return;
+        }
         let mut c = node.walk();
         if !c.goto_first_child() {
             let k = node.kind();
@@ -641,6 +820,12 @@ impl<'a> CsReader<'a> {
                 }
                 "integer_literal" | "real_literal" | "decimal_literal" => {
                     v.push(Atom::Number(t.to_string()));
+                }
+                "character_literal" => {
+                    // canon chars are Str atoms (double-quoted print; the
+                    // verbatim Sym would re-lex as a Str on round 2 anyway)
+                    eprintln!("CHARARM t={t:?}");
+                    v.push(Atom::Str(t.trim_matches(|c| c == '\'').replace("\\'", "'").to_string()));
                 }
                 ";" => {
                     v.push(Atom::Sym(String::new()));
@@ -1033,7 +1218,19 @@ impl<'a> CsReader<'a> {
     fn field_decl(&mut self, node: tree_sitter::Node) -> Vec<Core> {
         let mut rows = vec![];
         let mods = self.modifiers_raw(node);
-        let decl = node.child_by_field_name("declaration");
+        // the c-sharp grammar names no field for the variable_declaration
+        let decl = node.child_by_field_name("declaration").or_else(|| {
+            let mut fc = node.walk();
+            if fc.goto_first_child() {
+                loop {
+                    if fc.node().kind() == "variable_declaration" {
+                        return Some(fc.node());
+                    }
+                    if !fc.goto_next_sibling() { break; }
+                }
+            }
+            None
+        });
         if let Some(vd) = decl {
             let ty = vd.child(0).map(|t| self.type_text(t)).unwrap_or_default();
             let mut c = vd.walk();
@@ -1073,11 +1270,16 @@ impl<'a> CsReader<'a> {
             } else {
                 self.atomize(arrow)
             };
+            let mut mods = canon_modifiers(&mods);
+            if is_arrow {
+                mods.push("computed".into());
+            }
+            mods.dedup();
             return vec![Core::Var(VarDecl {
                 name,
                 ty: Some(ty),
                 value: Some(atoms),
-                modifiers: canon_modifiers(&mods),
+                modifiers: mods,
                 objlit: None,
                 span,
             })];

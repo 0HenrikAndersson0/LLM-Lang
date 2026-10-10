@@ -45,8 +45,8 @@ class DefaultCollectionFormatter
     {
         return collection switch
         {
-            ICollection<T> items => new (),
-            IReadOnlyCollection<T> items => new (),
+            ICollection<T> items => new (items.Count),
+            IReadOnlyCollection<T> items => new (items.Count),
             _ => []
         };
     }

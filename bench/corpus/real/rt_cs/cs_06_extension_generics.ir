@@ -89,7 +89,7 @@ type ByteSizeExtensions export{
     }
     var formatter=Configurator.GetFormatter(culture)
     var isNegative=input.Bits<0
-    var remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
+    var mut remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
     if remainingBits==0{
       return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol:!toWords))
     }
@@ -132,12 +132,12 @@ type ByteSizeExtensions export{
       formatProvider=LocaleNumberFormattingOverrides.GetFormattingNumberFormat(culture)
     }
     var formatter=Configurator.GetFormatter(culture)
-    var builtInFormatter=formatter as DefaultFormatter
+    var mut builtInFormatter=formatter as DefaultFormatter
     if builtInFormatter is not null &&formatter.GetType().Assembly !=typeof (DefaultFormatter).Assembly{
       builtInFormatter=null
     }
     var isNegative=input.Bits<0
-    var remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
+    var mut remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
     var units=unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits:BinaryCompositeUnits
     if remainingBits==0{
       return string.Concat("0 ", toWords?humanizeUnit(DataUnit.Bit, 0):ByteSize.BitSymbol)
@@ -172,7 +172,9 @@ type ByteSizeExtensions export{
     }
     fn humanizeUnit(dataUnit DataUnit, count Int64) String{builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol:false ):formatter.DataUnitHumanize(dataUnit, count, toSymbol:false )}
   }
+  Array<CompositeUnit> DecimalCompositeUnits =[new (ByteSize.BytesInDecimalExabyte, "EB", DataUnit.DecimalExabyte), new (ByteSize.BytesInDecimalPetabyte, "PB", DataUnit.DecimalPetabyte), new (ByteSize.BytesInDecimalTerabyte, "TB", DataUnit.DecimalTerabyte), new (ByteSize.BytesInDecimalGigabyte, "GB", DataUnit.DecimalGigabyte), new (ByteSize.BytesInDecimalMegabyte, "MB", DataUnit.DecimalMegabyte), new (ByteSize.BytesInDecimalKilobyte, "kB", DataUnit.DecimalKilobyte)]
+  Array<CompositeUnit> BinaryCompositeUnits =[new (ByteSize.BytesInPebibyte, "PiB", DataUnit.BinaryPebibyte), new (ByteSize.BytesInTebibyte, "TiB", DataUnit.BinaryTebibyte), new (ByteSize.BytesInGibibyte, "GiB", DataUnit.BinaryGibibyte), new (ByteSize.BytesInMebibyte, "MiB", DataUnit.BinaryMebibyte), new (ByteSize.BytesInKibibyte, "KiB", DataUnit.BinaryKibibyte)]
   type CompositeUnit{
   }
-  fn ByteSize.Per(size: this ByteSize, interval TimeSpan) ByteRate{new ()}
+  fn ByteSize.Per(size: this ByteSize, interval TimeSpan) ByteRate{new (size, interval)}
 }

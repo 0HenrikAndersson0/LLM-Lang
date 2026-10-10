@@ -2,6 +2,12 @@ namespace Humanizer;
 
 public class LocaliserRegistry
 {
+    readonly Dictionary<string,Func<CultureInfo,TLocaliser>> localisersBuilder = [];
+    readonly object lockObject = new ();
+    volatile FrozenDictionary<string,Func<CultureInfo,TLocaliser>>? frozenLocalisers;
+    Func<CultureInfo,TLocaliser> defaultLocaliser;
+    readonly ConditionalWeakTable<CultureInfo,StrongBox<TLocaliser>> cultureSpecificCache = new ();
+    volatile bool useGeneratedCultureResolver;
     LocaliserRegistry(TLocaliser defaultLocaliser)
     {
         this .defaultLocaliser=_ => defaultLocaliser;
@@ -15,7 +21,7 @@ public class LocaliserRegistry
     internal TLocaliser ResolveForCulture(CultureInfo? culture)
     {
         var cultureInfo = culture??CultureInfo.CurrentCulture;
-        return cultureSpecificCache.GetValue(cultureInfo, c => new ()).Value!;
+        return cultureSpecificCache.GetValue(cultureInfo, c => new (FindLocaliser(c)(c))).Value!;
     }
     internal void Register(string localeCode, TLocaliser localiser)
     {

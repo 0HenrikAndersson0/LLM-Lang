@@ -1143,6 +1143,54 @@ fn stmts_from_inline(a: &[Atom], level: usize, out: &mut String, ret_gate: bool)
 
 fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLowerError> {
     let ind = IND.repeat(level);
+    // assigned-name scan for member fields: the canon print drops member
+    // mut/const (print_member renders only volatile) — the emit restores
+    // mutability from its own row scan (`readonly` + assignment = CS0191)
+    let mut assigned: Vec<String> = vec![];
+    fn scan_assigned_at(atoms: &[Atom], out: &mut Vec<String>) {
+        for (i, a) in atoms.iter().enumerate() {
+            if let Atom::Ident(name) = a {
+                if let Some(Atom::Sym(op)) = atoms.get(i + 1) {
+                    if matches!(op.as_str(), "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=") {
+                        out.push(name.clone());
+                    }
+                }
+            }
+        }
+    }
+    fn scan_assigned_core(core: &[Core], out: &mut Vec<String>) {
+        for c in core {
+            match c {
+                Core::Expr(atoms, _) => scan_assigned_at(atoms, out),
+                Core::Stmt { head, body, arms, .. } => {
+                    scan_assigned_at(head, out);
+                    match body {
+                        Body::Bare(v) | Body::Block(v) => scan_assigned_core(v, out),
+                        Body::Inline(a) => scan_assigned_at(a, out),
+                        Body::Opaque(_) => {}
+                    }
+                    for a2 in arms {
+                        if let Body::Bare(v) = &a2.body {
+                            scan_assigned_core(v, out);
+                        }
+                    }
+                }
+                Core::Var(v) => {
+                    if let Some(atoms) = &v.value { scan_assigned_at(atoms, out); }
+                }
+                Core::Fn(f) => match &f.body {
+                    Body::Bare(v) | Body::Block(v) => scan_assigned_core(v, out),
+                    Body::Inline(a) => scan_assigned_at(a, out),
+                    Body::Opaque(_) => {}
+                },
+                Core::Type(inner) => scan_assigned_core(&inner.members, out),
+                _ => {}
+            }
+        }
+    }
+    scan_assigned_core(&t.members, &mut assigned);
+    assigned.dedup();
+
     // extension methods force a static class (C# rule)
     let is_static_class = t.members.iter().any(|m| matches!(m, Core::Fn(f) if f.receiver.is_some()))
         && (t.kind == "class" || t.kind == "struct");
@@ -1210,7 +1258,7 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
                 out.push('\n');
             }
             Core::Var(v) => {
-                out.push_str(&member_var(v, t, level + 1)?);
+                out.push_str(&member_var(v, t, level + 1, &assigned)?);
             }
             Core::Type(inner) => emit_type(inner, level + 1, out)?,
             Core::Expr(atoms, _) if atoms.len() == 1 && matches!(&atoms[0], Atom::Str(x) if x.starts_with("opaque:")) => {
@@ -1237,7 +1285,7 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
     Ok(())
 }
 
-fn member_var(v: &VarDecl, t: &TypeDecl, level: usize) -> Result<String, CsLowerError> {
+fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> Result<String, CsLowerError> {
     let ind = IND.repeat(level);
     // sig-only member rows (ty call-shaped): `DateHumanize_Now() String` —
     // expander models ty="Name(params)" name="Ret" — INVERT (cs-target §4)
@@ -1331,7 +1379,7 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize) -> Result<String, CsLower
         if is_const {
             s.push_str("const int ");
         } else {
-            if !is_mut && t.kind != "interface" {
+            if !is_mut && t.kind != "interface" && !assigned.iter().any(|x| x == &v.name) {
                 s.push_str("readonly ");
             }
             if is_volatile {
@@ -1388,7 +1436,7 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize) -> Result<String, CsLower
         s.push_str(&v.name);
         s.push_str(" { get; set; }\n");
         return Ok(s);
-    } else if !is_mut {
+    } else if !is_mut && !assigned.iter().any(|x| x == &v.name) {
         s.push_str("readonly ");
         let mt = if ty.is_empty() { "var".to_string() } else { map_type(&ty) };
         s.push_str(&mt);

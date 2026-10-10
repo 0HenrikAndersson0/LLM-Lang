@@ -1,6 +1,9 @@
 @1 @ns Humanizer
 
 type MetricNumeralExtensions export{
+  Int Limit=27
+  Float BigLimit=Math.Pow(10, Limit)
+  Float SmallLimit=Math.Pow(10, -Limit)
   fn ShouldKeepTrailingZeros(formats MetricNumeralFormats?, decimals Int?) Bool{
     if !decimals.HasValue||!formats.HasValue||!formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros){
       return false
@@ -11,6 +14,8 @@ type MetricNumeralExtensions export{
     return true
   }
   fn FormatLongWithTrailingZeros(input Int64, decimals Int, nfi NumberFormatInfo) String{decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string("0", decimals):input.ToString(nfi)}
+  Array<List<Char>> Symbols =[["k", "M", "G", "T", "P", "E", "Z", "Y"], ["m", "μ", "n", "p", "f", "a", "z", "y"]]
+  FrozenDictionary<Char,UnitPrefix> UnitPrefixes =new Dictionary<Char, UnitPrefix>{{"Y", new ("yotta", "septillion", "quadrillion")}, {"Z", new ("zetta", "sextillion", "trilliard")}, {"E", new ("exa", "quintillion", "trillion")}, {"P", new ("peta", "quadrillion", "billiard")}, {"T", new ("tera", "trillion", "billion")}, {"G", new ("giga", "billion", "milliard")}, {"M", new ("mega", "million")}, {"k", new ("kilo", "thousand")}, {"m", new ("milli", "thousandth")}, {"μ", new ("micro", "millionth")}, {"n", new ("nano", "billionth", "milliardth")}, {"p", new ("pico", "trillionth", "billionth")}, {"f", new ("femto", "quadrillionth", "billiardth")}, {"a", new ("atto", "quintillionth", "trillionth")}, {"z", new ("zepto", "sextillionth", "trilliardth")}, {"y", new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary()
   fn String.FromMetric(input: this String) Float{
     input=CleanRepresentation(input)
     return BuildNumber(input, input[^1])
@@ -74,22 +79,22 @@ type MetricNumeralExtensions export{
   }
   fn BuildNumber(input String, last Char) Float{char.IsLetter(last)?BuildMetricNumber(input, last):double.Parse(input)}
   fn BuildMetricNumber(input String, last Char) Float{
-    var number=double.Parse(input[..^1])
+    var mut number=double.Parse(input[..^1])
     var indexInPositive=Symbols[0].IndexOf(last)
     if indexInPositive>=0{
-      var exponent=(indexInPositive+1)*3.0
+      var mut exponent=(indexInPositive+1)*3.0
       return number*Math.Pow(10, exponent)
     }else{
       var indexInNegative=Symbols[1].IndexOf(last)
-      var exponent=(indexInNegative+1)*3.0
+      var mut exponent=(indexInNegative+1)*3.0
       return number*Math.Pow(10, -exponent)
 
     }
   }
-  fn ReplaceNameBySymbol(input String) String{UnitPrefixes.Aggregate(input, current=>current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()))}
+  fn ReplaceNameBySymbol(input String) String{UnitPrefixes.Aggregate(input, (current, unitPrefix)=>current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()))}
   fn BuildRepresentation(input Int64, formats MetricNumeralFormats?, decimals Int?) String{
-    var number=Math.Abs(input/10)
-    var exponent=0
+    var mut number=Math.Abs(input/10)
+    var mut exponent=0
     while number>0{
       exponent++
       number/=10
@@ -104,13 +109,13 @@ type MetricNumeralExtensions export{
     return representation+space
   }
   fn BuildMetricRepresentation(input Int64, scale Int, formats MetricNumeralFormats?, decimals Int?) String{
-    var exponent=scale*3
-    var divisor=1L
+    var mut exponent=scale*3
+    var mut divisor=1L
     for var i=0;i<scale;i++{
       divisor*=1000
     }
-    var number=input/divisor
-    var fractionalPart=Math.Abs(input%divisor)
+    var mut number=input/divisor
+    var mut fractionalPart=Math.Abs(input%divisor)
     if Math.Abs(number)>=1000&&exponent<Symbols[0].Count*3{
       exponent+=3
       scale++
@@ -123,14 +128,14 @@ type MetricNumeralExtensions export{
     if !decimals.HasValue{
       decimals=exponent
     }
-    var fractionalPartCharacters=Array.Empty<char>()
+    var mut fractionalPartCharacters=Array.Empty<char>()
     if decimals>0{
       fractionalPartCharacters=fractionalPart.ToString().PadLeft(exponent, "0").ToCharArray()
       if !decimals.HasValue||(decimals>=fractionalPartCharacters.Length){
         decimals=fractionalPartCharacters.Length
       }else if fractionalPartCharacters[decimals.Value]>="5"{
         var isExactlyAtMidpoint=(fractionalPartCharacters[decimals.Value]=="5")&&(fractionalPartCharacters.AsSpan().Slice(decimals.Value+1).IndexOfAnyExcept("0")<0)
-        var shouldRoundUp: Bool
+        var mut shouldRoundUp: Bool
         if !isExactlyAtMidpoint{
           shouldRoundUp=true
         }else{
@@ -184,7 +189,7 @@ type MetricNumeralExtensions export{
     }
   }
   fn BuildRepresentation(input Float, formats MetricNumeralFormats?, decimals Int?) String{
-    var exponent=(Int)Math.Floor(Math.Log10(Math.Abs(input))/3)
+    var mut exponent=(Int)Math.Floor(Math.Log10(Math.Abs(input))/3)
     if !exponent.Equals(0){
       return BuildMetricRepresentation(input, exponent, formats, decimals)
     }
@@ -200,7 +205,7 @@ type MetricNumeralExtensions export{
     return representation+space
   }
   fn BuildMetricRepresentation(input Float, exponent Int, formats MetricNumeralFormats?, decimals Int?) String{
-    var number=input*Math.Pow(1000, -exponent)
+    var mut number=input*Math.Pow(1000, -exponent)
     if decimals.HasValue{
       number=Math.Round(number, decimals.Value)
     }
@@ -253,6 +258,6 @@ type MetricNumeralExtensions export{
   type UnitPrefix{
     String Name=name
     String ShortScaleWord=shortScaleWord
-    String LongScaleWord=longScaleWord??ShortScaleWord
+    String LongScaleWord => longScaleWord??ShortScaleWord
   }
 }

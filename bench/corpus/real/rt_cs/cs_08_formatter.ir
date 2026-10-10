@@ -1,7 +1,9 @@
 @1 @ns Humanizer
 
 type DefaultFormatter export{
-  LocalePhraseTable PhraseTable=phraseTable
+  DefaultFormatter EnglishFallback=new (CultureInfo.GetCultureInfo("en"))
+  LocalePhraseTable phraseTable
+  LocalePhraseTable PhraseTable => phraseTable
   CultureInfo Culture
   ctor (culture CultureInfo){
     Culture=culture
@@ -120,7 +122,7 @@ type DefaultFormatter export{
       return DataUnitHumanize(dataUnit, (Float)magnitude, toSymbol)
     }
     var form=GetDataUnitPhraseForm(dataUnit, magnitude, category)
-    var result=TryFormatDataUnitFromPhraseTable(dataUnit, (Float)magnitude, form, toSymbol, category, out var phrase)?phrase:DataUnitHumanize(dataUnit, (Float)magnitude, toSymbol)
+    var mut result=TryFormatDataUnitFromPhraseTable(dataUnit, (Float)magnitude, form, toSymbol, category, out var phrase)?phrase:DataUnitHumanize(dataUnit, (Float)magnitude, toSymbol)
     return GetDataUnitPhrasePrefix(dataUnit, magnitude, category)+result
   }
   fn TryFormatDataUnitFromPhraseTable(dataUnit DataUnit, count Float, form FormatterNumberForm, toSymbol Bool, exactCategory CardinalPluralCategory?, result: out String) Bool{
@@ -249,7 +251,7 @@ type DefaultFormatter export{
   }
   fn JoinPhraseParts(first String?, second String?, third String?, fourth String?) String{
     var partCount=0
-    var totalLength=0
+    var mut totalLength=0
     MeasurePhrasePart(first, ref partCount, ref totalLength)
     MeasurePhrasePart(second, ref partCount, ref totalLength)
     MeasurePhrasePart(third, ref partCount, ref totalLength)

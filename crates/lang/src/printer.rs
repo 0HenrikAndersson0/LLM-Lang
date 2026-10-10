@@ -470,6 +470,9 @@ fn print_member(c: &Core, level: usize) -> String {
             }
             return s;
         }
+        if v.modifiers.iter().any(|m| m == "volatile") {
+            s.push_str("volatile ");
+        }
         if let Some(ty) = &v.ty {
             s.push_str(ty);
             s.push(' ');

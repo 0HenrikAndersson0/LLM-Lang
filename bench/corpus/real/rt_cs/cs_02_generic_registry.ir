@@ -1,12 +1,18 @@
 @1 @ns Humanizer
 
 type LocaliserRegistry export{
+  Dictionary<String,Func<CultureInfo,TLocaliser>> localisersBuilder =[]
+  Object lockObject=new ()
+  volatile FrozenDictionary<String,Func<CultureInfo,TLocaliser>>? frozenLocalisers
+  Func<CultureInfo,TLocaliser> defaultLocaliser
+  ConditionalWeakTable<CultureInfo,StrongBox<TLocaliser>> cultureSpecificCache =new ()
+  volatile Bool useGeneratedCultureResolver
   ctor (defaultLocaliser TLocaliser){this.defaultLocaliser=_=>defaultLocaliser}
   ctor (defaultLocaliser Func<CultureInfo,TLocaliser>){this.defaultLocaliser=defaultLocaliser}
   fn ResolveForUiCulture() TLocaliser{ResolveForCulture(CultureInfo.CurrentUICulture)}
   fn ResolveForCulture(culture CultureInfo?) TLocaliser{
     var cultureInfo=culture??CultureInfo.CurrentCulture
-    return cultureSpecificCache.GetValue(cultureInfo, c=>new ()).Value!
+    return cultureSpecificCache.GetValue(cultureInfo, c=>new (FindLocaliser(c)(c))).Value!
   }
   fn Register(localeCode String, localiser TLocaliser){
     lock lockObject{
@@ -38,7 +44,7 @@ type LocaliserRegistry export{
     }
   }
   fn FindLocaliser(culture CultureInfo) Func<CultureInfo,TLocaliser>{
-    var frozen=frozenLocalisers
+    var mut frozen=frozenLocalisers
     if frozen==null{
       lock lockObject{
         frozen=frozenLocalisers

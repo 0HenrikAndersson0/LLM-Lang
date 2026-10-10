@@ -102,26 +102,46 @@ follow-up behind a redeclaration-aware rig.
   core-form extension is out of scope for additive-only v0). All syntax
   classes (CS1001/2/3/1525/1519/0708/0127/0201/0122…) now emit clean.
 
-## Verdict
+## 5.6 leg-2 — behavior rig (boundary documented)
 
-**5.6 leg-1 (round 1 of 2) complete**: C# → IR canon → C# re-emits
-**syntax-clean** for the whole cs corpus (9/9 — all CS1xxx/CS0xxx
-emit-structural rows fixed); canon identity 9/9 + construct smoke green.
-The remaining diagnostics decompose entirely into (a) the stub-member
-boundary and (b) 8 char-vs-string design rows. The behavior leg is gated
-behind the same library context (the corpus files are Humanizer fragments
-whose runtime needs the library's data tables); the honest v0.1 statement:
-the round-trip compiles canon-stably, behavior identity remains a
-library-context rig queued for the 5.5/5.6 exit pass. The char design row
-is recorded in `docs/fidelity.md` (the IR canon has no char atom;
-single-quote chars canon to Str — the C#-emit restores strings; behavior
-for those specific comparisons shifts — bounded, listed).
+The C# analog of the J1 behavior harness was built incrementally; the
+emitted corpus cannot RUN at v0, and the boundary decomposes precisely:
 
-Phase-5 gate 5.4 (first pass): golden gate **8/9** (1 proven-upstream),
-real-corpus emit **structure-compiles 9/9** under dotnet's syntax phase
-with every semantic diagnostic attributed to the stub-world boundary or a
-tagged fidelity row above. Thirteen additive emitter fixes shipped; both
-canon-identity suites re-verified after each. Diff-vs-hand catalog
-recorded (conventions + fidelity rows). **Next: 5.5 LLM loop test for C#
-(`--lang cs` baseline + dotnet-run feedback in `bench/scripts/loop/`), 5.6
-tree-sitter-c-sharp reader + double round-trip.**
+- **char-vs-string design rows (55 diagnostics / ~10 rows)** — `Symbols`
+  (`List<char>`, char-key dict entries), char comparisons
+  (`chars[i]=="0"`), `PadLeft(n, "0")`, `IndexOf(char)`-args, and
+  `ToString(char…)` overloads all canon as Str atoms. The C# emit restores
+  strings in char positions → compile-level type errors inside the
+  emitted data rows. Fidelity row 17; unblocking needs either a Char
+  core-form atom (frozen-grammar change → Phase-0 re-run) or a
+  reader-level char-annotation convention — Phase-6 design decisions,
+  deliberately not rushed here.
+- **stub-member rows (~195 diagnostics)** — the library API surface
+  (`ByteSize.FromBits`, the phrase-table catalogs, cross-file
+  `DataUnitHumanizeExact` — that member IS carried by the emitted file
+  now, with the internal default). The rig closes the gap only with the
+  real Humanizer library compiled alongside, which redeclares the
+  corpus's own types — the same shape 2.4 chose `--noResolve` for.
+
+What leg-2 established positively: the emitted corpus structure-compiles
+end to end for all files except the two char-row files (cs_05/cs_06 —
+every non-char row in them compiles, verified by the diagnostic
+decomposition), canon identity is stable across all 9 files, and the
+emit-side field-mutability analysis (`readonly` + assignment → CS0191)
+keeps round-tripped mutable state mutable.
+
+**Behavior identity for the C# round trip: deferred to the char-atom
+decision (Phase-6 fidelity work).** The JS leg's behavior gate (3/3
+subjects) remains the strongest verified behavior evidence in the repo.
+
+## Verdict — Phase 5 status
+
+- 5.3 golden gate: **8/9** (1 proven-upstream: the golden fragment itself
+  does not compile in its own world).
+- 5.4 real-corpus emit: **syntax-clean after the row-queue passes**;
+  every semantic diagnostic attributed (stub boundary / char design row).
+- 5.6 leg-1 round-trip: canon identity 9/9 + re-emit syntax-clean.
+- 5.6 leg-2 behavior: boundary documented above; the corpus is
+  library-context dependent.
+- **Remaining: 5.5 (LLM loop test for C#, `--lang cs`) + the Phase-6
+  char-atom decision.**

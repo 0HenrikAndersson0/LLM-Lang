@@ -2,6 +2,9 @@ namespace Humanizer;
 
 public static class MetricNumeralExtensions
 {
+    static readonly int Limit = 27;
+    static readonly double BigLimit = Math.Pow(10, Limit);
+    static readonly double SmallLimit = Math.Pow(10, -Limit);
     internal static bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
     {
         if (!decimals.HasValue||!formats.HasValue||!formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros))
@@ -16,6 +19,8 @@ public static class MetricNumeralExtensions
     }
     internal static string FormatLongWithTrailingZeros(long input, int decimals, NumberFormatInfo nfi) =>
         decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string("0", decimals): input.ToString(nfi);
+    static readonly List<char>[] Symbols = [["k", "M", "G", "T", "P", "E", "Z", "Y"], ["m", "μ", "n", "p", "f", "a", "z", "y"]];
+    static readonly FrozenDictionary<char,UnitPrefix> UnitPrefixes = new Dictionary<Char, UnitPrefix>{{"Y", new ("yotta", "septillion", "quadrillion")}, {"Z", new ("zetta", "sextillion", "trilliard")}, {"E", new ("exa", "quintillion", "trillion")}, {"P", new ("peta", "quadrillion", "billiard")}, {"T", new ("tera", "trillion", "billion")}, {"G", new ("giga", "billion", "milliard")}, {"M", new ("mega", "million")}, {"k", new ("kilo", "thousand")}, {"m", new ("milli", "thousandth")}, {"μ", new ("micro", "millionth")}, {"n", new ("nano", "billionth", "milliardth")}, {"p", new ("pico", "trillionth", "billionth")}, {"f", new ("femto", "quadrillionth", "billiardth")}, {"a", new ("atto", "quintillionth", "trillionth")}, {"z", new ("zepto", "sextillionth", "trilliardth")}, {"y", new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary();
     internal static double FromMetric(this string input)
     {
         input=CleanRepresentation(input);
@@ -113,7 +118,7 @@ public static class MetricNumeralExtensions
         }
     }
     internal static string ReplaceNameBySymbol(string input) =>
-        UnitPrefixes.Aggregate(input, current => current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()));
+        UnitPrefixes.Aggregate(input, (current, unitPrefix) => current.Replace(unitPrefix.Value.Name, unitPrefix.Key.ToString()));
     internal static string BuildRepresentation(long input, MetricNumeralFormats? formats, int? decimals)
     {
         var number = Math.Abs(input/10);
@@ -321,6 +326,6 @@ public static class MetricNumeralExtensions
     {
         readonly string Name = name;
         readonly string ShortScaleWord = shortScaleWord;
-        readonly string LongScaleWord = longScaleWord??ShortScaleWord;
+        string LongScaleWord => longScaleWord??ShortScaleWord;
     }
 }
