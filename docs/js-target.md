@@ -192,3 +192,98 @@ models write explicit `return` per the guide; statement-shaped content
 that is NOT keyword-led inside inline runs (multi-assignment pieces without
 `var`) stays verbatim; `tree-sitter` (Phase 4) is the plan of record for
 full inline-run classification.
+## 8. Round trip: JS → IR (PLAN 4.3 mapping)
+
+Direction contract (language-design §6): the reader (JS → IR) is explicitly
+lossy; the writer back is lossless *relative to the IR*. The 4.2 audit
+(bench/results-coverage.md) classified every tree-sitter CST kind in the js
+corpus; this section is the construct→form mapping the 4.4 reader implements,
+plus the `(opaque …)` capture design that bounds the loss.
+
+### 8.1 The `(opaque …)` capture design
+
+Opaque capture bounds worst-case fidelity loss at zero per member: anything
+the reader cannot map is captured **verbatim (spans + original text)** and
+re-emitted byte-identically. Rules:
+
+1. **Capture unit: the whole declaration or member — never a partial
+   expression.** A captured class member, statement, or top-level type
+   re-emits exactly as read (including its original formatting).
+2. **Storage:** the existing `Body::Opaque(String)` + the `opaque` modifier
+   word (expander §63/90) hold the captured text; canon prints it as-is —
+   captured text participates in print→print identity verbatim.
+3. **Capture sites (exhaustive):**
+   - `opaque type Name = …` — type aliases whose bodies are union/template/
+     literal machinery (§6.6, reconcile row 21; js_02.ir:5-9 are the canon
+     precedent). Interface-shaped aliases (`type X = {a: B}`) are NOT
+     captured — they map to `type X interface{`.
+   - any statement the reader cannot classify into the §2 core closure
+     (the expander's expr-statement fallback generalizes: a genuinely
+     unclassifiable *line* becomes a `fn … opaque{}` body or an
+     `opaque:`-prefixed atom — never dropped).
+   - grammar-level parse failures (the ts fallback below).
+4. **When it triggers (from the audit):** verdict `opaquetype` (8 nodes,
+   js_02 aliases) and the one `grammar` node (`export type *` is NOT opaque
+   — it maps to Core::Reexport; the audit's ERROR is the ts grammar's gap).
+5. **Double-trip acceptance:** JS → IR(±opaque) → JS must compile and
+   behave identically — opaque members guarantee this by construction.
+
+### 8.2 Mapping table (by audit bucket)
+
+**Core / verbatim** (reader emits the corresponding core form; names and
+literals pass through by floor #1):
+
+| JS construct | IR surface |
+|---|---|
+| import decl (incl. named imports) | `@use Path` (+ named form, J4) |
+| export stmt / `export {a,b} from m` / `export type *` | `export` modifier / `Core::Reexport` |
+| function declaration | `fn Name(params) Ret{…}` |
+| arrow function / function expr | `x=>e` / `x=>{…}` (block lambda) |
+| lexical decl + declarator | `var name=expr` (let/const → `var mut` canon) |
+| expression statement | statement run / `expr-statement` fallback |
+| if / else, for, for-in, while | `if c{…}else{…}` / `for i in a..b` / `for x in xs` / `while c{…}` |
+| return / throw / await / yield* | `return e` / `throw e` / `await e` |
+| call + member chain | `recv.Member(args)` — args incl. lambdas |
+| binary / unary / ternary / assignment (+=` augmented) | infix atom runs / `!x` / `c ? a : b` / `x=e`, `x+=e` |
+| subscript `a[i]` | `a[i]` |
+| `typeof x`, `delete x.k`, `x as T`, `?.` | verbatim (hand renders: js_05.ir:26-28, js_01.ir:6) |
+| `new T(args)` | `new T(args)` verbatim (cs fixtures) |
+| object literal + pairs + spread | `{ k: v, …spread }` (J1 objlit) |
+| array literal | inline literal run |
+| template string + substitutions | interpolated `"…{e}…"` (§4 sugar) |
+| regex literal + flags | regex literal (lexer 1.2) |
+| params (+ optional `p?`) | `(name? Type …)` — `?` erased at emit |
+| optional chain | `x?.y` verbatim |
+
+**Sugar (canonicalize, §6.4):** template strings → interpolation; function
+expressions → arrows; `i++` → compound assign (`i+=1`).
+
+**Signature surface (erase to types-in-signatures, §3):** type annotations,
+type arguments/parameters, predefined/generic/union/function/array/object/
+parenthesized types, literal & lookup types (`SelectOptions['quirksMode']` →
+member access on the alias, js_08.ir:24), `Boolean/unknown/void` type words,
+generic constraints & param defaults (**not encoded** — printer emits
+conventional defaults), `as`-predicates (`x is T` → §6.6 printer
+reconstruction).
+
+**Opaque capture:** type aliases with union/template machinery
+(`opaque type`, §8.1.3a).
+
+**Dropped (by design, not opaque):** comments (§6.1 — 25–40% of real
+sources); formatting normalized to canon.
+
+**Reader-side reclassification (2.4-era accepted-v0 rows):** value-position
+`match` arms stay statement-shaped (guide teaches explicit `return`);
+non-keyword-led inline statement pieces in atom runs — the 4.4 reader
+classifies these from the tree-sitter CST instead of emission-time
+heuristics (the J2/J3 `split_stmt_runs`/`stmtify_piece` classification is
+the emission-side mirror of exactly this table).
+
+### 8.3 ts-grammar fallback
+
+tree-sitter-typescript 0.23.2 reports ERROR nodes where it lacks a construct
+(`export type *` — known; mapped to `Core::Reexport`, not opaque). Rule: an
+ERROR node whose source line matches a known-representable construct gets
+its mapping; otherwise the enclosing member is captured opaque (§8.1.3c).
+The 4.2 audit histogram is the checklist: any future corpus kind landing as
+ERROR gets classified before the reader is extended.
