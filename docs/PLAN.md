@@ -190,7 +190,7 @@ rather than a silent gap.
 | 6.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☑ — **cut confirmed**: the loop evidence (2.7/4.4/5.5) never demanded tooling — the repair loop drives from emit/runtime errors + the canon guide; a spec/tutorial + the canon identity serve the authoring path. Revisit only if agent-driven authoring shows canon-drift at scale |
 | 6.4 | Versioning policy: additive-only core forms; macros absorb growth | policy doc | ☑ — `docs/versioning.md`: additive-only core forms (repo precedents), opaque-rows-fidelity principle, canon-text rules (additive rows + reader normalization; keyword renames never), the `@1`→`@2` migration rule (the char-atom flip is the named candidate), reader sugar + target lowering as the growth absorbers |
 | 6.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☑ — `docs/spec.md` (canon v1.1 reference: lexical/grammar/types/statements/members/modules/printing/round-trip) + `docs/tutorial.md` (the target-agnostic walkthrough — supersedes teach.md's JS-only subset; JS + C# idiom tables) |
-| 6.6 | Release v0.1: crates.io + example repo | release | ☐ |
+| 6.6 | Release v0.1: crates.io + example repo | release | ◐ — **prep done**: crate metadata (keywords/categories/description/publish-ready — `cargo package` verifies for both `ir-lang` and `irc`), `examples/` (the metric.cs C# round-trip + compact.js JS idiom, both verified against the gates + `examples/README`), the publish checklist remaining is the actual `cargo publish` invocation + the char-atom decision call (blocks the C# behavior rig, not the JS release) |
 
 ---
 
@@ -328,7 +328,14 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v6.1 (2026-10-10, latest)** — **6.5 ☑ + 6.3 cut-confirmed.**
+- **v6.2 (2026-10-10, latest)** — **6.6 prep ☑.** `examples/` ships:
+  `metric.ir`→`metric.cs` (the C#-idiom emit, verified) and
+  `compact.ir`→`compact.js` (the JS-idiom emit) with `examples/README`
+  showing the two-way round trip (`from-cs` re-reads). Crate metadata
+  publish-ready (`cargo package` passes for both crates; the cli pins
+  `ir-lang = { version = "0.1.0" }`). The actual `cargo publish` +
+  the char-atom decision are the remaining release calls.
+- **v6.1 (2026-10-10, later)** — **6.5 ☑ + 6.3 cut-confirmed.**
   `docs/spec.md` (the canon v1.1 reference spec — lexical/grammar/core
   forms/types/statements/members/modules/printing-invariants and the
   round-trip contract) + `docs/tutorial.md` (the target-agnostic
