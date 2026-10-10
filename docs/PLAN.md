@@ -166,9 +166,9 @@ over the cs_* corpus.
 | 5.1 | C# AST + printer design (Roslyn-inspired, namespaces/usings/attributes) | design note | ☑ — `docs/cs-target.md` §1–§3+§5: direct Core→CS emitter over Core (the js.rs shape — proven by behavior/round-trip gates; "Roslyn-inspired" = output conventions §5, not an AST layer), verbatim-first atom mapping (C#-compatible expression surface by Phase-0 design), canonical layout (4-space, file-scoped namespace, usings after ns, brace-new-line types) |
 | 5.2 | Core-form → C# lowering table (`var`, properties vs fields, switch exprs) | lowering-table doc | ☑ — cs-target §4: full Core→C# table (Header→file-scoped ns + sorted usings; fields vs computed properties per fixture conventions; sig-only member rows invert ty-shaped text; match→switch expr/stmt; lock/try/range/foreach rows; extension methods→`this`-param statics; top-level fns→synthetic static class; Reexport→drop+fidelity flag) + §6 type-word map (`Float→double`, `Array<T>→T[]`…) + §7 deferred rows (attributes, access-modifier nuance, `{get;set;}`, query syntax — none in corpus) |
 | 5.3 | C# printer | emits golden corpus | ☑ — `crates/lang/src/cs.rs` + `irc to-cs`: direct Core→C# emitter per cs-target §2–§6 (verbatim-first atoms, LINQ op map, type-word map, decl-keyword ty stripping, sig-only member inversion, switch-expr reordering else-last, async→`Task<>` upgrade, synthetic `partial` top-level class for stub rigs). **Golden gate: `dotnet build` 8/9** — 03_pipeline excluded with proven upstream cause (the golden fragment itself does not compile in its own world: `.Select(o=>o.Total)` → `List<decimal>` vs declared `List<Order>`; the original golden .cs fails identically). Field-vs-property/access-nuance rows are recorded printer-quality diffs (fidelity budget) |
-| 5.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ☐ |
+| 5.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ◐ — **`bench/results-cs-diff.md` first pass**: golden gate 8/9 (1 proven-upstream); real-corpus emit **structure-compiles 9/9** (syntax phase) under a 35-type stub world (the `--noResolve` analog — the corpus is Humanizer-library fragments); 13 additive emitter fixes shipped en route (bracket-depth, `$`-canon interpolation, keyword-space glue, `else`-arm Sym form, pattern designators restored in `split_switch_arms` — identity green, C-style-for, receiver-param prepend, static/const discipline, ctor-return gate, `new T()` fallback); tagged fidelity rows: hand-canon `<rest-omitted>` elisions, multi-line `{…}`-initializer reader loss, target-typed-new type loss, field-vs-property nuance. Remaining: full-library semantic compile (needs a redeclaration-aware rig), then 5.5/5.6 |
 | 5.5 | LLM loop test for C# | report | ☐ |
-| 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ☐ |
+| 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ◐ — `cs_read.rs` (tree-sitter-c-sharp 0.23.5) + `irc from-cs`: **canon identity green on all 9 cs_*.cs files + 17-row construct smoke** (`cargo test --lib cs_read`) — 20 reader fixes en route (verbatim-arg depth, `conditional_expression`/`null_literal`/`bool-literal` kinds, args-wrapper descent, generics-atom split for comma canon, braceless-statement bodies, `lock`/`foreach` children-scans, param modifiers/defaults `T = d` convention, char-literal canon, computed-property arrow clause, keyword-verbatim-text→Ident). All-9 corpus parses clean (no grammar gaps). rt artifacts in `bench/corpus/real/rt_cs/`; **re-emit leg: 93 syntax-class diagnostics under dotnet to root-cause** (canon-print normalized shapes vs cs.rs emit expectations — the 5.4-analog iteration queue). Not yet: queue processing + behavior leg + report |
 
 ---
 
@@ -321,7 +321,32 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
-- **v5.1 (2026-10-10, latest)** — **5.3 done: C# printer ships.** `crates/lang/src/cs.rs`
+- **v5.3 (2026-10-10, latest)** — **5.6 in flight (◐):** `cs_read.rs` ships —
+  tree-sitter-c-sharp reader + `irc from-cs`; **canon identity green on all
+  9 cs_*.cs files + 17-row construct smoke** after 20 shape fixes (args
+  wrappers, `conditional_expression`/`null_literal` kinds, generics-atom
+  splitting for the comma-glue canon, braceless-statement bodies, lock/
+  foreach children-scans, param defaults, char-literal canon, computed-
+  property arrows, keyword-verbatim→Ident text map). All 9 corpus files
+  parse clean (no ts-grammar-style gaps). rt artifacts in
+  `bench/corpus/real/rt_cs/`. **Re-emit leg opens at 93 syntax-class
+  dotnet diagnostics** — the next session queue is root-causing those
+  (canon-print normalized shapes vs cs.rs emit expectations), then the
+  behavior leg. Also: `bracket_slice`-style depth fix ported; the reader
+  canon truths now match the same conventions the JS reader locked (§8.4).
+- **v5.2 (2026-10-10, later)** — **5.4 first pass (◐):** real-corpus emit
+  under `dotnet build` — structure-compiles 9/9 (syntax phase) via a 35-type
+  stub world (the corpus is Humanizer-library fragments; member-level
+  semantics reduce to the real-library context, `--noResolve` analog).
+  13 additive emitter fixes (each identity-re-verified): bracket_slice depth,
+  cast operand, `$`-canon interpolation, pre-keyword spacing, `}`-binder
+  glue, Sym(`else`) arms, pattern-designator restoration in the expander's
+  arm splitter, C-style for, receiver-param prepend (CS0111), static/const
+  discipline, ctor tail-return, argless `new T()`, var-branch run-end brace
+  capture. Hand-canon `<rest-omitted>` elisions + initializer reader-loss +
+  dynamic-new type-loss tagged in `bench/results-cs-diff.md`. **Next: the
+  library-context semantic rig (queued), 5.5 C# loop test, 5.6 reader.**
+- **v5.1 (2026-10-10, later)** — **5.3 done: C# printer ships.** `crates/lang/src/cs.rs`
   + `irc to-cs` — direct Core→C# emitter per cs-target §2–§6. Golden gate
   `dotnet build` **8/9** (03_pipeline excluded, proven upstream: the original
   golden fragment fails identically — its `.Select(o=>o.Total)` vs declared

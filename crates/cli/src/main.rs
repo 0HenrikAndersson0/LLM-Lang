@@ -12,6 +12,15 @@ fn main() {
         Some("to-js") => to_js_files(&args[1..], map),
         Some("to-cs") => to_cs_files(&args[1..]),
         Some("from-js") => from_js_files(&args[1..]),
+        Some("from-cs") => {
+            for path in &args[1..] {
+                let src = std::fs::read_to_string(path).expect("read");
+                match ir_lang::cs_read::read_cs(&src) {
+                    Ok(core) => print!("{}", ir_lang::printer::print(&core)),
+                    Err(e) => println!("// {path}: CS-READ-ERR {e}"),
+                }
+            }
+        }
         Some("canon") => canon_files(&args[1..]),
         Some("js-kinds") => {
             // PLAN 4.2 groundwork: node-kind histogram over a JS/TS source dir

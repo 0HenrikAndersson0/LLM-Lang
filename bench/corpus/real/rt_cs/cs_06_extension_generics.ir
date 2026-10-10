@@ -1,0 +1,178 @@
+@1 @ns Humanizer
+
+type ByteSizeExtensions export{
+  fn Byte.Bits(input: this Byte) ByteSize{ByteSize.FromBits(input)}
+  fn SByte.Bits(input: this SByte) ByteSize{ByteSize.FromBits(input)}
+  fn Short.Bits(input: this Short) ByteSize{ByteSize.FromBits(input)}
+  fn UShort.Bits(input: this UShort) ByteSize{ByteSize.FromBits(input)}
+  fn Int.Bits(input: this Int) ByteSize{ByteSize.FromBits(input)}
+  fn UInt.Bits(input: this UInt) ByteSize{ByteSize.FromBits(input)}
+  fn Int64.Bits(input: this Int64) ByteSize{ByteSize.FromBits(input)}
+  fn Float.Bits(input: this Float) ByteSize{ByteSize.FromBytes(input/ByteSize.BitsInByte)}
+  fn Byte.Bytes(input: this Byte) ByteSize{ByteSize.FromBytes(input)}
+  fn SByte.Bytes(input: this SByte) ByteSize{ByteSize.FromBytes(input)}
+  fn Short.Bytes(input: this Short) ByteSize{ByteSize.FromBytes(input)}
+  fn UShort.Bytes(input: this UShort) ByteSize{ByteSize.FromBytes(input)}
+  fn Int.Bytes(input: this Int) ByteSize{ByteSize.FromBytes(input)}
+  fn UInt.Bytes(input: this UInt) ByteSize{ByteSize.FromBytes(input)}
+  fn Float.Bytes(input: this Float) ByteSize{ByteSize.FromBytes(input)}
+  fn Int64.Bytes(input: this Int64) ByteSize{ByteSize.FromBytes(input)}
+  fn Byte.Kilobytes(input: this Byte) ByteSize{ByteSize.FromKilobytes(input)}
+  fn SByte.Kilobytes(input: this SByte) ByteSize{ByteSize.FromKilobytes(input)}
+  fn Short.Kilobytes(input: this Short) ByteSize{ByteSize.FromKilobytes(input)}
+  fn UShort.Kilobytes(input: this UShort) ByteSize{ByteSize.FromKilobytes(input)}
+  fn Int.Kilobytes(input: this Int) ByteSize{ByteSize.FromKilobytes(input)}
+  fn UInt.Kilobytes(input: this UInt) ByteSize{ByteSize.FromKilobytes(input)}
+  fn Float.Kilobytes(input: this Float) ByteSize{ByteSize.FromKilobytes(input)}
+  fn Int64.Kilobytes(input: this Int64) ByteSize{ByteSize.FromKilobytes(input)}
+  fn Byte.Megabytes(input: this Byte) ByteSize{ByteSize.FromMegabytes(input)}
+  fn SByte.Megabytes(input: this SByte) ByteSize{ByteSize.FromMegabytes(input)}
+  fn Short.Megabytes(input: this Short) ByteSize{ByteSize.FromMegabytes(input)}
+  fn UShort.Megabytes(input: this UShort) ByteSize{ByteSize.FromMegabytes(input)}
+  fn Int.Megabytes(input: this Int) ByteSize{ByteSize.FromMegabytes(input)}
+  fn UInt.Megabytes(input: this UInt) ByteSize{ByteSize.FromMegabytes(input)}
+  fn Float.Megabytes(input: this Float) ByteSize{ByteSize.FromMegabytes(input)}
+  fn Int64.Megabytes(input: this Int64) ByteSize{ByteSize.FromMegabytes(input)}
+  fn Byte.Gigabytes(input: this Byte) ByteSize{ByteSize.FromGigabytes(input)}
+  fn SByte.Gigabytes(input: this SByte) ByteSize{ByteSize.FromGigabytes(input)}
+  fn Short.Gigabytes(input: this Short) ByteSize{ByteSize.FromGigabytes(input)}
+  fn UShort.Gigabytes(input: this UShort) ByteSize{ByteSize.FromGigabytes(input)}
+  fn Int.Gigabytes(input: this Int) ByteSize{ByteSize.FromGigabytes(input)}
+  fn UInt.Gigabytes(input: this UInt) ByteSize{ByteSize.FromGigabytes(input)}
+  fn Float.Gigabytes(input: this Float) ByteSize{ByteSize.FromGigabytes(input)}
+  fn Int64.Gigabytes(input: this Int64) ByteSize{ByteSize.FromGigabytes(input)}
+  fn Byte.Terabytes(input: this Byte) ByteSize{ByteSize.FromTerabytes(input)}
+  fn SByte.Terabytes(input: this SByte) ByteSize{ByteSize.FromTerabytes(input)}
+  fn Short.Terabytes(input: this Short) ByteSize{ByteSize.FromTerabytes(input)}
+  fn UShort.Terabytes(input: this UShort) ByteSize{ByteSize.FromTerabytes(input)}
+  fn Int.Terabytes(input: this Int) ByteSize{ByteSize.FromTerabytes(input)}
+  fn UInt.Terabytes(input: this UInt) ByteSize{ByteSize.FromTerabytes(input)}
+  fn Float.Terabytes(input: this Float) ByteSize{ByteSize.FromTerabytes(input)}
+  fn Int64.Terabytes(input: this Int64) ByteSize{ByteSize.FromTerabytes(input)}
+  fn Byte.Petabytes(input: this Byte) ByteSize{ByteSize.FromPetabytes(input)}
+  fn SByte.Petabytes(input: this SByte) ByteSize{ByteSize.FromPetabytes(input)}
+  fn Short.Petabytes(input: this Short) ByteSize{ByteSize.FromPetabytes(input)}
+  fn UShort.Petabytes(input: this UShort) ByteSize{ByteSize.FromPetabytes(input)}
+  fn Int.Petabytes(input: this Int) ByteSize{ByteSize.FromPetabytes(input)}
+  fn UInt.Petabytes(input: this UInt) ByteSize{ByteSize.FromPetabytes(input)}
+  fn Float.Petabytes(input: this Float) ByteSize{ByteSize.FromPetabytes(input)}
+  fn Int64.Petabytes(input: this Int64) ByteSize{ByteSize.FromPetabytes(input)}
+  fn Byte.Exabytes(input: this Byte) ByteSize{ByteSize.FromExabytes(input)}
+  fn SByte.Exabytes(input: this SByte) ByteSize{ByteSize.FromExabytes(input)}
+  fn Short.Exabytes(input: this Short) ByteSize{ByteSize.FromExabytes(input)}
+  fn UShort.Exabytes(input: this UShort) ByteSize{ByteSize.FromExabytes(input)}
+  fn Int.Exabytes(input: this Int) ByteSize{ByteSize.FromExabytes(input)}
+  fn UInt.Exabytes(input: this UInt) ByteSize{ByteSize.FromExabytes(input)}
+  fn Float.Exabytes(input: this Float) ByteSize{ByteSize.FromExabytes(input)}
+  fn Int64.Exabytes(input: this Int64) ByteSize{ByteSize.FromExabytes(input)}
+  fn Byte.Pebibytes(input: this Byte) ByteSize{ByteSize.FromPebibytes(input)}
+  fn SByte.Pebibytes(input: this SByte) ByteSize{ByteSize.FromPebibytes(input)}
+  fn Short.Pebibytes(input: this Short) ByteSize{ByteSize.FromPebibytes(input)}
+  fn UShort.Pebibytes(input: this UShort) ByteSize{ByteSize.FromPebibytes(input)}
+  fn Int.Pebibytes(input: this Int) ByteSize{ByteSize.FromPebibytes(input)}
+  fn UInt.Pebibytes(input: this UInt) ByteSize{ByteSize.FromPebibytes(input)}
+  fn Float.Pebibytes(input: this Float) ByteSize{ByteSize.FromPebibytes(input)}
+  fn Int64.Pebibytes(input: this Int64) ByteSize{ByteSize.FromPebibytes(input)}
+  fn ByteSize.Humanize(input: this ByteSize, format: String? = null) String{string.IsNullOrWhiteSpace(format)?input.ToString():input.ToString(format)}
+  fn ByteSize.Humanize(input: this ByteSize, formatProvider IFormatProvider) String{input.ToString(formatProvider)}
+  fn ByteSize.Humanize(input: this ByteSize, format String?, formatProvider IFormatProvider?) String{string.IsNullOrWhiteSpace(format)?input.ToString(formatProvider):input.ToString(format, formatProvider)}
+  fn ByteSize.HumanizeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, format: String? = null, formatProvider: IFormatProvider? = null) String{unitSystem==ByteSizeUnitSystem.Legacy?input.Humanize(format, formatProvider):input.Format(unitSystem, format, formatProvider)}
+  fn ByteSize.HumanizeComposite(input: this ByteSize, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
+    if precision<1{
+      throw new ArgumentOutOfRangeException(nameof(precision), precision, "")
+    }
+    ArgumentNullException.ThrowIfNull(separator)
+    formatProvider??=CultureInfo.CurrentCulture
+    var culture=formatProvider as CultureInfo
+    if culture is not null{
+      formatProvider=LocaleNumberFormattingOverrides.GetFormattingNumberFormat(culture)
+    }
+    var formatter=Configurator.GetFormatter(culture)
+    var isNegative=input.Bits<0
+    var remainingBits=isNegative?(Int64)+1:(Int64)
+    if remainingBits==0{
+      return string.Concat("", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol))
+    }
+    var parts=new List<String>(Math.Min(precision, 8))
+    fn addPart(bitsPerUnit Int64, unit DataUnit){
+      if parts.Count>=precision{
+        return
+      }
+      var count=remainingBits/bitsPerUnit
+      if count==0{
+        return
+      }
+      parts.Add(string.Concat(count.ToString(formatProvider), "", formatter.DataUnitHumanize(unit, count, toSymbol)))
+      remainingBits%=bitsPerUnit
+    }
+    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Exabyte)
+    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Petabyte)
+    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Terabyte)
+    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Gigabyte)
+    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Megabyte)
+    addPart((Int64)*ByteSize.BitsInByte, DataUnit.Kilobyte)
+    addPart(ByteSize.BitsInByte, DataUnit.Byte)
+    addPart(1, DataUnit.Bit)
+    return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign:null , string.Join(separator, parts))
+  }
+  fn ByteSize.HumanizeCompositeWithUnitSystem(input: this ByteSize, unitSystem ByteSizeUnitSystem, precision: Int = 2, formatProvider: IFormatProvider? = null, separator: String = " ", toWords: Bool = false) String{
+    if unitSystem==ByteSizeUnitSystem.Legacy{
+      return input.HumanizeComposite(precision, formatProvider, separator, toWords)
+    }
+    if unitSystem is <ByteSizeUnitSystem.DecimalSi or>ByteSizeUnitSystem.BinaryIec{
+      throw new ArgumentOutOfRangeException(nameof(unitSystem), unitSystem, "")
+    }
+    if precision<1{
+      throw new ArgumentOutOfRangeException(nameof(precision), precision, "")
+    }
+    ArgumentNullException.ThrowIfNull(separator)
+    formatProvider??=CultureInfo.CurrentCulture
+    var culture=formatProvider as CultureInfo
+    if culture is not null{
+      formatProvider=LocaleNumberFormattingOverrides.GetFormattingNumberFormat(culture)
+    }
+    var formatter=Configurator.GetFormatter(culture)
+    var builtInFormatter=formatter as DefaultFormatter
+    if builtInFormatter is not null &&formatter.GetType.Assembly !=typeofDefaultFormatter.Assembly{
+      builtInFormatter=null
+    }
+    var isNegative=input.Bits<0
+    var remainingBits=isNegative?(Int64)+1:(Int64)
+    var units=unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits:BinaryCompositeUnits
+    if remainingBits==0{
+      return string.Concat("", toWords?humanizeUnit(DataUnit.Bit, 0):ByteSize.BitSymbol)
+    }
+    var parts=new List<String>(Math.Min(precision, units.Length+2))
+    for unit in units{
+      if parts.Count>=precision{
+        break
+      }
+      var bitsPerUnit=(Int64)*ByteSize.BitsInByte
+      var count=remainingBits/bitsPerUnit
+      if count==0{
+        continue
+      }
+      var unitText=toWords?humanizeUnit(unit.DataUnit, count):unit.Symbol
+      parts.Add(string.Concat(count.ToString(formatProvider), "", unitText))
+      remainingBits%=bitsPerUnit
+    }
+    addSmallUnit(ByteSize.BitsInByte, ByteSize.ByteSymbol, DataUnit.Byte)
+    addSmallUnit(1, ByteSize.BitSymbol, DataUnit.Bit)
+    return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign:null , string.Join(separator, parts))
+    fn addSmallUnit(bitsPerUnit Int64, symbol String, dataUnit DataUnit){
+      if parts.Count>=precision{
+        return
+      }
+      var count=remainingBits/bitsPerUnit
+      if count==0{
+        return
+      }
+      parts.Add(string.Concat(count.ToString(formatProvider), "", toWords?humanizeUnit(dataUnit, count):symbol))
+      remainingBits%=bitsPerUnit
+    }
+    fn humanizeUnit(dataUnit DataUnit, count Int64){builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol):formatter.DataUnitHumanize(dataUnit, count, toSymbol)}
+  }
+  type CompositeUnit{
+  }
+  fn ByteSize.Per(size: this ByteSize, interval TimeSpan) ByteRate{new ()}
+}

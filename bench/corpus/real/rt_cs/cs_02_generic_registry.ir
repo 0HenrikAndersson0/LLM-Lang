@@ -1,0 +1,64 @@
+@1 @ns Humanizer
+
+type LocaliserRegistry export{
+  ctor (defaultLocaliser TLocaliser){this.defaultLocaliser=_=>defaultLocaliser}
+  ctor (defaultLocaliser Func<CultureInfo,TLocaliser>){this.defaultLocaliser=defaultLocaliser}
+  fn ResolveForUiCulture() TLocaliser{ResolveForCulture(CultureInfo.CurrentUICulture)}
+  fn ResolveForCulture(culture CultureInfo?) TLocaliser{
+    var cultureInfo=culture??CultureInfo.CurrentCulture
+    return cultureSpecificCache.GetValue(cultureInfo, c=>new ()).Value!
+  }
+  fn Register(localeCode String, localiser TLocaliser) void{
+    lock lockObject{
+      if frozenLocalisers !=null{
+        throw new InvalidOperationException("")
+      }
+      localisersBuilder[localeCode]=_=>localiser
+    }
+  }
+  fn Register(localeCode String, localiser Func<CultureInfo,TLocaliser>) void{
+    lock lockObject{
+      if frozenLocalisers !=null{
+        throw new InvalidOperationException("")
+      }
+      localisersBuilder[localeCode]=localiser
+    }
+  }
+  fn GetRegisteredLocaleCodes() Array<String>{
+    lock lockObject{
+      return ..localisersBuilder.Keys.OrderBystaticlocale=>localeStringComparer.Ordinal
+    }
+  }
+  fn UseGeneratedCultureResolver() void{
+    lock lockObject{
+      if frozenLocalisers !=null{
+        throw new InvalidOperationException("")
+      }
+      useGeneratedCultureResolver=true
+    }
+  }
+  fn FindLocaliser(culture CultureInfo) Func<CultureInfo,TLocaliser>{
+    var frozen=frozenLocalisers
+    if frozen==null{
+      lock lockObject{
+        frozen=frozenLocalisers
+        if frozen==null{
+          frozen=localisersBuilder.ToFrozenDictionary()
+          frozenLocalisers=frozen
+        }
+      }
+    }
+    if useGeneratedCultureResolver{
+      if frozen.TryGetValue(culture.Name, out ){
+        return exactLocaliser
+      }
+      return GeneratedCultureResolver.TryResolve(culture.Name, out )&&frozen.TryGetValue(resolution.LocaleProfileOwner, out )?generatedLocaliser:defaultLocaliser
+    }
+    for c=culture;string.IsNullOrEmpty(c.Name);{
+      if frozen.TryGetValue(c.Name, out ){
+        return localiser
+      }
+    }
+    return defaultLocaliser
+  }
+}

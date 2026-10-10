@@ -737,6 +737,18 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                     wrapped.push(Atom::Sym("}".into()));
                     Some(wrapped)
                 }
+                (Some(v2), Some(inl))
+                    if !v2.is_empty() && !matches!(v2.last(), Some(Atom::Sym(sp)) if sp == "=>") => {
+                    // `var u = new T{rows}` — run-end brace payload after a real
+                    // value: capture the initializer rows into the value atoms
+                    // (was: silently dropped — cs_05 dict-initializer loss;
+                    // mid-run pairs never split so only run-end pairs arrive here)
+                    let mut wrapped = v2.clone();
+                    wrapped.push(Atom::Sym("{".into()));
+                    wrapped.extend(inl.iter().cloned());
+                    wrapped.push(Atom::Sym("}".into()));
+                    Some(wrapped)
+                }
                 (other, _) => other.clone(),
             };
             // `var X = {` + children + `} as const`-class obj-lits: reader
@@ -1124,16 +1136,18 @@ fn split_switch_arms(children: &[Form]) -> Result<Vec<Arm>, ExpandError> {
             }
         }
         let (pat, body) = if k < atoms.len() && k > 0 {
-            // break atom decides: `(`/`[`/`new` = call-head (body starts AT
-            // k), lowercase ident = binder (body starts at k+1)
-            let skip = if matches!(&atoms[k], Atom::Sym(s) if s == "(" || s == "[")
-                || matches!(&atoms[k], Atom::Ident(x) if x == "new")
-            {
-                0
+            // break atom decides: `(`,`[`/`new` = call-head (body starts AT
+            // k); lowercase ident = pattern designator in target languages
+            // (C# `ICollection<T> items => new(items.Count)`) — keep it in
+            // the pattern, body starts at k+1 (was: binder dropped — cs_03
+            // designator loss, 4.4-era canon shape)
+            let lower_binder = matches!(&atoms[k], Atom::Ident(x)
+                if x.chars().next().is_some_and(|ch| ch.is_lowercase()) && x != "new");
+            if lower_binder {
+                (atoms[..k + 1].to_vec(), Body::Inline(atoms[k + 1..].to_vec()))
             } else {
-                1
-            };
-            (atoms[..k].to_vec(), Body::Inline(atoms[k + skip..].to_vec()))
+                (atoms[..k].to_vec(), Body::Inline(atoms[k..].to_vec()))
+            }
         } else {
             (atoms[..k.min(atoms.len())].to_vec(), Body::Inline(Vec::new()))
         };

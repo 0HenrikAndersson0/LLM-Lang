@@ -175,6 +175,36 @@ struct ExprCtx<'a> {
 
 /// `await Users.Find id` → `await Users.Find(id)` — an identifier followed by
 /// a bare operand collects its operand span into parens (§3 paren rule).
+/// `else` default arm: the splitter folds it to `Sym("else")`; canon rows
+/// may also carry the bare ident form.
+fn arm_is_else(pat: &[Atom]) -> bool {
+    matches!(pat.first(), Some(Atom::Sym(s2)) if s2 == "else")
+        || matches!(pat.first(), Some(Atom::Ident(x)) if x == "else")
+}
+
+/// switch-arm pattern text: canon glue (`>items`) violates C# member lookup
+/// after a generic-close — separate `>` from a following lowercase ident
+/// (never `>=` or `>>`).
+fn pattern_txt(atoms: &[Atom]) -> String {
+    let txt = expr(atoms);
+    let mut out = String::with_capacity(txt.len());
+    let ch: Vec<char> = txt.chars().collect();
+    for (k, c) in ch.iter().enumerate() {
+        out.push(*c);
+        if *c == '>' && k + 1 < ch.len() && ch[k + 1] != '=' && ch[k + 1] != '>'
+            && ch[k + 1].is_ascii_lowercase()
+        {
+            out.push(' ');
+        }
+        if matches!(*c, ']' | ')') && k + 1 < ch.len() && ch[k + 1].is_ascii_lowercase()
+            && k > 0 && ch[k - 1] != ' '
+        {
+            out.push(' ');
+        }
+    }
+    out
+}
+
 fn is_bare_operand_start(a: &Atom) -> bool {
     match a {
         Atom::Ident(x) => !is_csharp_keyword(x),
@@ -183,7 +213,7 @@ fn is_bare_operand_start(a: &Atom) -> bool {
     }
 }
 
-fn expr(atoms: &[Atom]) -> String {
+pub fn expr(atoms: &[Atom]) -> String {
     let ctx = ExprCtx { atoms };
     ctx.render()
 }
@@ -197,7 +227,61 @@ impl<'a> ExprCtx<'a> {
         while i < n {
             match &atoms[i] {
                 Atom::Ident(id) => {
+                    if id == "new" {
+                        // `new Type` with no args/initializer in the run
+                        // (the canon dropped a multi-line `{…}` initializer —
+                        // reader-level row, cs-target §7): emit `new T()`
+                        let mut k = i + 1;
+                        let mut type_txt = String::new();
+                        if let Some(Atom::Ident(x2)) = atoms.get(k) {
+                            type_txt = x2.clone();
+                            k += 1;
+                        }
+                        if matches!(atoms.get(k), Some(Atom::Sym(sp)) if sp == "<") {
+                            let mut d = 1i32;
+                            type_txt.push('<');
+                            k += 1;
+                            while k < n {
+                                if let Atom::Sym(sp2) = &atoms[k] {
+                                    let sc = sp2.as_str();
+                                    if sc == "<" { d += 1; }
+                                    if sc == ">" {
+                                        d -= 1;
+                                        if d == 0 { type_txt.push('>'); k += 1; break; }
+                                    }
+                                    type_txt.push_str(sc);
+                                } else if let Atom::Ident(x2) = &atoms[k] { type_txt.push_str(x2); }
+                                k += 1;
+                            }
+                        }
+                        let has_shape = matches!(atoms.get(k), Some(Atom::Sym(sp)) if sp == "(" || sp == "{")
+                            || matches!(atoms.get(k), Some(Atom::Sym(sp)) if sp == ".");
+                        if !has_shape && !type_txt.is_empty() {
+                            out.push_str("new ");
+                            out.push_str(&type_txt);
+                            out.push_str("()");
+                            i = k;
+                            continue;
+                        }
+                    }
+                    if id == "$" {
+                        // canon `$"…"` interpolation prefix: `$` + payload → `$"…"`
+                        if let Some(Atom::Str(k)) = atoms.get(i + 1) {
+                            let esc = k.replace('\\', "\\\\").replace('"', "\\\"");
+                            out.push_str(&format!("${esc:?}"));
+                            i += 2;
+                            continue;
+                        }
+                    }
                     // `match` keyword inside expr runs (C# switch expr emits it)
+                    // mid-run pattern keywords need a space BEFORE when the
+                    // previous token ended word-ish (`M is`, `x is not` — the
+                    // canon glues these; C# requires the separation)
+                    if is_csharp_keyword(id)
+                        && out.ends_with(|c: char| c.is_alphanumeric() || c == ']')
+                    {
+                        out.push(' ');
+                    }
                     out.push_str(id);
                     // bare-call: Ident followed by a bare operand — successive
                     // operands separate on `,` at top level (IR arg paren rule)
@@ -232,10 +316,18 @@ impl<'a> ExprCtx<'a> {
                     i += 1;
                 }
                 Atom::Str(k) => {
-                    // interpolation canon `x{e}y` → `$"x{e}y"`; plain → "…"
-                    let interp = k.contains('{') && k.contains('}');
-                    let esc = k.replace('\\', "\\\\").replace('"', "\\\"");
-                    let rendered = if interp { format!("${esc:?}") } else { format!("{esc:?}") };
+                    // interpolation canon `x{e}y` → `$"x{e}y"`; plain → "…".
+                    // C#-canon payloads carry the leading `$` ($"...") — strip
+                    let k2 = k.strip_prefix('$').unwrap_or(k);
+                    let interp = k2.contains('{') && k2.contains('}');
+                    let esc = k2.replace('\\', "\\\\").replace('"', "\\\"");
+                    // canon `$"…"` = `$` atom + payload — a `$` right before means the
+                    // payload renders as a plain quoted interpolation arg
+                    let rendered = if interp && !out.ends_with('$') {
+                        format!("${esc:?}")
+                    } else {
+                        format!("{esc:?}")
+                    };
                     out.push_str(&rendered);
                     i += 1;
                 }
@@ -244,6 +336,16 @@ impl<'a> ExprCtx<'a> {
                     i += 1;
                 }
                 Atom::Sym(s) => match s.as_str() {
+                    // `}`-close followed by a word (`… is not {} multiple`):
+                    // canon glues, C# needs the separation
+                    "}" => {
+                        if matches!(atoms.get(i + 1), Some(Atom::Ident(_)) | Some(Atom::Number(_))) {
+                            out.push_str("} ");
+                        } else {
+                            out.push('}');
+                        }
+                        i += 1;
+                    }
                     "(" | "[" => {
                         let c = if s == "(" { ')' } else { ']' };
                         let mut j = i + 1;
@@ -251,14 +353,21 @@ impl<'a> ExprCtx<'a> {
                         // `(Float)x` cast → mapped keyword
                         if s == "(" && inner.len() == 1
                             && matches!(&inner[0], Atom::Ident(t) if map_type(&t.to_string()) != *t)
-                            && matches!(atoms.get(j + 1), Some(Atom::Ident(_)) | Some(Atom::Number(_)))
+                            && matches!(atoms.get(j), Some(Atom::Ident(_)) | Some(Atom::Number(_)))
                         {
                             let t = match &inner[0] { Atom::Ident(t) => t.clone(), _ => unreachable!() };
                             out.push_str(&format!("({})", map_type(&t)));
                             i = j;
                             continue;
                         }
-                        out.push_str(&format!("{s}{}{c}", expr(&inner)));
+                        let close_txt = if c == '}'
+                            && matches!(atoms.get(j), Some(Atom::Ident(_)) | Some(Atom::Number(_)))
+                        {
+                            format!("}} ")
+                        } else {
+                            c.to_string()
+                        };
+                        out.push_str(&format!("{s}{}{close_txt}", expr(&inner)));
                         i = j;
                     }
                     // `[^1]`, `[.. xs]`, `[a, b]` — verbatim (C# 12)
@@ -340,9 +449,9 @@ fn bracket_slice(atoms: &[Atom], i: &mut usize, close: char) -> Vec<Atom> {
             let sc = s.chars().next().unwrap_or(' ');
             match sc {
                 '(' | '[' | '{' if s.len() == 1 => depth += 1,
-                x if x == close => {
+                ')' | ']' | '}' if s.len() == 1 => {
                     depth -= 1;
-                    if depth == 0 {
+                    if depth == 0 && s.chars().next().unwrap_or(' ') == close {
                         let inner = atoms[start..*i].to_vec();
                         *i += 1;
                         return inner;
@@ -496,13 +605,39 @@ fn emit_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<S
         _ => String::new(),
     };
     // match → switch (value-position handled by caller fusing `return`)
+    if head.len() >= 2 && head.last().map(|a| matches!(a, Atom::Ident(x) if x == "switch")).unwrap_or(false) {
+        let subject = expr(&head[..head.len() - 1]);
+        let mut s = format!("{ind}return {subject} switch\n{ind}{{");
+        let rendered_arms: Vec<(String, String)> = arms.iter().filter_map(|a| {
+            let pat = pattern_txt(&a.pattern);
+            let pat_txt = if a.pattern.is_empty() || pat.is_empty() || arm_is_else(&a.pattern) { "_".to_string() } else { pat };
+            let body_txt = match &a.body {
+                Body::Inline(b) if !b.is_empty() => expr(b),
+                Body::Inline(_) => "default".to_string(),
+                _ => String::new(),
+            };
+            Some((pat_txt, body_txt))
+        }).collect::<Vec<(String, String)>>();
+        let (mut firsts, elses): (Vec<(String, String)>, Vec<(String, String)>) =
+            rendered_arms.into_iter().partition(|(p, _)| p != "_");
+        firsts.extend(elses);
+        for (k, (pat, body)) in firsts.iter().enumerate() {
+            s.push('\n');
+            s.push_str(&IND.repeat(level + 2));
+            s.push_str(&format!("{pat} => {body}"));
+            s.push(if k + 1 < firsts.len() { ',' } else { '\n' });
+        }
+        s.push_str(&ind);
+        s.push_str("};");
+        return Ok(s);
+    }
     if lead == "match" && head.len() > 1 {
         let subject = expr(&head[1..]);
         let mut s = format!("{ind}return {subject} switch\n{ind}{{");
         let rendered_arms: Vec<(String, String)> = arms.iter().filter_map(|a| {
-            let pat = expr(&a.pattern);
+            let pat = pattern_txt(&a.pattern);
             let is_else = a.pattern.is_empty() || pat.is_empty() || a.pattern.first().map(|x| matches!(x, Atom::Ident(e) if e == "else")).unwrap_or(false);
-            let pat_txt = if is_else { "_".to_string() } else { pat };
+            let pat_txt = if arm_is_else(&a.pattern) || is_else { "_".to_string() } else { pat };
             let body_txt = match &a.body {
                 Body::Inline(b) if !b.is_empty() => expr(b),
                 Body::Inline(_) => "default".to_string(),
@@ -607,7 +742,8 @@ fn emit_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<S
         let mut s = s;
         for a in arms {
             let pat_txt = expr(&a.pattern);
-            let is_else = a.pattern.is_empty() || pat_txt.is_empty() || pat_txt == "else";
+            let is_else = a.pattern.is_empty() || pat_txt.is_empty() || pat_txt == "else"
+                || arm_is_else(&a.pattern);
             if let Some(else_if) = pat_txt.strip_prefix("else if ") {
                 let cond2 = else_if.to_string();
                 s.push_str(&format!("\n{0}else if ({cond2})\n{0}{{", IND.repeat(level + 1)));
@@ -623,6 +759,20 @@ fn emit_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> Result<S
                 s.push('}');
             }
         }
+        return Ok(s);
+    }
+    if lead == "for" && head.iter().any(|a| matches!(a, Atom::Sym(sp) if sp == ";")) {
+        // C-style: `for (init; cond; step)` — head atoms carry the shape
+        let inner = expr(&head[1..]);
+        let mut s = format!("{ind}for ({inner})\n{ind}{{\n");
+        match body {
+            Body::Inline(b) if !b.is_empty() => s.push_str(&format!("{}{};\n", IND.repeat(level + 2), render_stmt_line(b))),
+            Body::Bare(v) | Body::Block(v) => stmts_csharp(v, level + 1, &mut s)?,
+            Body::Inline(_) => {}
+            Body::Opaque(_) => {}
+        }
+        s.push_str(&ind);
+        s.push('}');
         return Ok(s);
     }
     if lead == "for" {
@@ -689,7 +839,7 @@ fn push_arm_body(b: &Body, mut s: String, level: usize) -> Result<String, CsLowe
 // ---------------------------------------------------------------------------
 // fn / ctor / type emission (§4)
 
-fn fn_sig(f: &FnDecl, _in_static: bool) -> String {
+fn fn_sig(f: &FnDecl, in_static: bool) -> String {
     let mut mods: Vec<String> = vec![];
     let is_ctor = f.modifiers.iter().any(|m| m == "ctor");
     let is_async = f.modifiers.iter().any(|m| m == "async");
@@ -704,6 +854,9 @@ fn fn_sig(f: &FnDecl, _in_static: bool) -> String {
     if is_async {
         mods.push("async".into());
     }
+    if in_static && !is_ctor && !mods.iter().any(|m| m == "static") {
+        mods.push("static".into());
+    }
     let mut s = String::new();
     for m in &mods {
         s.push_str(m);
@@ -712,30 +865,34 @@ fn fn_sig(f: &FnDecl, _in_static: bool) -> String {
     if is_ctor {
         s.push_str(&f.name);
     } else if let Some(recv) = &f.receiver {
-        // extension fn: `fn String.FromMetric() Float` → static, `this string input` param 0
-        s.push_str("static ");
+        // extension fn: `fn String.FromMetric() Float` → static, `this string input`
+        // param 0 (static already in mods when the host type is a static class)
+        if !mods.iter().any(|m| m == "static") {
+            s.push_str("static ");
+        }
         if let Some(r) = &f.ret {
             s.push_str(&map_type(r));
             s.push(' ');
         }
         s.push_str(&f.name);
         let mut params = f.params.clone();
-        let recv_name = params.first().map(|(n, _)| n.clone()).unwrap_or_else(|| "input".into());
-        let recv_ty = params.first().map(|(_, t)| t.clone()).unwrap_or_default();
-        let _ = recv_ty;
-        let mapped = format!("this {} {}", map_type(recv), recv_name);
-        if params.is_empty() {
-            s.push_str(&format!("({mapped})"));
+        if params.first().map(|(_, t)| t.starts_with("this ")).unwrap_or(false) {
+            // canon carries the receiver as param 0 (`fn serialize(this Cheerio<T>)`)
+            let recv_ty = params[0].1["this ".len()..].trim().to_string();
+            let recv_name = params[0].0.clone();
+            params[0] = (recv_name, format!("this {}", map_type(&recv_ty)));
         } else {
-            params[0] = ("input".into(), format!("this {}", recv));
-            s.push_str(&params_csharp(&params));
+            params.insert(0, ("input".into(), format!("this {}", map_type(recv))));
         }
+        s.push_str(&params_csharp(&params));
         return s;
     } else {
         if let Some(r) = &f.ret {
             let (rt, _) = split_default(r);
             s.push_str(&map_type(rt));
             s.push(' ');
+        } else {
+            s.push_str("void ");
         }
         s.push_str(&f.name);
     }
@@ -752,6 +909,10 @@ fn params_csharp(params: &[(String, String)]) -> String {
         let (rt, def) = split_default(ty);
         if rt.is_empty() {
             out.push_str(nm);
+        } else if let Some(rest) = rt.strip_prefix("out ").map(|x| x.trim()) {
+            out.push_str(&format!("out {} {}", map_type(rest), nm));
+        } else if rt == "out" {
+            out.push_str(&format!("out {nm}"));
         } else {
             out.push_str(&map_type(rt));
             out.push(' ');
@@ -818,7 +979,7 @@ fn render_body(b: &Body, level: usize, ret: &Option<String>) -> Result<String, C
         }
         Body::Inline(_) => Ok(" { }".to_string()),
         Body::Bare(v) | Body::Block(v) => {
-            if v.len() == 1 {
+            if v.len() == 1 && ret.is_some() {
                 if let Core::Expr(atoms, _) = &v[0] {
                     let lead = atoms.first().map(|x| match x { Atom::Ident(k) => k.clone(), _ => String::new() }).unwrap_or_default();
                     let flow = matches!(lead.as_str(), "return" | "throw" | "if" | "for" | "while" | "lock" | "match" | "try")
@@ -1012,7 +1173,24 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize) -> Result<String, CsLower
                 _ => {}
             }
         }
+        let balanced = close < chars.len();
         let ptext: String = chars[open + 1..close.min(chars.len())].iter().collect();
+        let rt_word = v.name.trim();
+        let ret_capped = rt_word.chars().next().is_some_and(|c| c.is_uppercase());
+        if !balanced && !ret_capped && v.value.as_ref().map(|a| a.len() >= 2).unwrap_or(false) {
+            // expander split `…,T p=d ) Ret` → ty ends mid-params, name=param,
+            // value=[default…, Ret] — reconstruct the full signature
+            let val: Vec<Atom> = v.value.as_ref().unwrap().iter()
+                .filter(|a| !matches!(a, Atom::Sym(sp) if sp == ")" || sp == "("))
+                .cloned().collect();
+            let (def_atoms, ret_atom) = val.split_at(val.len() - 1);
+            let def_txt = expr(def_atoms).trim_end().to_string();
+            let ret = map_type(&match ret_atom.last() { Some(Atom::Ident(x)) => x.clone(), _ => String::new() });
+            return Ok(format!(
+                "{ind}{ret} {m_name}({} {} = {});\n",
+                map_type(ptext.trim()), rt_word, def_txt
+            ));
+        }
         let rt = map_type(&v.name);
         return Ok(format!("{ind}{rt} {m_name}({});\n", map_type(ptext.trim())));
     }
@@ -1058,7 +1236,7 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize) -> Result<String, CsLower
         if v.modifiers.iter().any(|m| m == "export") {
             s.push_str("public ");
         }
-        if is_static || v.modifiers.iter().any(|m| m == "static") {
+        if (is_static || v.modifiers.iter().any(|m| m == "static")) && !is_const {
             s.push_str("static ");
         }
         if is_const {
@@ -1079,6 +1257,16 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize) -> Result<String, CsLower
                 s.push_str(" = ");
                 s.push_str(&expr(atoms));
             }
+        }
+        if let Some(rows) = &v.objlit {
+            s.push_str(" { ");
+            for row in rows {
+                if let Core::Expr(atoms, _) = row {
+                    s.push_str(&expr(atoms));
+                }
+                s.push_str(", ");
+            }
+            s.push_str("}");
         }
         s.push_str(";\n");
         return Ok(s);
