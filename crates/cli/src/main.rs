@@ -22,6 +22,7 @@ fn main() {
             }
         }
         Some("canon") => canon_files(&args[1..]),
+        Some("verify") => verify_files(&args[1..]),
         Some("js-kinds") => {
             // PLAN 4.2 groundwork: node-kind histogram over a JS/TS source dir
             for dir in &args[1..] {
@@ -113,6 +114,46 @@ fn to_js_files(paths: &[String], map: bool) {
             },
             Err(e) => println!("// {path}: ERROR {e}"),
         }
+    }
+}
+
+fn verify_files(paths: &[String]) {
+    // task 1.7's print→print identity as a user lint: canon text is stable
+    // across re-parse; any drift = the file would churn every tool round
+    let mut bad = 0;
+    for path in paths {
+        let Ok(src) = std::fs::read_to_string(path) else {
+            bad += 1;
+            println!("{path}: unreadable (missing or not UTF-8)");
+            continue;
+        };
+        match ir_lang::expander::expand(&src) {
+            Ok(core) => {
+                let canon = ir_lang::printer::print(&core);
+                match ir_lang::expander::expand(&canon) {
+                    Ok(core2) => {
+                        let canon2 = ir_lang::printer::print(&core2);
+                        if canon == canon2 {
+                            println!("{path}: OK ({} lines, {} bytes canon)", canon.lines().count(), canon.len());
+                        } else {
+                            bad += 1;
+                            println!("{path}: UNSTABLE canon (print→print drift)");
+                        }
+                    }
+                    Err(e) => {
+                        bad += 1;
+                        println!("{path}: canon does not re-parse: {e}");
+                    }
+                }
+            }
+            Err(e) => {
+                bad += 1;
+                println!("{path}: expand failed: {e}");
+            }
+        }
+    }
+    if bad > 0 {
+        std::process::exit(1);
     }
 }
 
