@@ -104,6 +104,19 @@ follow-up behind a redeclaration-aware rig.
 
 ## Verdict
 
+**5.6 leg-1 (round 1 of 2) complete**: C# → IR canon → C# re-emits
+**syntax-clean** for the whole cs corpus (9/9 — all CS1xxx/CS0xxx
+emit-structural rows fixed); canon identity 9/9 + construct smoke green.
+The remaining diagnostics decompose entirely into (a) the stub-member
+boundary and (b) 8 char-vs-string design rows. The behavior leg is gated
+behind the same library context (the corpus files are Humanizer fragments
+whose runtime needs the library's data tables); the honest v0.1 statement:
+the round-trip compiles canon-stably, behavior identity remains a
+library-context rig queued for the 5.5/5.6 exit pass. The char design row
+is recorded in `docs/fidelity.md` (the IR canon has no char atom;
+single-quote chars canon to Str — the C#-emit restores strings; behavior
+for those specific comparisons shifts — bounded, listed).
+
 Phase-5 gate 5.4 (first pass): golden gate **8/9** (1 proven-upstream),
 real-corpus emit **structure-compiles 9/9** under dotnet's syntax phase
 with every semantic diagnostic attributed to the stub-world boundary or a

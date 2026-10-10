@@ -60,6 +60,23 @@ carry **zero** opaque captures; js_02 (type-alias module) peaks at 8 captured
 (`opaque:` atom) inside the union text — all within the §6 contract's
 capture design, none a statement or expression.
 
-**Acceptance:** double round-trip (JS → IR → JS) compiles (node --check 7/7,
-tsc 7/7) and behaves identically on every riggable subject (3/3 harness
-subjects) — the §6 contract holds with the budget above.
+## Phase-5 addendum (2026-10-10) — C# round-trip rows
+
+The 4.5 JS budget above was JS-only. The C# reader (`cs_read.rs`) adds:
+
+| # | row | practice |
+|---|---|---|
+| 17 | **char literals vs string literals** | the IR atom set has no `char`; C# single-quote chars canon to Str atoms. *Recorded design limit*, not opaque: `new string('0', n)` re-emits `new string("0", n)` (CS1503-style shifts at the C#-emit stage of the round trip — 8 corpus rows in cs_05/cs_06). Bounded to char contexts; additive core-form extension (a Char atom) stays out of v0's frozen grammar |
+| 18 | accessibility nuance | canon keeps `export` (public) only; `internal`/`private`/`protected` collapse — the C# emitter emits `internal` for non-export members so multi-file cross-calls in the corpus assembly resolve as the originals do (`cs_06 → cs_08.DataUnitHumanizeExact`) |
+| 19 | `where` generic constraints | dropped (contract); the C# emitter emits type params without them |
+| 20 | data-braces vs interpolation in C# strings | **distinguished at the reader** (interpolated_string vs plain literal): plain literals canon-escape `{{…}}`, interpolation canon's `x{e}y`; the C# emit restores literal braces — *this one is preserved*, recorded because JS canon cannot make the same distinction |
+| 21 | `<rest-omitted>` hand-canon elision rows | cs_08's hand rendition elided 2 long bodies — the machine canon re-reads the full source, so these exist only in the hand fixture |
+| 22 | `#if` preprocessor regions | captured verbatim (`opaque:` atom rows in the canon); the C# emit flags them `/* opaque */` — the NET8_OR_GREATER guards pass textually, not semantically |
+
+The JS-side rows 1–16 carry over unchanged.
+**Acceptance (JS leg):** double round-trip (JS → IR → JS) compiles
+(node --check 7/7, tsc 7/7) and behaves identically on every riggable
+subject (3/3 harness subjects) — the §6 contract holds with the budget
+above. **C# leg (5.6 leg-1):** C# → IR canon → C# re-emits syntax-clean
+9/9 (`bench/results-cs-diff.md`); the behavior leg runs behind the
+library-context rig.
