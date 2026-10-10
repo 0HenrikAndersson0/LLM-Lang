@@ -136,7 +136,7 @@ documented.
 | 4.1 | tree-sitter-javascript grammar for parsing JS targets | parser setup | ☑ — `js_read.rs`: tree-sitter + tree-sitter-typescript v0.23.2; CST parse over the js_*.ts corpus (TS grammar superset — types surface as `type_annotation` and get skipped by the JS-only mapping); 6/7 corpus files parse clean, **gap identified: `export type * from` unsupported by the grammar** (round-trip will treat it as opaque passthrough); node-kind histogram wired as `irc js-kinds <dir>` (4.2 groundwork, kind histogram incl. `program/file` roots) |
 | 4.2 | IR-form coverage audit on js corpus: % of constructs representable in core+ sugar | coverage report | ☑ — `bench/results-coverage.md` + `bench/scripts/coverage_audit.py` (verdict table per kind, evidence rows via per-file histograms): **4398 nodes / 145 kinds over the 7 js_*.ts files; 2233 constructs the reader must map; 100.0% representable** — core 1576/51 kinds (direct core form or verbatim surface per hand renders: `new`, `typeof`, `delete`, `as`, `?.` all pass through), sugar 14/4 (templates→interpolation, `i++`→`+=`, fn-expr→arrow), signature 634/23 (types erased to signatures, §3/§6.6), `opaque type` capture 8/1 (js_02 union/template aliases, reconcile row 21 — bounded loss), grammar-gap 1 (ts grammar lacks `export type *`, construct = Core::Reexport). Comments dropped by design (§6.1). Reader (4.4) has no representability blockers |
 | 4.3 | Mapping table: JS construct → IR form; unrepresentable → `(opaque …)` passthrough [3] | mapping doc + `(opaque …)` design | ☑ — js-target.md §8: capture design (verify-grounded: `Body::Opaque`, `opaque` modifier, `opaque:` atoms, `opaque{ raw }` bodies all exist in expander/printer; `opaque type` canon rows js_02.ir:5-9), capture rules (whole declaration/member, never partial expr; verbatim print identity), exhaustive capture sites, mapping table by audit bucket (core/verbatim incl. `new`/`typeof`/`delete`/`as`/`?.`; sugar canon: templates→interpolation, `i++`→`+=`, fn-expr→arrow; signature erasure incl. lookup-type member resolution; opaque = union/template aliases only; comments dropped by design), reader-side reclassification of the 2.4 accepted-v0 rows, ts-grammar ERROR fallback rule |
-| 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ☐ |
+| 4.4 | JS reader (JS → IR), reusing the canonical printer; reclassifies the 2.4 gap rows (re-exports, inline statement bodies) where they land | reader | ◐ — WIP in js_read.rs (compiles, 40 lib tests green): expression/statement/declaration walk per js-target §8.2 (atoms, Var+`var mut` over-label, Stmt incl. C-style-for→range canon, Fn+param erasure, class/interface members), imports→@use aliases, reexports→Core::Reexport, alias split (interface-shaped vs `opaque type` union/template), `opaque:` verbatim member capture. NOT yet tested: canon-print verification + corpus smoke + re-emit round-trip are the next concrete steps |
 | 4.5 | Double round-trip over js corpus: compile + behavior identity checks | round-trip report | ☐ |
 | 4.6 | Document actual §5 budget (what was dropped in practice) | fidelity doc | ☐ |
 
@@ -317,6 +317,17 @@ Each phase exit is a verification act, not a checklist:
   Report: `bench/results-coverage.md`. **Next session: 4.3 mapping table +
   `(opaque …)` design (seeded by the audit's per-kind evidence), then 4.4
   JS reader.**
+- **v4.9 (2026-10-10, latest)** — **4.4 in flight (session paused):** reader walk
+  written and compiling in `js_read.rs` — expressions/atoms (`new`/`typeof`/
+  `delete`/`as`/`?.` verbatim, templates→interpolation payloads, `i++`→`+=`,
+  callee-generics preserved), statements (`var`/`var mut` over-label,
+  if/else(+else-if)/while/for-in/C-style-for→range canon/return/throw),
+  declarations (`fn` + param type erasure `name Type` + `Type?`, class/
+  interface members, imports→@use, reexports, type-alias split into
+  interface-shaped vs `opaque type` atom runs), `opaque:` member capture
+  fallback (never-wrong rule). Unverified next steps: `irc from-js` CLI,
+  canon-print identity tests, corpus smoke (js_01/js_08), re-emit
+  node --check round-trip, then 4.5.
 - **v4.8 (2026-10-10, later)** — **4.3 done: js-target.md §8.** The round-trip
   mapping (4.2 audit buckets → IR forms/sugar/signature/opaque/drop) plus the
   `(opaque …)` capture design. The existing printer already holds the
