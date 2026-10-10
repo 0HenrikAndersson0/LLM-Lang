@@ -2,35 +2,35 @@
 
 type DefaultCollectionFormatter(defaultSeparator String){
   String DefaultSeparator=defaultSeparator
-  fn Humanize(collection IEnumerable<T>) String{Humanize(collection, o=>o?.ToString(), DefaultSeparator)}
-  fn Humanize(collection IEnumerable<T>, objectFormatter Func<T,String?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
-  fn Humanize(collection IEnumerable<T>, objectFormatter Func<T,Object?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
-  fn Humanize(collection IEnumerable<T>, separator String) String{Humanize(collection, o=>o?.ToString(), separator)}
-  fn Humanize(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
+  fn Humanize<T>(collection IEnumerable<T>) String{Humanize(collection, o=>o?.ToString(), DefaultSeparator)}
+  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
+  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
+  fn Humanize<T>(collection IEnumerable<T>, separator String) String{Humanize(collection, o=>o?.ToString(), separator)}
+  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
     ArgumentNullException.ThrowIfNull(collection)
     ArgumentNullException.ThrowIfNull(objectFormatter)
     return HumanizeDisplayStrings(collection, objectFormatter, separator)
   }
-  fn Humanize(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
+  fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
     ArgumentNullException.ThrowIfNull(collection)
     ArgumentNullException.ThrowIfNull(objectFormatter)
     return HumanizeDisplayObjects(collection, objectFormatter, separator)
   }
-  fn HumanizeDisplayStrings(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
+  fn HumanizeDisplayStrings<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
     var items=CreateDisplayItems(collection)
     for item in collection{
       AddDisplayString(items, objectFormatter(item))
     }
     return HumanizeDisplayItems(items, separator)
   }
-  fn HumanizeDisplayObjects(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
+  fn HumanizeDisplayObjects<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
     var items=CreateDisplayItems(collection)
     for item in collection{
       AddDisplayString(items, objectFormatter(item)?.ToString())
     }
     return HumanizeDisplayItems(items, separator)
   }
-  fn CreateDisplayItems(collection IEnumerable<T>) List<String>{
+  fn CreateDisplayItems<T>(collection IEnumerable<T>) List<String>{
     collection switch{
       ICollection<T>items new (items.Count)
       IReadOnlyCollection<T>items new (items.Count)

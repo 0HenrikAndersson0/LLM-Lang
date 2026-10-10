@@ -1,6 +1,6 @@
 @1 @ns Humanizer
 
-type RussianGrammaticalNumberDetector{
+type RussianGrammaticalNumberDetector static{
   fn Detect(number Int64) RussianGrammaticalNumber{
     var tens=number%100/10
     if tens !=1{

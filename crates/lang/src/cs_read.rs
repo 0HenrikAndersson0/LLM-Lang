@@ -962,12 +962,10 @@ impl<'a> CsReader<'a> {
         if c.goto_first_child() {
             loop {
                 if c.node().kind() == "modifier" {
-                    match text(c.node(), self.src) {
-                        "public" => mods.push("export".into()),
-                        "sealed" => mods.push("sealed".into()),
-                        "abstract" => mods.push("abstract".into()),
-                        _ => {}
-                    }
+                    mods.push(match text(c.node(), self.src) {
+                        "public" => "export".into(),
+                        other => other.to_string(),
+                    });
                 }
                 if !c.goto_next_sibling() { break; }
             }
@@ -998,8 +996,18 @@ impl<'a> CsReader<'a> {
             .child_by_field_name("name")
             .map(|n| text(n, self.src).to_string())
             .unwrap_or_default();
-        if let Some(tp) = node.child_by_field_name("type_parameters") {
-            name = format!("{name}{}", text(tp, self.src).replace(' ', ""));
+        // the type_parameter_list child is unnamed in this grammar
+        {
+            let mut tc2 = node.walk();
+            if tc2.goto_first_child() {
+                loop {
+                    if tc2.node().kind() == "type_parameter_list" {
+                        name = format!("{name}{}", text(tc2.node(), self.src).replace(' ', ""));
+                        break;
+                    }
+                    if !tc2.goto_next_sibling() { break; }
+                }
+            }
         }
         // primary constructor: `type X(params)` — the parameter_list child
         // that is NOT a method's (type-level: sits directly on the declaration)
@@ -1073,7 +1081,20 @@ impl<'a> CsReader<'a> {
     }
 
     fn method_decl(&mut self, node: tree_sitter::Node<'a>, _in_type: bool) -> Core {
-        let name = node.child_by_field_name("name").map(|n| text(n, self.src).to_string()).unwrap_or_default();
+        let mut name = node.child_by_field_name("name").map(|n| text(n, self.src).to_string()).unwrap_or_default();
+        // method-level type params: unnamed `type_parameter_list` child
+        {
+            let mut mc = node.walk();
+            if mc.goto_first_child() {
+                loop {
+                    if mc.node().kind() == "type_parameter_list" {
+                        name = format!("{name}{}", text(mc.node(), self.src).replace(' ', ""));
+                        break;
+                    }
+                    if !mc.goto_next_sibling() { break; }
+                }
+            }
+        }
         let params = node.child_by_field_name("parameters").map(|p| self.param_pairs(p)).unwrap_or_default();
         let ret = node
             .child_by_field_name("returns")
@@ -1082,9 +1103,10 @@ impl<'a> CsReader<'a> {
             .filter(|t| !t.is_empty() && !t.eq_ignore_ascii_case("void"));
         let mut modifiers: Vec<String> = vec![];
         for m in self.modifiers_raw(node) {
-            if m == "async" {
-                modifiers.push("async".into());
-            }
+            modifiers.push(match m.as_str() {
+                "public" => "export".into(),
+                other => other.to_string(),
+            });
         }
         // extension: `this Type name` param 0 → receiver fn
         let mut receiver = None;

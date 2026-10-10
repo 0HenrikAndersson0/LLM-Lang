@@ -1,6 +1,6 @@
 namespace Humanizer;
 
-public class LocaliserRegistry
+public class LocaliserRegistry<TLocaliser>
 {
     readonly Dictionary<string,Func<CultureInfo,TLocaliser>> localisersBuilder = [];
     readonly object lockObject = new ();

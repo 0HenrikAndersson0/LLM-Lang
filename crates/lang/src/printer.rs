@@ -432,16 +432,19 @@ fn print_type(t: &TypeDecl, level: usize) -> String {
     s.push_str(&indent(level));
     s.push_str("type ");
     s.push_str(&t.name);
+    // C# source order: modifiers precede the name/primary (`readonly
+    // struct CompositeUnit(...)`); the expander type arm consumes mods
+    // before the primary scan, so canon must match that order
+    for m in &t.modifiers {
+        s.push(' ');
+        s.push_str(m);
+    }
     if let Some(p) = &t.primary {
         // primary ctor canon: `type Name(params) {` (fixture-row shape)
         let parts: Vec<String> = p.iter().map(|(n, ty)| {
             if ty.is_empty() { n.clone() } else { format!("{n} {ty}") }
         }).collect();
         s.push_str(&format!("({})", parts.join(", ")));
-    }
-    for m in &t.modifiers {
-        s.push(' ');
-        s.push_str(m);
     }
     // kind word: canon keeps it when the target needs it (C# interface/
     // struct/record emit rows 5.4) — plain-class stays implied

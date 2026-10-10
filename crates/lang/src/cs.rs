@@ -1247,7 +1247,7 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
                     if !f2.name.is_empty() && f2.name != "{}" {
                         // ctor name == type name
                     }
-                    f2.name = t.name.clone();
+                    f2.name = t.name.split('<').next().unwrap_or(&t.name).to_string();
                     out.push_str(&IND.repeat(level + 1));
                     out.push_str(&fn_sig(&f2, true, false));
                     out.push_str(&render_body(&f2.body, level + 1, &None)?);

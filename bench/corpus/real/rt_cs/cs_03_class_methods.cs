@@ -3,27 +3,27 @@ namespace Humanizer;
 class DefaultCollectionFormatter(string defaultSeparator)
 {
     readonly string DefaultSeparator = defaultSeparator;
-    internal string Humanize(IEnumerable<T> collection) =>
+    internal string Humanize<T>(IEnumerable<T> collection) =>
         Humanize(collection, o => o?.ToString(), DefaultSeparator);
-    internal string Humanize(IEnumerable<T> collection, Func<T,string?> objectFormatter) =>
+    internal string Humanize<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter) =>
         Humanize(collection, objectFormatter, DefaultSeparator);
-    internal string Humanize(IEnumerable<T> collection, Func<T,object?> objectFormatter) =>
+    internal string Humanize<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter) =>
         Humanize(collection, objectFormatter, DefaultSeparator);
-    internal string Humanize(IEnumerable<T> collection, string separator) =>
+    internal string Humanize<T>(IEnumerable<T> collection, string separator) =>
         Humanize(collection, o => o?.ToString(), separator);
-    internal string Humanize(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
+    internal string Humanize<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(objectFormatter);
         return HumanizeDisplayStrings(collection, objectFormatter, separator);
     }
-    internal string Humanize(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
+    internal string Humanize<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(objectFormatter);
         return HumanizeDisplayObjects(collection, objectFormatter, separator);
     }
-    internal string HumanizeDisplayStrings(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
+    internal string HumanizeDisplayStrings<T>(IEnumerable<T> collection, Func<T,string?> objectFormatter, string separator)
     {
         var items = CreateDisplayItems(collection);
         foreach (var item in collection)
@@ -32,7 +32,7 @@ class DefaultCollectionFormatter(string defaultSeparator)
         }
         return HumanizeDisplayItems(items, separator);
     }
-    internal string HumanizeDisplayObjects(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
+    internal string HumanizeDisplayObjects<T>(IEnumerable<T> collection, Func<T,object?> objectFormatter, string separator)
     {
         var items = CreateDisplayItems(collection);
         foreach (var item in collection)
@@ -41,7 +41,7 @@ class DefaultCollectionFormatter(string defaultSeparator)
         }
         return HumanizeDisplayItems(items, separator);
     }
-    internal List<string> CreateDisplayItems(IEnumerable<T> collection)
+    internal List<string> CreateDisplayItems<T>(IEnumerable<T> collection)
     {
         return collection switch
         {

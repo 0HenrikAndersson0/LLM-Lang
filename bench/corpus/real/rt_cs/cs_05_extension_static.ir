@@ -1,6 +1,6 @@
 @1 @ns Humanizer
 
-type MetricNumeralExtensions export{
+type MetricNumeralExtensions export static{
   Int Limit=27
   Float BigLimit=Math.Pow(10, Limit)
   Float SmallLimit=Math.Pow(10, -Limit)

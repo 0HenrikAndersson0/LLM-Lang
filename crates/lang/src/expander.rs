@@ -482,26 +482,26 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             let from = dotted(&atoms[fi + 1..]);
             Ok(Core::Reexport { star, is_type, names, from, span })
         }
-        "fn" | "async" | "export"
+        "fn" | "async" | "export" | "internal" | "protected" | "private" | "virtual" | "override" | "static" | "sealed" | "abstract"
             if !(kw == "export"
-                && !matches!(atoms.get(1), Some(Atom::Ident(k)) if k == "fn" || k == "async")) =>
+                && !matches!(atoms.get(1), Some(Atom::Ident(k)) if k == "fn" || k == "async" || k == "internal" || k == "protected" || k == "private" || k == "virtual" || k == "override" || k == "static" || k == "sealed" || k == "abstract"))
+            && (kw == "fn" || kw == "async" || matches!(atoms.get(1), Some(_) if true)) =>
         {
-            // `fn …` / `async fn …` / canon `export fn …` (+ `export async fn`)
-            // `export <other>` stays in the var branch (export type/const/…)
+            // `fn …` / `async fn …` / canon `export fn …` / modifier-led fn
+            // rows (`internal static virtual fn …` from the C# round trip)
             let mut mods = Vec::new();
             let mut i = 0usize;
-            if kw == "export" {
-                mods.push("export".into());
-                i += 1;
-                if matches!(atoms.get(i), Some(Atom::Ident(k)) if k == "async") {
-                    mods.push("async".into());
-                    i += 1;
+            loop {
+                match atoms.get(i) {
+                    Some(Atom::Ident(w)) if matches!(w.as_str(),
+                        "export" | "async" | "internal" | "protected" | "private"
+                        | "virtual" | "override" | "static" | "sealed" | "abstract") =>
+                    {
+                        mods.push(w.clone());
+                        i += 1;
+                    }
+                    _ => break,
                 }
-            }
-            // `async fn` (async-led) — handled above only via kw==async
-            if kw == "async" {
-                mods.push("async".into());
-                i += 1;
             }
             if !matches!(atoms.get(i), Some(Atom::Ident(id)) if id == "fn") {
                 return Err(ExpandError { msg: format!("fn missing fn token {i}") });
@@ -515,16 +515,29 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 other => return Err(ExpandError { msg: format!("fn missing name {other:?}") }),
             };
             let mut receiver = None;
-            // skip type params `<T, U>` (depth scan)
-            if matches!(atoms.get(i), Some(Atom::Sym(s)) if s == "<") {
+            // type-params `<T, U>`: re-attach to the name (the reader canon
+            // prints `fn Humanize<T>(...)`; the round-2 name must carry them)
+            if matches!(atoms.get(i), Some(Atom::Sym(sp2)) if sp2 == "<") {
+                let mut tp = String::new();
                 let mut d = 0i32;
                 while i < atoms.len() {
-                    if let Atom::Sym(s) = &atoms[i] {
-                        if s == "<" { d += 1; }
-                        if s == ">" { d -= 1; if d == 0 { i += 1; break; } }
+                    if let Atom::Sym(sp3) = &atoms[i] {
+                        if sp3 == "<" { d += 1; tp.push('<'); i += 1; continue; }
+                        if sp3 == ">" {
+                            d -= 1;
+                            tp.push('>');
+                            i += 1;
+                            if d == 0 { break; }
+                            continue;
+                        }
+                    }
+                    if d > 0 {
+                        if let Atom::Ident(x3) = &atoms[i] { tp.push_str(x3); }
+                        if let Some(Atom::Sym(sp4)) = atoms.get(i + 1) { if sp4 == "," { tp.push(','); i += 1; continue; } }
                     }
                     i += 1;
                 }
+                name = format!("{name}{tp}");
             }
             // receiver form: `Ident . Ident` at head
             if name != "fn" && matches!(&atoms.get(i), Some(Atom::Sym(s)) if s == ".") {
@@ -588,16 +601,40 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
         }
         "type" => {
             let mut i = 1usize;
-            let name = match atoms.get(i) {
+            let mut name = match atoms.get(i) {
                 Some(Atom::Ident(n)) => n.clone(),
                 other => return Err(ExpandError { msg: format!("type missing name {other:?}") }),
             };
             i += 1;
+            // type-params `<T, U>`: re-attach to the name (the reader canon
+            // prints `type X<T> {...}`; the round-2 name must carry them)
+            if matches!(atoms.get(i), Some(Atom::Sym(sp)) if sp == "<") {
+                let mut tp = String::new();
+                let mut d = 0i32;
+                while i < atoms.len() {
+                    if let Atom::Sym(sp2) = &atoms[i] {
+                        if sp2 == "<" { d += 1; tp.push('<'); i += 1; continue; }
+                        if sp2 == ">" {
+                            d -= 1;
+                            tp.push('>');
+                            i += 1;
+                            if d == 0 { break; }
+                            continue;
+                        }
+                    }
+                    if d > 0 {
+                        if let Atom::Ident(x2) = &atoms[i] { tp.push_str(x2); }
+                        if let Some(Atom::Sym(sp3)) = atoms.get(i + 1) { if sp3 == "," { tp.push(','); i += 1; continue; } }
+                    }
+                    i += 1;
+                }
+                name = format!("{name}{tp}");
+            }
             let mut kind = String::from("class");
             let mut modifiers = Vec::new();
             loop {
                 match atoms.get(i) {
-                    Some(Atom::Ident(m)) if matches!(m.as_str(), "export" | "sealed" | "abstract") => {
+                    Some(Atom::Ident(m)) if matches!(m.as_str(), "export" | "sealed" | "abstract" | "internal" | "protected" | "private" | "static" | "readonly") => {
                         modifiers.push(m.clone());
                         i += 1;
                     }
@@ -1176,6 +1213,14 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
     };
     if atoms.is_empty() {
         return Ok(Core::Expr(Vec::new(), span));
+    }
+    // modifier-led fn member rows (`internal virtual fn Humanize(...)`
+    // from the C# round trip): delegate to expand_line once a `fn` token
+    // exists downstream; non-fn rows stay in the field arms
+    let mod_words: &[&str] = &["internal", "protected", "private", "virtual", "override", "static", "sealed", "abstract", "export", "async"];
+    let lead_mod = matches!(&atoms[0], Atom::Ident(w) if mod_words.contains(&w.as_str()));
+    if lead_mod && atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "fn")) {
+        return expand_line(f);
     }
     let kw = match &atoms[0] {
         Atom::Ident(id) => id.clone(),

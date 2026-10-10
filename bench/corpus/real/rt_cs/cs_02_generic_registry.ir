@@ -1,6 +1,6 @@
 @1 @ns Humanizer
 
-type LocaliserRegistry export{
+type LocaliserRegistry<TLocaliser> export{
   Dictionary<String,Func<CultureInfo,TLocaliser>> localisersBuilder =[]
   Object lockObject=new ()
   volatile FrozenDictionary<String,Func<CultureInfo,TLocaliser>>? frozenLocalisers
