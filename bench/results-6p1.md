@@ -6,6 +6,31 @@
 > original with its round-trip canon (`rt/` for js, `rt_cs/` for cs) and
 > scores both with the Phase-0 tokenizers (o200k_base, llama).
 > Measured 2026-10-10 (`bench/scripts/.venv`, tiktoken + tokenizers).
+>
+> **Re-measured 2026-10-11** after the member-row pass (access/readonly/
+> const/bases canon rows — behavior-rig blocking rows, fidelity 11+18):
+> the C# canon grew ~2.1% (64.2%/64.2%), weighted 57.6% → **58.3%
+> o200k / 58.8% llama**; JS canon byte-identical (36.7%/37.7%). The
+> current table:
+
+## C# canon after the member-row pass
+
+| file | original o200k | canon o200k | % | llama % |
+|---|---|---|---|---|
+| cs_01_interface | 712 | 137 | 19.2% | 19.2% |
+| cs_02_generic_registry | 968 | 652 | 67.4% | 68.1% |
+| cs_03_class_methods | 895 | 721 | 80.6% | 79.8% |
+| cs_04_strategy | 99 | 59 | 59.6% | 56.4% |
+| cs_05_extension_static | 6175 | 3227 | 52.3% | 53.0% |
+| cs_06_extension_generics | 5633 | 3427 | 60.8% | 61.7% |
+| cs_08_formatter | 5020 | 4344 | 86.5% | 84.0% |
+| cs_09_detector | 209 | 111 | 53.1% | 51.1% |
+| cs_10_detector2 | 198 | 98 | 49.5% | 47.7% |
+| **C# total** | **19909** | **12776** | **64.2%** | **64.2%** |
+
+Weighted both languages: (1979 + 12776) / (5390 + 19909) = **58.3%
+o200k**; llama (2483 + 16503) / (6587 + 25713) = **58.8%**. JS canon is
+unchanged byte-for-byte (the pass touched C#-leg canon only).
 
 ## JS canon vs original TS (`bench/corpus/real/rt`)
 

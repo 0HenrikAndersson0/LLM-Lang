@@ -3,6 +3,7 @@ name = "ircc"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "ircc — the IR toolchain CLI: parse, expand, to-js, to-cs, from-js, from-cs (round-trip)"
 
 [[bin]]

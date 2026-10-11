@@ -1,17 +1,17 @@
 namespace Humanizer;
 
-public class DefaultFormatter
+public class DefaultFormatter : IGrammaticalCaseTimeSpanFormatter
 {
-    readonly DefaultFormatter EnglishFallback = new (CultureInfo.GetCultureInfo("en"));
-    LocalePhraseTable phraseTable;
-    LocalePhraseTable PhraseTable => phraseTable;
-    CultureInfo Culture;
-    DefaultFormatter(CultureInfo culture)
+    static readonly DefaultFormatter EnglishFallback = new (CultureInfo.GetCultureInfo("en"));
+    readonly LocalePhraseTable phraseTable;
+    private protected LocalePhraseTable PhraseTable => phraseTable;
+    protected CultureInfo Culture;
+    public DefaultFormatter(CultureInfo culture)
     {
         Culture=culture;
         phraseTable=LocalePhraseTableCatalog.Resolve(culture)??throw new InvalidOperationException("The generated locale phrase tables are missing the required English fallback.");
     }
-    DefaultFormatter(string localeCode) { }
+    public DefaultFormatter(string localeCode) : this(new CultureInfo(localeCode)) { }
     public virtual string DateHumanize_Now() =>
         phraseTable.DateNow??"now";
     internal string DateHumanize_Today(string now) =>
@@ -57,7 +57,7 @@ public class DefaultFormatter
         }
         return category;
     }
-    internal string TimeSpanHumanize(TimeUnit timeUnit, int unit, GrammaticalCase grammaticalCase)
+    string IGrammaticalCaseTimeSpanFormatter.TimeSpanHumanize(TimeUnit timeUnit, int unit, GrammaticalCase grammaticalCase)
     {
         if (GetType().Assembly!=typeof (DefaultFormatter).Assembly)
         {

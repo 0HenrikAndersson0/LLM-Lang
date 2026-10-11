@@ -2,20 +2,20 @@ namespace Humanizer;
 
 public interface IFormatter
 {
-    internal string DateHumanize_Now();
+    string DateHumanize_Now();
 
-    internal string DateHumanize_Never();
+    string DateHumanize_Never();
 
-    internal string DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, int unit);
+    string DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, int unit);
 
-    internal string TimeSpanHumanize_Zero();
+    string TimeSpanHumanize_Zero();
 
-    internal string TimeSpanHumanize(TimeUnit timeUnit, int unit, bool toWords = false );
+    string TimeSpanHumanize(TimeUnit timeUnit, int unit, bool toWords = false );
 
-    internal string TimeSpanHumanize_Age();
+    string TimeSpanHumanize_Age();
 
-    internal string DataUnitHumanize(DataUnit dataUnit, double count, bool toSymbol = true );
+    string DataUnitHumanize(DataUnit dataUnit, double count, bool toSymbol = true );
 
-    internal string TimeUnitHumanize(TimeUnit timeUnit);
+    string TimeUnitHumanize(TimeUnit timeUnit);
 
 }

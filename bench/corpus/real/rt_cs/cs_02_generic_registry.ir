@@ -1,14 +1,14 @@
 @1 @ns Humanizer @use System.Runtime.CompilerServices
 
 type LocaliserRegistry<TLocaliser> export{
-  Dictionary<String,Func<CultureInfo,TLocaliser>> localisersBuilder =[]
-  Object lockObject=new ()
+  readonly Dictionary<String,Func<CultureInfo,TLocaliser>> localisersBuilder =[]
+  readonly Object lockObject=new ()
   volatile FrozenDictionary<String,Func<CultureInfo,TLocaliser>>? frozenLocalisers
-  Func<CultureInfo,TLocaliser> defaultLocaliser
-  ConditionalWeakTable<CultureInfo,StrongBox<TLocaliser>> cultureSpecificCache =new ()
+  readonly Func<CultureInfo,TLocaliser> defaultLocaliser
+  readonly ConditionalWeakTable<CultureInfo,StrongBox<TLocaliser>> cultureSpecificCache =new ()
   volatile Bool useGeneratedCultureResolver
-  ctor (defaultLocaliser TLocaliser){this.defaultLocaliser=_=>defaultLocaliser}
-  ctor (defaultLocaliser Func<CultureInfo,TLocaliser>){this.defaultLocaliser=defaultLocaliser}
+  export ctor (defaultLocaliser TLocaliser){this.defaultLocaliser=_=>defaultLocaliser}
+  export ctor (defaultLocaliser Func<CultureInfo,TLocaliser>){this.defaultLocaliser=defaultLocaliser}
   export fn ResolveForUiCulture() TLocaliser{ResolveForCulture(CultureInfo.CurrentUICulture)}
   export fn ResolveForCulture(culture CultureInfo?) TLocaliser{
     var cultureInfo=culture??CultureInfo.CurrentCulture
@@ -32,7 +32,7 @@ type LocaliserRegistry<TLocaliser> export{
   }
   internal fn GetRegisteredLocaleCodes() Array<String>{
     lock lockObject{
-      return [..localisersBuilder.Keys.OrderBy(staticlocale=>locale, StringComparer.Ordinal)]
+      return [..localisersBuilder.Keys.OrderBy(static locale=>locale, StringComparer.Ordinal)]
     }
   }
   internal fn UseGeneratedCultureResolver(){

@@ -42,7 +42,7 @@
    param inside member rows that the emitted class declares ✓ (these
    compile once access rows fix the ctor visibility).
 
-## Honest verdict
+## Honest verdict (2026-10-10, superseded same week)
 
 The behavior rig *built incrementally* but cannot reach green without
 the member-access canon rows — the same class as the type-modifier row
@@ -51,3 +51,35 @@ rows + expander member parse + printer/emit arms + the re-gates) to
 close, then behavior cases can run against Humanizer's own semantics
 (the library's own test suite could then run against the round-tripped
 assembly — the strongest possible behavior evidence).
+
+## Member-row pass (2026-10-11): the boundary CLOSED — rig builds 0 errors
+
+The queued row set landed (additive canon rows, the type-modifier-row
+precedent):
+
+| row | fix | where |
+|---|---|---|
+| member access words | `protected CultureInfo Culture`, `private protected LocalePhraseTable PhraseTable`, `export ctor` — canon member rows carry access words verbatim (compound pairs joined at emit); `canon_modifiers` widened to the fn-family set | cs_read `canon_modifiers` |
+| ctor visibility + initializer chain | ctor rows carry access (`export ctor (…)`) AND the `: this(...)`/`: base(...)` initializer (unnamed `constructor_initializer` child — `child_by_field_name` missed) | cs_read `ctor_decl` |
+| modifier-led member rows | expander drains mod words on member rows (fn rows delegate per the 7140a7f path; field/property/ctor rows carry the mods) | expander `expand_member` |
+| canon print | `print_member` prints the mod words before the type; `print_type` prints `: bases` (spec §2 grammar had them all along) + kind-before-primary order | printer |
+| emit | access words + family words on member var rows (const/readonly/static discipline kept), explicit-impl dotted names, static-class detection excludes explicit rows (CS0112 root) | cs `member_var`, `fn_sig` |
+| record structs | `record struct` kind phrase folds through `record_declaration` (+ literal `struct` token child); emit restores `record struct` | cs_read dispatch, cs emit_type |
+| static lambdas | `static locale => locale` carried as canon idents (was: dropped in the lambda path, glued into `staticlocale` in the verbatim path — the CS0103 row) | cs_read lambda arm + verbatim keyword-text arm |
+
+**Result: the vendored rig (vendor tree minus the 9 corpus mirrors +
+the emitted round-tripped corpus) compiles 834 → 0 errors** — canon
+identity 9/9 (`ircc verify`) + all test suites (59 rows) green; JS
+behavior 3/3 BEHAVIOR-MATCH re-verified; loop selftests ×4 green.
+
+## Remaining (queued)
+
+- **The library's own test suite against the rig assembly** — the
+  strongest behavior evidence. Environment-bound: the vendor pins SDK
+  11 (`global.json`, rollForward latestFeature) and the Microsoft
+  Testing Platform runner refuses VSTest targets on SDK 10
+  ("opt-in to the new dotnet test experience"); the produced test-exec
+  also failed to bind Humanizer at module-init locally. Needs either
+  `sdk install` of the pinned SDK or `-p:RunAnalyzers=false` +
+  runner resolution — scoped but not closed this pass.
+- **6.2 loop at scale** (model time).

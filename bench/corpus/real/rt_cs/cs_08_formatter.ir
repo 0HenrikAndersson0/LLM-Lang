@@ -1,15 +1,15 @@
 @1 @ns Humanizer
 
-type DefaultFormatter export{
-  DefaultFormatter EnglishFallback=new (CultureInfo.GetCultureInfo("en"))
-  LocalePhraseTable phraseTable
-  LocalePhraseTable PhraseTable => phraseTable
-  CultureInfo Culture
-  ctor (culture CultureInfo){
+type DefaultFormatter export : IGrammaticalCaseTimeSpanFormatter{
+  static readonly DefaultFormatter EnglishFallback=new (CultureInfo.GetCultureInfo("en"))
+  readonly LocalePhraseTable phraseTable
+  private protected LocalePhraseTable PhraseTable => phraseTable
+  protected CultureInfo Culture
+  export ctor (culture CultureInfo){
     Culture=culture
     phraseTable=LocalePhraseTableCatalog.Resolve(culture)??throw new InvalidOperationException("The generated locale phrase tables are missing the required English fallback.")
   }
-  ctor (localeCode String){}
+  export ctor (localeCode String) : this(new CultureInfo(localeCode)){}
   export virtual fn DateHumanize_Now() String{phraseTable.DateNow??"now"}
   internal fn DateHumanize_Today(now String) String{now==(phraseTable.DateNow??"now")?phraseTable.DateToday??now:now}
   export virtual fn DateHumanize_Never() String{phraseTable.DateNever??"never"}
@@ -42,7 +42,7 @@ type DefaultFormatter export{
     }
     return category
   }
-  fn TimeSpanHumanize(timeUnit TimeUnit, unit Int, grammaticalCase GrammaticalCase) String{
+  explicit fn IGrammaticalCaseTimeSpanFormatter.TimeSpanHumanize(timeUnit TimeUnit, unit Int, grammaticalCase GrammaticalCase) String{
     if GetType().Assembly !=typeof (DefaultFormatter).Assembly{
       throw new NotSupportedException("Custom formatter type '{GetType().FullName}' must explicitly implement {nameof(IGrammaticalCaseTimeSpanFormatter)} to support grammatical-case-aware durations.")
     }

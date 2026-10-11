@@ -570,7 +570,7 @@ fn stmts_csharp(sts: &[Core], level: usize, out: &mut String) -> Result<(), CsLo
             Core::Fn(f) => {
                 // local function
                 out.push_str(&IND.repeat(level + 1));
-                out.push_str(&fn_sig(f, false, false));
+                out.push_str(&fn_sig(f, false, false, false));
                 out.push_str(&render_body(&f.body, level, &f.ret)?);
                 out.push('\n');
             }
@@ -891,7 +891,7 @@ fn push_arm_body(b: &Body, mut s: String, level: usize) -> Result<String, CsLowe
 // ---------------------------------------------------------------------------
 // fn / ctor / type emission (§4)
 
-fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
+fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool, in_interface: bool) -> String {
     
     let mut mods: Vec<String> = vec![];
     let is_ctor = f.modifiers.iter().any(|m| m == "ctor");
@@ -912,8 +912,9 @@ fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
         // access nuance is a fidelity row (§1): non-export members get the
         // internal default — member calls across files in the corpus
         // assembly (cs_06 → cs_08.DataUnitHumanizeExact) resolve like the
-        // originals; local fns are emitted outside this branch (no access)
-        if !is_ctor && !f.modifiers.iter().any(|m| m == "export")
+        // originals; local fns are emitted outside this branch (no access);
+        // interface members keep implicit public (internal is CS0524)
+        if !in_interface && !is_ctor && !f.modifiers.iter().any(|m| m == "export" || m == "explicit")
             && !mods.iter().any(|m| m == "public" || m == "private" || m == "protected" || m == "internal")
         {
             mods.push("internal".into());
@@ -932,6 +933,28 @@ fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
     }
     if is_ctor {
         s.push_str(&f.name);
+    } else if f.modifiers.iter().any(|m| m == "explicit") {
+        // explicit interface impl: `string IGrammaticalCaseTimeSpanFormatter
+        // .TimeSpanHumanize(...)` — receiver holds the interface qualifier;
+        // no access/static words (explicit impls can't carry them)
+        if let Some(r) = &f.ret {
+            let (rt, _) = split_default(r);
+            if rt.eq_ignore_ascii_case("void") {
+                s.push_str("void ");
+            } else {
+                s.push_str(&map_type(rt));
+                s.push(' ');
+            }
+        } else {
+            s.push_str("void ");
+        }
+        s.push_str(&format!(
+            "{}.{}",
+            f.receiver.clone().unwrap_or_default(),
+            f.name
+        ));
+        s.push_str(&params_csharp(&f.params));
+        return s;
     } else if let Some(recv) = &f.receiver {
         // extension fn: `fn String.FromMetric() Float` → static, `this string input`
         // param 0 (static already in mods when the host type is a static class)
@@ -976,6 +999,13 @@ fn fn_sig(f: &FnDecl, type_ctx: bool, in_static: bool) -> String {
         s.push_str(&f.name);
     }
     s.push_str(&params_csharp(&f.params));
+    // ctor initializer chain (`: this(...)` / `: base(...)`) — canon-carried
+    // on ctor rows; without it the emitted ctor leaves fields uninitialized
+    // (CS8618 in the vendor rig)
+    if let Some(b) = &f.base {
+        s.push_str(" : ");
+        s.push_str(b);
+    }
     s
 }
 
@@ -1198,15 +1228,17 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
     scan_assigned_core(&t.members, &mut assigned);
     assigned.dedup();
 
-    // extension methods force a static class (C# rule)
-    let is_static_class = t.members.iter().any(|m| matches!(m, Core::Fn(f) if f.receiver.is_some()))
+    // extension methods force a static class (C# rule); explicit interface
+    // impls ride the receiver form too — never extension rows
+    let is_static_class = t.members.iter().any(|m| matches!(m, Core::Fn(f) if f.receiver.is_some()
+        && !f.modifiers.iter().any(|mf| mf == "explicit")))
         && (t.kind == "class" || t.kind == "struct");
     let mut mods: Vec<String> = vec![];
     if t.modifiers.iter().any(|m| m == "export") {
         mods.push("public".into());
     }
     for m in &t.modifiers {
-        if matches!(m.as_str(), "sealed" | "abstract") {
+        if matches!(m.as_str(), "sealed" | "abstract" | "readonly" | "internal") {
             mods.push(m.clone());
         }
     }
@@ -1220,8 +1252,7 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
     }
     out.push_str(match t.kind.as_str() {
         "interface" => "interface",
-        "record" => "record",
-        "struct" => "struct",
+        "record" | "record struct" | "struct" => t.kind.as_str(),
         _ => "class",
     });
     out.push(' ');
@@ -1243,7 +1274,7 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
                 if t.kind == "interface" && matches!(&f.body, Body::Inline(a) if a.is_empty()) {
                     // interface member: signature row, no body
                     out.push_str(&IND.repeat(level + 1));
-                    out.push_str(&fn_sig(f, true, is_static_class));
+                    out.push_str(&fn_sig(f, true, is_static_class, true));
                     out.push_str(";\n");
                 } else if f.modifiers.iter().any(|x| x == "ctor") {
                     let mut f2 = f.clone();
@@ -1252,14 +1283,14 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
                     }
                     f2.name = t.name.split('<').next().unwrap_or(&t.name).to_string();
                     out.push_str(&IND.repeat(level + 1));
-                    out.push_str(&fn_sig(&f2, true, false));
+                    out.push_str(&fn_sig(&f2, true, false, false));
                     out.push_str(&render_body(&f2.body, level + 1, &None)?);
                 } else {
                     let mut f2 = f.clone();
                     async_upgrade(&mut f2);
                     let body_ret = f2.ret.clone();
                     out.push_str(&IND.repeat(level + 1));
-                    out.push_str(&fn_sig(&f2, true, is_static_class));
+                    out.push_str(&fn_sig(&f2, true, is_static_class, false));
                     out.push_str(&render_body(&f.body, level + 1, &body_ret)?);
                 }
                 out.push('\n');
@@ -1343,6 +1374,10 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
     if is_computed {
         let mut s = String::new();
         s.push_str(&ind);
+        push_member_front(v, t, &mut s);
+        if v.modifiers.iter().any(|m| m == "static") || is_static {
+            s.push_str("static ");
+        }
         if let Some(ty) = &v.ty {
             s.push_str(&map_type(ty));
             s.push(' ');
@@ -1360,6 +1395,10 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
     }
     // ty may carry the declaration keywords (`const var`/`volatile var`)
     let (is_const, is_volatile, ty_real) = decl_flags(v.ty.as_deref().unwrap_or(""));
+    // canon now carries const/volatile/readonly as modifier words (member
+    // row pass) — honor both spellings
+    let const_row = is_const || mods_any(v, "const");
+    let volatile_row = is_volatile || mods_any(v, "volatile");
     let is_mut = v.modifiers.iter().any(|m| m == "mut");
     let typed = ty_real.clone().or_else(|| {
         // no real type and no value → still emit as untyped row handled below
@@ -1377,19 +1416,17 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
         }).unwrap_or("");
         let mut s = String::new();
         s.push_str(&ind);
-        if v.modifiers.iter().any(|m| m == "export") {
-            s.push_str("public ");
-        }
-        if (is_static || v.modifiers.iter().any(|m| m == "static")) && !is_const {
+        push_member_front(v, t, &mut s);
+        if (is_static || v.modifiers.iter().any(|m| m == "static")) && !const_row {
             s.push_str("static ");
         }
-        if is_const {
+        if const_row {
             s.push_str("const int ");
         } else {
-            if !is_mut && t.kind != "interface" && !assigned.iter().any(|x| x == &v.name) {
+            if t.kind != "interface" && !is_mut && (mods_any(v, "readonly") || !assigned.iter().any(|x| x == &v.name)) {
                 s.push_str("readonly ");
             }
-            if is_volatile {
+            if volatile_row {
                 s.push_str("volatile ");
             }
             s.push_str(if ty_guess.is_empty() { "dynamic" } else { ty_guess });
@@ -1418,21 +1455,20 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
     let ty = typed.unwrap();
     let mut s = String::new();
     s.push_str(&ind);
-    if v.modifiers.iter().any(|m| m == "export") {
-        s.push_str("public ");
-    }
-    if is_static || v.modifiers.iter().any(|m| m == "static") {
+    push_member_front(v, t, &mut s);
+    // C# consts are implicitly static — suppress (CS0504)
+    if (is_static || v.modifiers.iter().any(|m| m == "static")) && !const_row {
         s.push_str("static ");
     }
     if ty.starts_with("out ") {
         s.push_str(&ty);
         s.push(' ');
-    } else if is_const {
+    } else if const_row {
         s.push_str("const ");
         let mt = if ty.is_empty() { "int".to_string() } else { map_type(&ty) };
         s.push_str(&mt);
         s.push(' ');
-    } else if is_volatile {
+    } else if volatile_row {
         s.push_str("volatile ");
         let mt = if ty.is_empty() { "bool".to_string() } else { map_type(&ty) };
         s.push_str(&mt);
@@ -1443,7 +1479,7 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
         s.push_str(&v.name);
         s.push_str(" { get; set; }\n");
         return Ok(s);
-    } else if !is_mut && !assigned.iter().any(|x| x == &v.name) {
+    } else if mods_any(v, "readonly") || (!is_mut && !assigned.iter().any(|x| x == &v.name)) {
         s.push_str("readonly ");
         let mt = if ty.is_empty() { "var".to_string() } else { map_type(&ty) };
         s.push_str(&mt);
@@ -1466,7 +1502,59 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
 }
 
 fn is_static_class_ctx(t: &TypeDecl) -> bool {
-    t.members.iter().any(|m| matches!(m, Core::Fn(f) if f.receiver.is_some()))
+    // receiver fns mark static classes (extension-method hosts); explicit
+    // interface impls ride the receiver form too — never extension rows
+    t.members.iter().any(|m| matches!(m, Core::Fn(f) if f.receiver.is_some()
+        && !f.modifiers.iter().any(|mf| mf == "explicit")))
+}
+
+/// member access word canon-carried on member rows (the Humanizer rig's
+/// member-access row set): export→public, protected/private/internal
+/// verbatim, compound pairs joined (`private protected`/`protected
+/// internal`); interface members keep implicit public
+fn member_access<'a>(v: &'a VarDecl, t: &TypeDecl) -> Option<String> {
+    if t.kind == "interface" {
+        return None;
+    }
+    let words: Vec<&str> = v.modifiers.iter().map(String::as_str).collect();
+    for i in 0..words.len() {
+        match words[i] {
+            "export" => return Some("public".into()),
+            w @ ("protected" | "private" | "internal") => {
+                // compound access modifier: the partner word trails
+                let compound = match (w, words.get(i + 1).copied().unwrap_or("")) {
+                    ("private", "protected") => Some("private protected"),
+                    ("protected", "internal") => Some("protected internal"),
+                    _ => None,
+                };
+                return Some(compound.map(String::from).unwrap_or_else(|| w.to_string()));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn mods_any(v: &VarDecl, word: &str) -> bool {
+    v.modifiers.iter().any(|m| m == word)
+}
+
+/// member row modifier prefix: access word first, then fn-family words in
+/// stored order (virtual/override/sealed/abstract/new/unsafe) — the same
+/// family fn_sig carries for member fns. Compound access words already
+/// print as one phrase and their halves are not family words, so no
+/// double-emit
+fn push_member_front(v: &VarDecl, t: &TypeDecl, s: &mut String) {
+    if let Some(acc) = member_access(v, t) {
+        s.push_str(&acc);
+        s.push(' ');
+    }
+    for m in &v.modifiers {
+        if matches!(m.as_str(), "virtual" | "override" | "sealed" | "abstract" | "new" | "unsafe") {
+            s.push_str(m);
+            s.push(' ');
+        }
+    }
 }
 
 fn is_static_ctx_for_computed(t: &TypeDecl) -> bool {
@@ -1524,7 +1612,7 @@ pub fn emit(core: &[Core]) -> Result<String, CsLowerError> {
                     let mut f2 = f.clone();
                     async_upgrade(&mut f2);
                     out.push_str(&IND.repeat(1));
-                    out.push_str(&fn_sig(&f2, true, true));
+                    out.push_str(&fn_sig(&f2, true, true, false));
                     out.push_str(&render_body(&f2.body, 1, &ret)?);
                     out.push('\n');
                 }

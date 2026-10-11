@@ -42,7 +42,7 @@
 | 8 | Interface `?` optionals | canon `Bool? xmlMode` — the `?` rides the type; erased at emit (2.4 fix) | member_field |
 | 9 | Private members (`#p`) | opaque-captured member row `"opaque:…"`. Canon-stable + compiles; **emit currently stringifies the capture instead of re-emitting verbatim** — emit-side passthrough gap, queued for the Phase-5 emit work | §8.1.3c, print_member |
 | 10 | `@ns` | dropped — no ESM equivalent; reader cannot infer | header_core |
-| 11 | Interface kind word, `: bases`, name-generics in canon print | `type X interface : A, B{` prints `type X export{` — **existing printer surface row** (symmetric drop; re-print stable; C# canon ships the same). TypeDecl keeps the data in-memory | print_type |
+| 11 | Interface kind word, `: bases`, name-generics in canon print | `type X interface : A, B{` — ✅ **bases + kind words now print** (spec §2 grammar always had `[':' bases]`; the printer dropped it — the vendor rig's interface-satisfaction rows, ~794 diagnostics, closed). **generics-in-canon-name still drop in member rows** — canon fn/member names carry no type args; TypeDecl keeps the data in-memory | print_type, canon_modifiers |
 | 12 | `export type * from` | canon `export * from` (star row keeps no `type` word) | printer Reexport |
 | 13 | Alias type-parameters | `BasicAcceptedElems<T extends AnyNode> = ...` → `opaque type BasicAcceptedElems = ...` (param name `T` survives inside the captured text) | alias_decl |
 | 14 | Value-using postfix `i++` | canon `i+=1` — value-determining usages (`x = i++`) would shift by one; corpus has none (statement-tail only) | §8.2 sugar note |
@@ -67,7 +67,7 @@ The 4.5 JS budget above was JS-only. The C# reader (`cs_read.rs`) adds:
 | # | row | practice |
 |---|---|---|
 | 17 | **char literals vs string literals** | ✅ **RESOLVED 2026-10-10 (the @2 admission)**: canon v1.1 gained `Atom::Char` (single-quoted 1-char; double-quoted 1-char stays Str — 1-char JS strings are meaningful). The C# emit restores `'X'`; JS emit renders `"X"` (JSON string; JS has no chars). Token-neutral (probe: ±1 over 36 swaps — `bench/results-char-atom.md`). The 8 char-family emit rows cleared; the round-trip corpus re-emits with zero non-stub diagnostics |
-| 18 | accessibility nuance | canon keeps `export` (public) only; `internal`/`private`/`protected` collapse — the C# emitter emits `internal` for non-export members so multi-file cross-calls in the corpus assembly resolve as the originals do (`cs_06 → cs_08.DataUnitHumanizeExact`) |
+| 18 | accessibility nuance | ✅ **RESOLVED 2026-10-10 (member-row pass)**: member rows carry access words in canon (`protected CultureInfo Culture`, `export ctor (…)`, compound `private protected`; internal stays free — the emitter's internal default *is* C#'s default). The vendor rig's ~400 CS0122 rows cleared; `ircc verify` green across the corpus | canon_modifiers, expand_member, print_member, member_access |
 | 19 | `where` generic constraints | dropped (contract); the C# emitter emits type params without them |
 | 20 | data-braces vs interpolation in C# strings | **distinguished at the reader** (interpolated_string vs plain literal): plain literals canon-escape `{{…}}`, interpolation canon's `x{e}y`; the C# emit restores literal braces — *this one is preserved*, recorded because JS canon cannot make the same distinction |
 | 21 | `<rest-omitted>` hand-canon elision rows | cs_08's hand rendition elided 2 long bodies — the machine canon re-reads the full source, so these exist only in the hand fixture |
@@ -78,5 +78,9 @@ The JS-side rows 1–16 carry over unchanged.
 (node --check 7/7, tsc 7/7) and behaves identically on every riggable
 subject (3/3 harness subjects) — the §6 contract holds with the budget
 above. **C# leg (5.6 leg-1):** C# → IR canon → C# re-emits syntax-clean
-9/9 (`bench/results-cs-diff.md`); the behavior leg runs behind the
-library-context rig.
+9/9 (`bench/results-cs-diff.md`). **C# leg-2 (2026-10-10, member-row
+pass):** the vendored Humanizer behavior rig builds **0 errors** with the
+round-tripped corpus compiled into the real library tree (was ~834
+diagnostics; `bench/results-humanizer-rig.md`). The library's own test
+suite is the queued strongest-evidence layer (needs the vendor's pinned
+SDK 11 environment).

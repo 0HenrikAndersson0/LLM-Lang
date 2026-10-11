@@ -2,7 +2,7 @@ namespace Humanizer;
 
 public static class MetricNumeralExtensions
 {
-    static readonly int Limit = 27;
+    const int Limit = 27;
     static readonly double BigLimit = Math.Pow(10, Limit);
     static readonly double SmallLimit = Math.Pow(10, -Limit);
     static internal bool ShouldKeepTrailingZeros(MetricNumeralFormats? formats, int? decimals)
@@ -322,10 +322,10 @@ public static class MetricNumeralExtensions
         var isSymbol = UnitPrefixes.ContainsKey(last);
         return !double.TryParse(isSymbol?input[..index]: input, out _);
     }
-    class UnitPrefix(string name, string shortScaleWord, string? longScaleWord = null )
+    struct UnitPrefix(string name, string shortScaleWord, string? longScaleWord = null )
     {
-        readonly string Name = name;
-        readonly string ShortScaleWord = shortScaleWord;
-        string LongScaleWord => longScaleWord??ShortScaleWord;
+        public readonly string Name = name;
+        public readonly string ShortScaleWord = shortScaleWord;
+        public string LongScaleWord => longScaleWord??ShortScaleWord;
     }
 }

@@ -175,7 +175,7 @@ rather than a silent gap.
 | 5.3 | C# printer | emits golden corpus | ☑ — `crates/lang/src/cs.rs` + `irc to-cs`: direct Core→C# emitter per cs-target §2–§6 (verbatim-first atoms, LINQ op map, type-word map, decl-keyword ty stripping, sig-only member inversion, switch-expr reordering else-last, async→`Task<>` upgrade, synthetic `partial` top-level class for stub rigs). **Golden gate: `dotnet build` 8/9** — 03_pipeline excluded with proven upstream cause (the golden fragment itself does not compile in its own world: `.Select(o=>o.Total)` → `List<decimal>` vs declared `List<Order>`; the original golden .cs fails identically). Field-vs-property/access-nuance rows are recorded printer-quality diffs (fidelity budget) |
 | 5.4 | Real-corpus compile under `dotnet build`; diff against hand renditions | report | ☑ — **`bench/results-cs-diff.md` first pass**: golden gate 8/9 (1 proven-upstream); real-corpus emit **structure-compiles 9/9** (syntax phase) under a 35-type stub world (the `--noResolve` analog — the corpus is Humanizer-library fragments); 13 additive emitter fixes shipped en route (bracket-depth, `$`-canon interpolation, keyword-space glue, `else`-arm Sym form, pattern designators restored in `split_switch_arms` — identity green, C-style-for, receiver-param prepend, static/const discipline, ctor-return gate, `new T()` fallback); tagged fidelity rows: hand-canon `<rest-omitted>` elisions, multi-line `{…}`-initializer reader loss, target-typed-new type loss, field-vs-property nuance. Remaining: full-library semantic compile (needs a redeclaration-aware rig), then 5.5/5.6 |
 | 5.5 | LLM loop test for C# | report | ☑ — `report_5p5_cs.md`: the harness gained the **ir-cs and cs worlds** (to-cs + dotnet rig; C#-baseline); all four echo selftests green; **task_01 cs-baseline: qwen2.5-coder:7b ONE-SHOT cold PASS** (idiomatic .NET); ir-cs: round-1 build-fail repaired round-2 (raw dotnet feedback), rounds 2–4 value near-miss (`"hellow"` — the small-scale semantic class; mapped-IR feedback = the queued to-cs sourcemap parity). Loop-as-QA: 7 rig/emitter truths fixed on landing |
-| 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ◐ — `cs_read.rs` + `irc from-cs`: **canon identity 9/9 + 17-row construct smoke; re-emit leg syntax-clean** (rounds 1–2: 35 fixes; zero emit-structural rows; 250 residual diagnostics decomposed: ~195 stub-member boundary + ~55 char-family design rows — fidelity row 17). Behavior leg: documented boundary (library context + char-atom decision, Phase-6) — `bench/results-cs-diff.md` §leg-2+verdict. **5.5 = the remaining Phase-5 task (needs model time)** |
+| 5.6 | tree-sitter-c-sharp reader + double round-trip over cs corpus | round-trip report | ☑ — `cs_read.rs` + `ircc from-cs`: canon identity 9/9 + 17-row construct smoke; re-emit syntax-clean; **the behavior leg closed by the member-row pass (2026-10-11)** — the vendored Humanizer rig (real library tree + emitted corpus) **builds 834 → 0 errors** (`bench/results-humanizer-rig.md`); the library's own test suite = the queued strongest-evidence layer (vendor pins SDK 11; needs that environment) |
 
 ---
 
@@ -185,12 +185,12 @@ rather than a silent gap.
 
 | # | Task | Deliverable | Status |
 |---|------|-------------|--------|
-| 6.1 | Bench rerun vs Phase 0 headline: did savings hold on the whole-pipeline view? | updated results | ☑ — `bench/results-6p1.md`: **machined-canon rerun — JS canon 36.7% o200k / 37.7% llama (beats the 46% Phase-0 hand-canonicalized headline); C# canon 62.1% / 62.5%; both-languages weighted 57.6%**. The J6 denominator finding carries over and now anchors to machine canon an agent regenerates from any file |
+| 6.1 | Bench rerun vs Phase 0 headline: did savings hold on the whole-pipeline view? | updated results | ☑ — `bench/results-6p1.md`: **machined-canon rerun — JS canon 36.7% o200k / 37.7% llama (beats the 46% Phase-0 hand-canonicalized headline); C# canon 62.1% / 62.5%; both-languages weighted 57.6%**. Re-measured 2026-10-11 after the member-row pass: C# canon **64.2%/64.2%** (the additive access rows are the honest cost), weighted **58.3% o200k / 58.8% llama**; JS canon byte-identical. The J6 denominator finding carries over and now anchors to machine canon an agent regenerates from any file |
 | 6.2 | LLM loop test at scale: larger corpus, multiple models (GPT/Claude/Llama) | scale report | ☐ |
 | 6.3 | LSP-ish tooling sketch (completion, go-to-def) — cut unless loop tests demand it | decision doc | ☑ — **cut confirmed**: the loop evidence (2.7/4.4/5.5) never demanded tooling — the repair loop drives from emit/runtime errors + the canon guide; a spec/tutorial + the canon identity serve the authoring path. Revisit only if agent-driven authoring shows canon-drift at scale |
 | 6.4 | Versioning policy: additive-only core forms; macros absorb growth | policy doc | ☑ — `docs/versioning.md`: additive-only core forms (repo precedents), opaque-rows-fidelity principle, canon-text rules (additive rows + reader normalization; keyword renames never), the `@1`→`@2` migration rule (the char-atom flip is the named candidate), reader sugar + target lowering as the growth absorbers |
 | 6.5 | Language spec + tutorial for "teaching the model" | spec + tutorial | ☑ — `docs/spec.md` (canon v1.1 reference: lexical/grammar/types/statements/members/modules/printing/round-trip) + `docs/tutorial.md` (the target-agnostic walkthrough — supersedes teach.md's JS-only subset; JS + C# idiom tables) |
-| 6.6 | Release v0.1: crates.io + example repo | release | ◐ — **prep done**: crate metadata (keywords/categories/description/publish-ready — `cargo package` verifies for both `ir-lang` and `irc`), `examples/` (the metric.cs C# round-trip + compact.js JS idiom, both verified against the gates + `examples/README`), the publish checklist remaining is the actual `cargo publish` invocation + the char-atom decision call (blocks the C# behavior rig, not the JS release) |
+| 6.6 | Release v0.1: crates.io + example repo | release | ◐ — **prep done**: crate metadata (keywords/categories/description/publish-ready — `cargo package` verifies for both `llm-lang` and `ircc`; `repository` metadata joined), `examples/` (the metric.cs C# round-trip + compact.js JS idiom, both verified against the gates + `examples/README`). The char-atom decision call RESOLVED (admitted + implemented, v6.4). Remaining: the actual `cargo publish` (deferred by the human 2026-10-11 — names verified free on crates.io; publish order = lib then bin) |
 
 ---
 
@@ -345,6 +345,29 @@ Each phase exit is a verification act, not a checklist:
   verdict + the round-trip gate result; fidelity row 17 → ✅ resolved.
   **The C# round-trip leg is clean at the emit stage for the whole
   corpus.** Next: behavior rig behind the real library (Phase-6), 6.2.
+- **v6.5 (2026-10-11, latest)** — **THE VENDORED HUMANIZER BEHAVIOR RIG
+  BUILDS 834 → 0 errors: the member-row pass landed** (the precise
+  next-pass row set from dcf53f1). Additive canon rows, the type-modifier
+  precedent: member access words carried (`protected CultureInfo
+  Culture`, compound `private protected`; `export ctor` visibility + the
+  `: this(...)` initializer chain — an unnamed `constructor_initializer`
+  child), `print_member`/`print_type` print them (bases were already in
+  spec §2's grammar — the printer dropped them; ~794 interface-satisfaction
+  rows), the expander drains mod words on member rows, the C# emit maps
+  them (static-class detection excludes explicit-impl rows — the CS0112
+  root), `record struct` kind phrases fold through `record_declaration`'s
+  literal `struct` token, and static lambdas canon as separate idents
+  (was: glued `staticlocale` — the CS0103 row). Canon identity 9/9
+  (`ircc verify`) + 59 tests + JS behavior 3/3 + loop selftests ×4 all
+  green; the rt_cs corpus regenerated. **Bench re-measured (6.1
+  addendum): C# canon 62.1% → 64.2%** (the additive rows are the honest
+  cost; weighted 57.6% → 58.3% o200k / 58.8% llama; JS canon
+  byte-identical). Fidelity rows 11+18 → ✅. Queued: the library's own
+  test suite against the rig assembly (the vendor pins SDK 11 — its MTP
+  runner + apphost binding refuse our SDK 10; needs that environment).
+  Also this session: `ircc`/`llm-lang` names verified free on crates.io;
+  the `cargo publish` call deferred by the human (6.6 stays ◐ on
+  publish); `repository` metadata added to both crate manifests.
 - **v6.3 (2026-10-10, later)** — **6.6-preflight: the char-atom probe
   ran** (`bench/scripts/charatom_probe.py` +
   `bench/results-char-atom.md`): **token-neutral** (±1 over 36 swaps;

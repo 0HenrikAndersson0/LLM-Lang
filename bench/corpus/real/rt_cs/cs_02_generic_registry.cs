@@ -6,14 +6,14 @@ public class LocaliserRegistry<TLocaliser>
     readonly Dictionary<string,Func<CultureInfo,TLocaliser>> localisersBuilder = [];
     readonly object lockObject = new ();
     volatile FrozenDictionary<string,Func<CultureInfo,TLocaliser>>? frozenLocalisers;
-    Func<CultureInfo,TLocaliser> defaultLocaliser;
+    readonly Func<CultureInfo,TLocaliser> defaultLocaliser;
     readonly ConditionalWeakTable<CultureInfo,StrongBox<TLocaliser>> cultureSpecificCache = new ();
     volatile bool useGeneratedCultureResolver;
-    LocaliserRegistry(TLocaliser defaultLocaliser)
+    public LocaliserRegistry(TLocaliser defaultLocaliser)
     {
         this .defaultLocaliser=_ => defaultLocaliser;
     }
-    LocaliserRegistry(Func<CultureInfo,TLocaliser> defaultLocaliser)
+    public LocaliserRegistry(Func<CultureInfo,TLocaliser> defaultLocaliser)
     {
         this .defaultLocaliser=defaultLocaliser;
     }
@@ -50,7 +50,7 @@ public class LocaliserRegistry<TLocaliser>
     {
         lock (lockObject)
         {
-            return [..localisersBuilder.Keys.OrderBy(staticlocale => locale, StringComparer.Ordinal)];
+            return [..localisersBuilder.Keys.OrderBy(static locale => locale, StringComparer.Ordinal)];
         }
     }
     internal void UseGeneratedCultureResolver()

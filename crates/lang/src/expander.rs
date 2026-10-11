@@ -482,7 +482,7 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
             let from = dotted(&atoms[fi + 1..]);
             Ok(Core::Reexport { star, is_type, names, from, span })
         }
-        "fn" | "async" | "export" | "internal" | "protected" | "private" | "virtual" | "override" | "static" | "sealed" | "abstract"
+        "fn" | "async" | "export" | "internal" | "protected" | "private" | "virtual" | "override" | "static" | "sealed" | "abstract" | "explicit"
             if !(kw == "export"
                 && !matches!(atoms.get(1), Some(Atom::Ident(k)) if k == "fn" || k == "async" || k == "internal" || k == "protected" || k == "private" || k == "virtual" || k == "override" || k == "static" || k == "sealed" || k == "abstract"))
             && (kw == "fn" || kw == "async" || matches!(atoms.get(1), Some(_) if true)) =>
@@ -495,7 +495,8 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 match atoms.get(i) {
                     Some(Atom::Ident(w)) if matches!(w.as_str(),
                         "export" | "async" | "internal" | "protected" | "private"
-                        | "virtual" | "override" | "static" | "sealed" | "abstract") =>
+                        | "virtual" | "override" | "static" | "sealed" | "abstract"
+                        | "explicit") =>
                     {
                         mods.push(w.clone());
                         i += 1;
@@ -639,7 +640,8 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                         i += 1;
                     }
                     Some(Atom::Ident(k)) if matches!(k.as_str(), "interface" | "record" | "struct") => {
-                        kind = k.clone();
+                        // two-word kinds (`record struct` from C#) accumulate
+                        kind = if kind == "class" { k.clone() } else { format!("{kind} {k}") };
                         i += 1;
                     }
                     _ => break,
@@ -1214,15 +1216,25 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
     if atoms.is_empty() {
         return Ok(Core::Expr(Vec::new(), span));
     }
-    // modifier-led fn member rows (`internal virtual fn Humanize(...)`
-    // from the C# round trip): delegate to expand_line once a `fn` token
-    // exists downstream; non-fn rows stay in the field arms
-    let mod_words: &[&str] = &["internal", "protected", "private", "virtual", "override", "static", "sealed", "abstract", "export", "async"];
+    // modifier-led member rows (`internal virtual fn Humanize(...)`,
+    // `protected CultureInfo Culture` from the C# round trip): delegate to
+    // expand_line once a `fn` token exists downstream; non-fn rows drain
+    // the mod words in place (ctor + field/property paths carry them)
+    let mod_words: &[&str] = &["export", "internal", "protected", "private", "virtual", "override", "static", "sealed", "abstract", "readonly", "volatile", "new", "extern", "unsafe", "explicit"];
     let lead_mod = matches!(&atoms[0], Atom::Ident(w) if mod_words.contains(&w.as_str()));
     if lead_mod && atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "fn")) {
         return expand_line(f);
     }
-    let kw = match &atoms[0] {
+    let mut mods: Vec<String> = vec![];
+    let mut atoms = atoms;
+    while let Some(Atom::Ident(w)) = atoms.first() {
+        if !mod_words.contains(&w.as_str()) {
+            break;
+        }
+        mods.push(w.clone());
+        atoms.remove(0);
+    }
+    let kw = match &atoms.first().unwrap_or(&Atom::Sym(String::new())) {
         Atom::Ident(id) => id.clone(),
         // `"opaque:…"` member capture row (§8.1.3c): verbatim member blob
         Atom::Str(s) if s.starts_with("opaque:") => {
@@ -1305,12 +1317,14 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 (None, c) => Body::Bare(c.iter().map(expand_form).collect::<Result<Vec<_>, _>>()?),
             };
             let _ = head_end;
+            let mut ctor_mods = mods;
+            ctor_mods.push("ctor".into());
             Ok(Core::Fn(FnDecl {
                 name: "<ctor>".into(),
                 receiver: None,
                 params: params_v,
                 ret: None,
-                modifiers: vec!["ctor".into()],
+                modifiers: ctor_mods,
                 base,
                 body,
                 span,
@@ -1388,7 +1402,11 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 Some(Atom::Sym(s)) if s == "=>" => (Some(atoms[split + 1..].to_vec()), true),
                 _ => (None, false),
             };
-            Ok(Core::Var(VarDecl { name, ty: ty_str, value, modifiers: if is_prop { vec!["computed".into()] } else { vec![] }, objlit: None, span }))
+            let mut row_mods = mods;
+            if is_prop {
+                row_mods.push("computed".into());
+            }
+            Ok(Core::Var(VarDecl { name, ty: ty_str, value, modifiers: row_mods, objlit: None, span }))
         }
     }
 }

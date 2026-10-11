@@ -439,6 +439,14 @@ fn print_type(t: &TypeDecl, level: usize) -> String {
         s.push(' ');
         s.push_str(m);
     }
+    // kind word: canon keeps it when the target needs it (C# interface/
+    // struct/record emit rows 5.4; `record struct` = both words) — the
+    // kind arm in the expander consumes it before the primary scan, so
+    // kind prints before the primary ctor params; plain-class stays implied
+    if t.kind != "class" {
+        s.push(' ');
+        s.push_str(&t.kind);
+    }
     if let Some(p) = &t.primary {
         // primary ctor canon: `type Name(params) {` (fixture-row shape)
         let parts: Vec<String> = p.iter().map(|(n, ty)| {
@@ -446,11 +454,11 @@ fn print_type(t: &TypeDecl, level: usize) -> String {
         }).collect();
         s.push_str(&format!("({})", parts.join(", ")));
     }
-    // kind word: canon keeps it when the target needs it (C# interface/
-    // struct/record emit rows 5.4) — plain-class stays implied
-    if t.kind != "class" {
-        s.push(' ');
-        s.push_str(&t.kind);
+    // bases: spec §2 grammar `[':' bases]` — the round-trip canon carries
+    // the base list (the vendor rig's interface-satisfaction rows)
+    if !t.bases.is_empty() {
+        s.push_str(" : ");
+        s.push_str(&t.bases.join(", "));
     }
     s.push('{');
     s.push('\n');
@@ -480,8 +488,16 @@ fn print_member(c: &Core, level: usize) -> String {
             }
             return s;
         }
-        if v.modifiers.iter().any(|m| m == "volatile") {
-            s.push_str("volatile ");
+        // member access/modifier words (round-trip canon rows): carry
+        // verbatim before the type in stored order; structural words skip
+        // (computed → `=>`, opaque handled above, mut is a local-annotation
+        // word)
+        for m in &v.modifiers {
+            if matches!(m.as_str(), "computed" | "opaque" | "mut") {
+                continue;
+            }
+            s.push_str(m);
+            s.push(' ');
         }
         if let Some(ty) = &v.ty {
             s.push_str(ty);
@@ -558,6 +574,7 @@ const KEYWORDS: &[&str] = &[
     "finally", "throw", "return", "null", "true", "false", "async", "export", "ctor",
     "interface", "record", "struct", "sealed", "abstract", "const", "volatile", "opaque", "out",
     "ref", "new", "typeof", "as", "is", "from", "extends", "await", "mut", "let", "delete",
+    "static",
 ];
 
 pub fn render_atoms(atoms: &[Atom]) -> String {

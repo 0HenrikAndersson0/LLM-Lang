@@ -1,7 +1,7 @@
 @1 @ns Humanizer
 
-type DefaultCollectionFormatter(defaultSeparator String){
-  String DefaultSeparator=defaultSeparator
+type DefaultCollectionFormatter(defaultSeparator String) : ICollectionFormatter{
+  protected String DefaultSeparator=defaultSeparator
   export virtual fn Humanize<T>(collection IEnumerable<T>) String{Humanize(collection, o=>o?.ToString(), DefaultSeparator)}
   export virtual fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
   export fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}

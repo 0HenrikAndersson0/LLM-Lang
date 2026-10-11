@@ -471,6 +471,25 @@ impl<'a> CsReader<'a> {
                         }
                     }
                 }
+                // static lambda modifier (`static x => x`) — canon keeps it
+                // as an Ident BEFORE the param list (the verbatim path's
+                // Sym spelling glued with the param name)
+                {
+                    let mut mc = node.walk();
+                    if mc.goto_first_child() {
+                        loop {
+                            let m = mc.node();
+                            if m.kind() == "modifier" || m.kind() == "static" {
+                                v.push(Atom::Ident(text(m, self.src).to_string()));
+                                break;
+                            }
+                            if m.kind() == "parameter_list" || m.kind() == "=>" {
+                                break;
+                            }
+                            if !mc.goto_next_sibling() { break; }
+                        }
+                    }
+                }
                 if let Some(p) = params_node {
                     if p.kind() == "parameter_list" {
                         v.extend(self.lambda_params_atoms(p));
@@ -814,8 +833,10 @@ impl<'a> CsReader<'a> {
                 }
                 // keyword LITERAL texts arrive as Sym rows through various
                 // grammar kinds (csharp `null_literal`/args wrappers) — canon
-                // needs the Ident (keyword-space glue rules)
-                _ if matches!(t, "true" | "false" | "null" | "this" | "base" | "var" | "new") => {
+                // needs the Ident (keyword-space glue rules); `static` rides
+                // here in verbatim contexts (static lambda modifiers — canon
+                // `static locale => locale`, the CS0103 glue row)
+                _ if matches!(t, "true" | "false" | "null" | "this" | "base" | "var" | "new" | "static") => {
                     v.push(Atom::Ident(t.to_string()));
                 }
                 "integer_literal" | "real_literal" | "decimal_literal" => {
@@ -824,7 +845,6 @@ impl<'a> CsReader<'a> {
                 "character_literal" => {
                     // canon chars are Str atoms (double-quoted print; the
                     // verbatim Sym would re-lex as a Str on round 2 anyway)
-                    eprintln!("CHARARM t={t:?}");
                     v.push(Atom::Str(t.trim_matches(|c| c == '\'').replace("\\'", "'").to_string()));
                 }
                 ";" => {
@@ -929,8 +949,17 @@ impl<'a> CsReader<'a> {
                 vec![]
             }
             "comment" => vec![],
-            "class_declaration" | "struct_declaration" | "record_declaration" | "record_struct_declaration" => {
+            "class_declaration" => {
                 vec![self.type_decl(node, "class")]
+            }
+            "struct_declaration" => {
+                vec![self.type_decl(node, "struct")]
+            }
+            // `record struct X(...)` folds into record_declaration with a
+            // literal `struct` token child (kind = "record struct")
+            "record_declaration" => {
+                let has_struct_token = self.has_child_token(node, "struct");
+                vec![self.type_decl(node, if has_struct_token { "record struct" } else { "record" })]
             }
             "interface_declaration" => vec![self.type_decl(node, "interface")],
             "enum_declaration" => {
@@ -1040,19 +1069,30 @@ impl<'a> CsReader<'a> {
                 }
             }
         }
+        // base list: unnamed `base_list` child in the c-sharp grammar
+        // (child_by_field_name("bases") misses) — walk by kind
         let mut bases = vec![];
-        if let Some(bl) = node.child_by_field_name("bases") {
-            let mut c = bl.walk();
-            if c.goto_first_child() {
+        {
+            let mut bc = node.walk();
+            if bc.goto_first_child() {
                 loop {
-                    let n = c.node();
-                    if n.kind() != ":" && n.kind() != "comment" {
-                        let b = self.type_text(n);
-                        if !b.is_empty() {
-                            bases.push(b);
+                    if bc.node().kind() == "base_list" {
+                        let mut cc = bc.node().walk();
+                        if cc.goto_first_child() {
+                            loop {
+                                let n = cc.node();
+                                if n.kind() != ":" && n.kind() != "," && n.kind() != "comment" {
+                                    let b = self.type_text(n);
+                                    if !b.is_empty() {
+                                        bases.push(b);
+                                    }
+                                }
+                                if !cc.goto_next_sibling() { break; }
+                            }
                         }
+                        break;
                     }
-                    if !c.goto_next_sibling() { break; }
+                    if !bc.goto_next_sibling() { break; }
                 }
             }
         }
@@ -1075,8 +1115,11 @@ impl<'a> CsReader<'a> {
                             vec![Atom::Str(format!("opaque:{}", text(n, self.src).trim()))],
                             self.span(n),
                         )],
-                        "interface_declaration" | "class_declaration" | "struct_declaration"
-                        | "record_declaration" => vec![self.type_decl(n, "class")],
+                        "interface_declaration" => vec![self.type_decl(n, "interface")],
+                        "class_declaration" => vec![self.type_decl(n, "class")],
+                        "struct_declaration" => vec![self.type_decl(n, "struct")],
+                        "record_declaration" =>
+                            vec![self.type_decl(n, if self.has_child_token(n, "struct") { "record struct" } else { "record" })],
                         "comment" => vec![],
                         _ => vec![],
                     };
@@ -1098,6 +1141,25 @@ impl<'a> CsReader<'a> {
 
     fn method_decl(&mut self, node: tree_sitter::Node<'a>, _in_type: bool) -> Core {
         let mut name = node.child_by_field_name("name").map(|n| text(n, self.src).to_string()).unwrap_or_default();
+        // explicit interface impl (`string IFormatter.Name(...)`) — canon
+        // `explicit fn I.Name(...)` (receiver form, additive mod word;
+        // the emitter prints the dotted impl name without access words)
+        let explicit_spec = {
+            let mut xc = node.walk();
+            let mut found: Option<String> = None;
+            if xc.goto_first_child() {
+                loop {
+                    if xc.node().kind() == "explicit_interface_specifier" {
+                        found = Some(
+                            text(xc.node(), self.src).trim().trim_end_matches('.').to_string(),
+                        );
+                        break;
+                    }
+                    if !xc.goto_next_sibling() { break; }
+                }
+            }
+            found
+        };
         // method-level type params: unnamed `type_parameter_list` child
         {
             let mut mc = node.walk();
@@ -1131,6 +1193,12 @@ impl<'a> CsReader<'a> {
                 receiver = Some(ty["this ".len()..].trim().to_string());
             }
         }
+        // explicit interface impl: the dotted interface qualifier rides the
+        // receiver form (`fn I.Name(...)`) — no extension semantics
+        if let Some(spec) = explicit_spec {
+            receiver = Some(spec);
+            modifiers.push("explicit".into());
+        }
         let body = node
             .child_by_field_name("body")
             .or_else(|| node.child_by_field_name("arrow_expression_clause_body"))
@@ -1146,6 +1214,22 @@ impl<'a> CsReader<'a> {
             body,
             span: self.span(node),
         })
+    }
+
+    /// literal token child by text (`record struct X` folds into
+    /// record_declaration; the `struct` keyword arrives as a token child)
+    fn has_child_token(&self, node: tree_sitter::Node<'a>, word: &str) -> bool {
+        let mut c = node.walk();
+        if c.goto_first_child() {
+            loop {
+                let n = c.node();
+                if n.kind() == word || text(n, self.src) == word {
+                    return true;
+                }
+                if !c.goto_next_sibling() { break; }
+            }
+        }
+        false
     }
 
     fn modifiers_raw(&self, node: tree_sitter::Node) -> Vec<String> {
@@ -1165,17 +1249,37 @@ impl<'a> CsReader<'a> {
     fn ctor_decl(&mut self, node: tree_sitter::Node<'a>) -> Core {
         let params = node.child_by_field_name("parameters").map(|p| self.param_pairs(p)).unwrap_or_default();
         let mut base = None;
-        if let Some(ci) = node.child_by_field_name("constructor_initializer") {
-            let t = text(ci, self.src).trim_start_matches(':').trim();
-            base = Some(t.to_string());
+        // the constructor initializer is an unnamed child in this grammar
+        // (`: this(...)` / `: base(...)`) — walk by kind
+        {
+            let mut bc = node.walk();
+            if bc.goto_first_child() {
+                loop {
+                    if bc.node().kind() == "constructor_initializer" {
+                        let t = text(bc.node(), self.src).trim_start_matches(':').trim();
+                        base = Some(t.to_string());
+                        break;
+                    }
+                    if !bc.goto_next_sibling() { break; }
+                }
+            }
         }
         let body = node.child_by_field_name("body").map(|b| self.body_core(b)).unwrap_or(Body::Inline(vec![]));
+        // ctor visibility carries in the ctor row (`protected ctor (...)`) —
+        // the Humanizer rig's ctor-access row set
+        let mut modifiers: Vec<String> = vec![];
+        for m in self.modifiers_raw(node) {
+            if matches!(m.as_str(), "public" | "protected" | "private" | "internal" | "static" | "unsafe" | "extern") {
+                modifiers.push(if m == "public" { "export".into() } else { m });
+            }
+        }
+        modifiers.push("ctor".into());
         Core::Fn(FnDecl {
             name: "_ctor".into(), // name filled by the type emitter context
             receiver: None,
             params,
             ret: None,
-            modifiers: vec!["ctor".into()],
+            modifiers,
             base,
             body,
             span: self.span(node),
@@ -1777,8 +1881,9 @@ fn pattern_empty_else(pat: &[Atom]) -> bool {
         || matches!(pat.first(), Some(Atom::Ident(x)) if x == "else" || x == "_")
 }
 
-/// canon modifiers for member rows: public→export; const/volatile keep;
-/// others (readonly/static/etc) drop (canon field shapes)
+/// canon modifiers for member rows: public→export; access/modifier words
+/// carry verbatim (protected/private/internal/readonly + fn-family words —
+/// the Humanizer rig's member-access row set); const/volatile/mut keep
 fn canon_modifiers(mods: &[String]) -> Vec<String> {
     let mut out = vec![];
     for m in mods {
@@ -1787,6 +1892,10 @@ fn canon_modifiers(mods: &[String]) -> Vec<String> {
             "const" => out.push("const".into()),
             "volatile" => out.push("volatile".into()),
             "mut" => out.push("mut".into()),
+            "protected" | "private" | "internal" | "readonly" | "virtual" | "override"
+            | "static" | "abstract" | "sealed" | "extern" | "new" | "unsafe" | "required" => {
+                out.push(m.clone())
+            }
             _ => {}
         }
     }

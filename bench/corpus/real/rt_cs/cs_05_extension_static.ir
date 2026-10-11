@@ -1,9 +1,9 @@
 @1 @ns Humanizer
 
 type MetricNumeralExtensions export static{
-  Int Limit=27
-  Float BigLimit=Math.Pow(10, Limit)
-  Float SmallLimit=Math.Pow(10, -Limit)
+  const Int Limit=27
+  static readonly Float BigLimit=Math.Pow(10, Limit)
+  static readonly Float SmallLimit=Math.Pow(10, -Limit)
   static fn ShouldKeepTrailingZeros(formats MetricNumeralFormats?, decimals Int?) Bool{
     if !decimals.HasValue||!formats.HasValue||!formats.Value.HasFlag(MetricNumeralFormats.KeepTrailingZeros){
       return false
@@ -14,8 +14,8 @@ type MetricNumeralExtensions export static{
     return true
   }
   static fn FormatLongWithTrailingZeros(input Int64, decimals Int, nfi NumberFormatInfo) String{decimals>0?input.ToString(nfi)+nfi.NumberDecimalSeparator+new string('0', decimals):input.ToString(nfi)}
-  Array<List<Char>> Symbols =[['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'], ['m', 'μ', 'n', 'p', 'f', 'a', 'z', 'y']]
-  FrozenDictionary<Char,UnitPrefix> UnitPrefixes =new Dictionary<Char, UnitPrefix>{{'Y', new ("yotta", "septillion", "quadrillion")}, {'Z', new ("zetta", "sextillion", "trilliard")}, {'E', new ("exa", "quintillion", "trillion")}, {'P', new ("peta", "quadrillion", "billiard")}, {'T', new ("tera", "trillion", "billion")}, {'G', new ("giga", "billion", "milliard")}, {'M', new ("mega", "million")}, {'k', new ("kilo", "thousand")}, {'m', new ("milli", "thousandth")}, {'μ', new ("micro", "millionth")}, {'n', new ("nano", "billionth", "milliardth")}, {'p', new ("pico", "trillionth", "billionth")}, {'f', new ("femto", "quadrillionth", "billiardth")}, {'a', new ("atto", "quintillionth", "trillionth")}, {'z', new ("zepto", "sextillionth", "trilliardth")}, {'y', new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary()
+  static readonly Array<List<Char>> Symbols =[['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'], ['m', 'μ', 'n', 'p', 'f', 'a', 'z', 'y']]
+  static readonly FrozenDictionary<Char,UnitPrefix> UnitPrefixes =new Dictionary<Char, UnitPrefix>{{'Y', new ("yotta", "septillion", "quadrillion")}, {'Z', new ("zetta", "sextillion", "trilliard")}, {'E', new ("exa", "quintillion", "trillion")}, {'P', new ("peta", "quadrillion", "billiard")}, {'T', new ("tera", "trillion", "billion")}, {'G', new ("giga", "billion", "milliard")}, {'M', new ("mega", "million")}, {'k', new ("kilo", "thousand")}, {'m', new ("milli", "thousandth")}, {'μ', new ("micro", "millionth")}, {'n', new ("nano", "billionth", "milliardth")}, {'p', new ("pico", "trillionth", "billionth")}, {'f', new ("femto", "quadrillionth", "billiardth")}, {'a', new ("atto", "quintillionth", "trillionth")}, {'z', new ("zepto", "sextillionth", "trilliardth")}, {'y', new ("yocto", "septillionth", "quadrillionth")}}.ToFrozenDictionary()
   export static fn String.FromMetric(input: this String) Float{
     input=CleanRepresentation(input)
     return BuildNumber(input, input[^1])
@@ -255,9 +255,9 @@ type MetricNumeralExtensions export static{
     var isSymbol=UnitPrefixes.ContainsKey(last)
     return !double.TryParse(isSymbol?input[..index]:input, out _)
   }
-  type UnitPrefix(name String, shortScaleWord String, longScaleWord String? = null){
-    String Name=name
-    String ShortScaleWord=shortScaleWord
-    String LongScaleWord => longScaleWord??ShortScaleWord
+  type UnitPrefix struct(name String, shortScaleWord String, longScaleWord String? = null){
+    export String Name=name
+    export String ShortScaleWord=shortScaleWord
+    export readonly String LongScaleWord => longScaleWord??ShortScaleWord
   }
 }
