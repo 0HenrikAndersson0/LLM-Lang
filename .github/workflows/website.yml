@@ -1,12 +1,11 @@
 name: website
 on:
+  push:
+    branches: [main]
+    paths: ["website/**", ".github/workflows/website.yml"]
   workflow_dispatch:
-  # local-only for now — GitHub Pages is plan-blocked for this private repo
-  # (every push-deploy 404'd). When hosting is chosen, restore the push
-  # trigger:
-  #   push:
-  #     branches: [main]
-  #     paths: ["website/**", ".github/workflows/website.yml"]
+  # (2026-10-27) repo is public — plan no longer blocks Pages; the push
+  # trigger above deploys on every website change
 permissions:
   contents: read
   pages: write
