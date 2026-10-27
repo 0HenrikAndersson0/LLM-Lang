@@ -2,9 +2,9 @@
 
 The complete reference for LLM-Lang canon v1: syntax, core forms, types,
 the two targets, and the invariants the toolchain enforces. Companion
-documents: `docs/language-design.md` (design + measured decisions),
-`docs/tutorial.md` (the teaching walkthrough), `docs/versioning.md`
-(policy), `docs/fidelity.md` (round-trip budget).
+documents: `docs/language-design.md` (upstream) (design + measured decisions),
+`tutorial.md` (the teaching walkthrough), `versioning.md`
+(policy), `fidelity.md` (round-trip budget).
 
 ## 1. Lexical structure
 
@@ -147,7 +147,7 @@ reader re-lexes.
 - Emit: `to-js` (2.3 table + J/J5 verifications) and `to-cs` (§5.2
   table + the 5.4 dotnet gates). Opaque rows emit verbatim with
   `/* opaque */` statement flags where fragments can't.
-- Fidelity budget: `docs/fidelity.md` (JS rows 1–16; C# addendum 17–22).
+- Fidelity budget: `fidelity.md` (JS rows 1–16; C# addendum 17–22).
 
 ## 10. Targets
 
@@ -156,4 +156,4 @@ reader re-lexes.
 - **C#** (`.cs`, .NET 10) — emit + reader verified; behavior rig
   boundary documented (row 17/18/21; the library context).
 - **C#-lite**: versioned `@1`; additive-only growth per
-  `docs/versioning.md`.
+  `versioning.md`.

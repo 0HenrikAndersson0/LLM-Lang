@@ -4,7 +4,7 @@ The model-facing walkthrough: from an empty file to publishing features
 that compile and run on both targets (JavaScript and C#). Every construct
 here is verified by the repo's gates (`cargo test`, the loop selftests,
 the corpus identity suites). For the formal grammar see
-`docs/language-design.md` §1; for release policy `docs/versioning.md`.
+`docs/language-design.md` (upstream) §1; for release policy `versioning.md`.
 
 *(This tutorial is the target-agnostic superset of the loop's
 `bench/scripts/loop/teach.md`, which shows the JS-verified subset.)*
@@ -17,7 +17,7 @@ the corpus identity suites). For the formal grammar see
 export fn Cap(String s) String{...}
 ```
 
-- `@1` — file-format version (always `@1` today; see `docs/versioning.md`)
+- `@1` — file-format version (always `@1` today; see `versioning.md`)
 - `@ns Acme.Demo` — a module namespace (free-form dotted path)
 - `export fn Name(params) Ret{...}` — a function callers import
 - Braces fuse to the header; expressions are tight (`a==b`, `x+y`)
@@ -92,8 +92,8 @@ xs.Where(p)  xs.Select(f)  string.Join("", xs)
 n.ToString("F2")  xs[^1]  input[..^1]
 ```
 
-The lowerings are documented per-target: `docs/js-target.md` (§1–8) and
-`docs/cs-target.md` (§1–6). Collection ops canonize: `.filter`→`Where`,
+The lowerings are documented per-target: `docs/js-target.md` (upstream) (§1–8) and
+`docs/cs-target.md` (upstream) (§1–6). Collection ops canonize: `.filter`→`Where`,
 `.map`→`Select`, `.sum`→`Sum` (C#), so the same canon text lowers to both.
 
 ## 7. Types (the `Type` surface)
@@ -133,7 +133,7 @@ Cross-module calls qualify with the module's last path segment:
 Writing against an existing codebase: the reader (`from-js`/`from-cs`)
 turns real files into canon (comments drop, formatting canonicalizes,
 `mut` is inferred from assignments, chars canon to strings, `where`
-constraints drop — the full budget is `docs/fidelity.md`). What you read
+constraints drop — the full budget is `fidelity.md`). What you read
 is the *value* of the file; what you write regenerates the file on
 either target.
 

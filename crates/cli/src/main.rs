@@ -223,10 +223,10 @@ fn doc_files(paths: &[String]) {
     let docs: &[(&str, &str)] = &[
         ("skill", ASSET_SKILL),
         ("agents", ASSET_AGENTS),
-        ("spec", include_str!("../../../docs/spec.md")),
-        ("tutorial", include_str!("../../../docs/tutorial.md")),
-        ("fidelity", include_str!("../../../docs/fidelity.md")),
-        ("versioning", include_str!("../../../docs/versioning.md")),
+        ("spec", include_str!("../assets/docs/spec.md")),
+        ("tutorial", include_str!("../assets/docs/tutorial.md")),
+        ("fidelity", include_str!("../assets/docs/fidelity.md")),
+        ("versioning", include_str!("../assets/docs/versioning.md")),
     ];
     if paths.is_empty() || paths[0] == "list" {
         println!("embedded docs:");

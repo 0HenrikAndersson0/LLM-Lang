@@ -29,7 +29,7 @@ only for *running* emitted code (node for `to-js` output, .NET 10 for
 
 ## Getting started
 
-Write a feature in the IR (see `examples/` and `docs/tutorial.md`):
+Write a feature in the IR (see `examples/` and `crates/cli/assets/docs/tutorial.md`):
 
 ```
 @1 @ns Examples.Compact
@@ -87,7 +87,7 @@ curation.
   decision log (§8) + what got falsified along the way (§10).
 - `docs/llm_optimized_language_architecture.md` — transpiler
   architecture summary (Rust reader + expander + printers).
-- `docs/fidelity.md` — the actual round-trip fidelity budget in practice
+- `crates/cli/assets/docs/fidelity.md` — the actual round-trip fidelity budget in practice
   (what holds, what's bounded, per-row evidence).
 - `docs/js-target.md` — JS lowering table, emission notes/sourcemap
   design (§1–7), JS→IR round-trip mapping + canon shapes (§8).
@@ -156,7 +156,7 @@ async fn Load(Int id) User?{
 - **Round-trip JS→IR (Phase 4):** `ircc from-js` — canon is identity
   stable over the whole corpus; double round-trip JS→IR→JS compiles
   (node 7/7, tsc 7/7) and behaves identically (3/3 harness subjects);
-  actual fidelity budget in `docs/fidelity.md`.
+  actual fidelity budget in `crates/cli/assets/docs/fidelity.md`.
 - **C# emit + round-trip (Phase 5):** `ircc to-cs` / `ircc from-cs` —
   golden gate 8/9 (1 proven-upstream fragment), canon identity 9/9,
   double round-trip re-emits clean; the LLM loop test passed for the C#
@@ -169,8 +169,8 @@ async fn Load(Int id) User?{
   **61,581 tests, 61,580 pass / 0 fail / 1 vendor-disabled skip**.
 - **Phase 6 (hardening):** machine-canon bench re-measured (36.7% JS /
   64.2% C#, weighted 58.3% — `results-6p1.md`), spec + tutorial +
-  versioning policy shipped (`docs/spec.md`, `docs/tutorial.md`,
-  `docs/versioning.md`), LSP tooling cut confirmed. Remaining: 6.2
+  versioning policy shipped (`crates/cli/assets/docs/spec.md`, `crates/cli/assets/docs/tutorial.md`,
+  `crates/cli/assets/docs/versioning.md`), LSP tooling cut confirmed. Remaining: 6.2
   (loop test at scale — needs model time) and the crates.io publish
   (deferred; `llm-lang`/`ircc` names verified free).
 

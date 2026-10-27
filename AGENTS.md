@@ -26,12 +26,12 @@ ircc lex|parse|expand <files>      # reader introspection (expand = core forms)
    AND print→print stability. Never hand-tweak canon so that this fails.
    `ircc verify` exits 1 on drift.
 2. **Core forms are additive-only**: never rename or reshape existing canon
-   text; growth lands as new rows (versioning policy: `docs/versioning.md`).
-   Canon v1.1 grammar reference: `docs/spec.md`.
+   text; growth lands as new rows (versioning policy: `crates/cli/assets/docs/versioning.md`).
+   Canon v1.1 grammar reference: `crates/cli/assets/docs/spec.md`.
 3. **Fidelity is budgeted with `opaque`**: constructs with no core form
    capture verbatim as `opaque:` rows and re-emit byte-identically (enums,
    operators, `#if` regions, unmatched statements). Don't invent new
-   escape shapes — the budget is documented in `docs/fidelity.md`.
+   escape shapes — the budget is documented in `crates/cli/assets/docs/fidelity.md`.
 4. **Comments drop by contract.** Hand canon MAY carry `//` rows (they are
    fixture annotations); machine canon never re-emits them.
 
@@ -71,10 +71,10 @@ rig runs the vendor's own 61,581-test suite against round-tripped code
 
 ## Where the deep references live
 
-- `docs/spec.md` — canon v1.1 grammar (the authoritative form list)
-- `docs/tutorial.md` — step-by-step authoring walkthrough (JS + C# idiom tables)
-- `docs/fidelity.md` — the round-trip budget, per-row
-- `docs/versioning.md` — the additive-only core-forms policy
+- `crates/cli/assets/docs/spec.md` — canon v1.1 grammar (the authoritative form list)
+- `crates/cli/assets/docs/tutorial.md` — step-by-step authoring walkthrough (JS + C# idiom tables)
+- `crates/cli/assets/docs/fidelity.md` — the round-trip budget, per-row
+- `crates/cli/assets/docs/versioning.md` — the additive-only core-forms policy
 - `bench/results-local-projects.md` — the fresh-code gate (what "holds up" means)
 
 ## Repo structure
