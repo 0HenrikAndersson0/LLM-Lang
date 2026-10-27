@@ -312,7 +312,20 @@ impl<'a> ExprCtx<'a> {
                     {
                         out.push(' ');
                     }
-                    out.push_str(id);
+                    // canon type-words in expression positions (`new
+                    // Dictionary<Currency,Int>`) map back to C# keywords —
+                    // `Int`/`Bool` have no lowercase-insensitive .NET name and
+                    // would CS0246 in the emitted tree. Skipped after a `.` (a
+                    // `System.String` member) and before `(` (a call name).
+                    let mapped = map_type(id) != id.as_str()
+                        && !is_csharp_keyword(id)
+                        && !out.ends_with('.')
+                        && !matches!(atoms.get(i + 1), Some(a) if matches!(a, Atom::Sym(sp) if sp == "("));
+                    if mapped {
+                        out.push_str(&map_type(id));
+                    } else {
+                        out.push_str(id);
+                    }
                     // bare-call: Ident followed by a bare operand — successive
                     // operands separate on `,` at top level (IR arg paren rule)
                     if !is_csharp_keyword(id)
@@ -1333,6 +1346,24 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
 
 fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> Result<String, CsLowerError> {
     let ind = IND.repeat(level);
+    // opaque member capture (operator/event/enum-member rows): the payload
+    // IS the verbatim C# member — print it raw (the string-literal fallback
+    // would render it as a corrupted field)
+    if v.modifiers.iter().any(|m| m == "opaque") {
+        if let Some(Atom::Str(x)) = v.value.as_ref().and_then(|a| a.first()) {
+            if let Some(raw) = x.strip_prefix("opaque:") {
+                let mut s = String::new();
+                for (li, line) in raw.lines().enumerate() {
+                    if li > 0 {
+                        s.push('\n');
+                    }
+                    s.push_str(line);
+                }
+                s.push('\n');
+                return Ok(s);
+            }
+        }
+    }
     // sig-only member rows (ty call-shaped): `DateHumanize_Now() String` —
     // expander models ty="Name(params)" name="Ret" — INVERT (cs-target §4)
     let ty_call = v.ty.as_deref().map(|x| x.contains('(')).unwrap_or(false);
@@ -1624,6 +1655,18 @@ pub fn emit(core: &[Core]) -> Result<String, CsLowerError> {
     for c in core {
         match c {
             Core::Header { .. } => {}
+            Core::Expr(atoms, _) if atoms.len() == 1
+                && matches!(&atoms[0], Atom::Str(x) if x.starts_with("opaque:")) =>
+            {
+                // file-level opaque capture (enums, attributes, `#if` regions):
+                // the payload IS compilable C# at file scope — print verbatim
+                let raw = match &atoms[0] { Atom::Str(x) => x["opaque:".len()..].to_string(), _ => unreachable!() };
+                for (li, line) in raw.lines().enumerate() {
+                    if li > 0 { out.push('\n'); }
+                    out.push_str(line);
+                }
+                out.push('\n');
+            }
             Core::Type(t) => {
                 emit_type(t, 0, &mut out)?;
             }

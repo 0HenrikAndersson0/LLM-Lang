@@ -1156,6 +1156,36 @@ fn split_switch_arms(children: &[Form]) -> Result<Vec<Arm>, ExpandError> {
             arms.push(Arm { pattern: vec![Atom::Sym("else".into())], body: Body::Inline(atoms[1..].to_vec()), span: child_span });
             continue;
         }
+        // `pat => body` — the arrow is the structural split point (canon
+        // rows carry it additively; lambda `=>`s inside the body sit in
+        // call parens, deeper than depth 0)
+        {
+            let mut d = 0i32;
+            let mut arrow: Option<usize> = None;
+            for (idx, a) in atoms.iter().enumerate() {
+                if let Atom::Sym(s) = a {
+                    match s.as_str() {
+                        "(" | "[" | "{" | "<" => d += 1,
+                        ")" | "]" | "}" | ">" if d > 0 => d -= 1,
+                        "=>" if d == 0 => {
+                            arrow = Some(idx);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if let Some(k) = arrow {
+                if k > 0 {
+                    arms.push(Arm {
+                        pattern: atoms[..k].to_vec(),
+                        body: Body::Inline(atoms[k + 1..].to_vec()),
+                        span: child_span,
+                    });
+                    continue;
+                }
+            }
+        }
         // pattern = dotted/type/member run (`ICollection<T>`, `PP.BeforeForm`,
         // `+1`); a BARE capitalized call-head with no dot-prefix = body;
         // binder = lowercase ident
@@ -1415,6 +1445,20 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 Some(Atom::Sym(s)) if s == "=" => (Some(atoms[split + 1..].to_vec()), false),
                 Some(Atom::Sym(s)) if s == "=>" => (Some(atoms[split + 1..].to_vec()), true),
                 _ => (None, false),
+            };
+            // data-brace payload (`=new T{a=1, b=2}` dict/array initializers):
+            // the reader's brace-gluing parked the payload in the inline body
+            // — re-fuse into the value atoms so canon round-trips and emit
+            // restores valid C# (`new Dictionary<…>{…}`)
+            let value = match (&value, &inline) {
+                (Some(v), Some(b)) if !v.is_empty() && !b.is_empty() => {
+                    let mut fused = v.clone();
+                    fused.push(Atom::Sym("{".into()));
+                    fused.extend(b.iter().cloned());
+                    fused.push(Atom::Sym("}".into()));
+                    Some(fused)
+                }
+                (v, _) => v.clone(),
             };
             let mut row_mods = mods;
             if is_prop {

@@ -32,8 +32,8 @@ type DefaultCollectionFormatter(defaultSeparator String) : ICollectionFormatter{
   }
   static internal fn CreateDisplayItems<T>(collection IEnumerable<T>) List<String>{
     return collection switch{
-      ICollection<T>items new (items.Count)
-      IReadOnlyCollection<T>items new (items.Count)
+      ICollection<T>items => new (items.Count)
+      IReadOnlyCollection<T>items => new (items.Count)
       else []
     }
   }

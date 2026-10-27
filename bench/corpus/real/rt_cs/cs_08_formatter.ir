@@ -63,9 +63,9 @@ type DefaultFormatter export : IGrammaticalCaseTimeSpanFormatter{
     }
     var unitOverlay=caseOverlay.Units[(Int)timeUnit]
     return unitOverlay.Kind switch{
-      LocalizedDurationCaseUnitKind.SameAsNominative FormatCaseAwareNominative(timeUnit, unit)
-      LocalizedDurationCaseUnitKind.NotApplicable throw new NotSupportedException($"Culture '{Culture.Name}' does not apply grammatical case '{grammaticalCase}' to duration unit '{timeUnit}'.")
-      LocalizedDurationCaseUnitKind.Unsupported throw new NotSupportedException($"Culture '{Culture.Name}' does not support grammatical case '{grammaticalCase}' for duration unit '{timeUnit}'.")
+      LocalizedDurationCaseUnitKind.SameAsNominative => FormatCaseAwareNominative(timeUnit, unit)
+      LocalizedDurationCaseUnitKind.NotApplicable => throw new NotSupportedException($"Culture '{Culture.Name}' does not apply grammatical case '{grammaticalCase}' to duration unit '{timeUnit}'.")
+      LocalizedDurationCaseUnitKind.Unsupported => throw new NotSupportedException($"Culture '{Culture.Name}' does not support grammatical case '{grammaticalCase}' for duration unit '{timeUnit}'.")
       else FormatCaseAwareTimeSpanPhrase(timeUnit, unit, unitOverlay.Phrase!.Value)
     }
   }
@@ -235,8 +235,8 @@ type DefaultFormatter export : IGrammaticalCaseTimeSpanFormatter{
     var renderedUnit=RenderPattern(unitText, countValue, secondaryPlaceholder)
     var afterCount=RenderPattern(phrase.AfterCountText, countValue, secondaryPlaceholder)
     return phrase.CountPlacement switch{
-      PhraseCountPlacement.BeforeForm JoinPhraseParts(beforeCount, countValue, renderedUnit, afterCount)
-      PhraseCountPlacement.AfterForm JoinPhraseParts(beforeCount, renderedUnit, countValue, afterCount)
+      PhraseCountPlacement.BeforeForm => JoinPhraseParts(beforeCount, countValue, renderedUnit, afterCount)
+      PhraseCountPlacement.AfterForm => JoinPhraseParts(beforeCount, renderedUnit, countValue, afterCount)
       else RenderPattern(renderedUnit, countValue, secondaryPlaceholder)
     }
   }

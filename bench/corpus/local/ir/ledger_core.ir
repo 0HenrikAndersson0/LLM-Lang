@@ -1,0 +1,34 @@
+@1 @ns Ledger.Core
+
+"opaque:public enum Currency\n{\n    /// <summary>United States dollar.</summary>\n    Usd,\n    /// <summary>Euro.</summary>\n    Eur,\n    /// <summary>Japanese yen — zero-decimal in canon form.</summary>\n    Jpy,\n    /// <summary>Swedish krona — the ledger's home currency.</summary>\n    Sek,\n}"
+type Money export record(Minor Int64, Curr Currency){
+  export static readonly IReadOnlyDictionary<Currency,Int> Scale =new Dictionary<Currency, Int>{[Currency.Usd]=2, [Currency.Eur]=2, [Currency.Jpy]=0, [Currency.Sek]=2, }
+  export static fn Of(amount Decimal, curr Currency) Money{
+    var scale=Scale[curr]
+    var minor=decimal.Round(amount, scale)*(Decimal)Math.Pow(10, scale)
+    if minor%1m !=0m{
+      throw new ArgumentOutOfRangeException(nameof(amount), amount, "residual decimals after scaling")
+    }
+    return new Money((Int64)minor, curr)
+  }
+  export Decimal Major => Minor/(Decimal)Math.Pow(10, Scale[Curr])
+  "opaque:public static Money operator +(Money a, Money b)\n    {\n        if (a.Curr != b.Curr)\n        {\n            throw new InvalidOperationException($\"currency mismatch: {a.Curr} vs {b.Curr}\");\n        }\n        return new Money(checked(a.Minor + b.Minor), a.Curr);\n    }"
+  export fn TryAdd(other Money) Result<Money,String>{Curr==other.Curr?Result<Money, String>.Ok(new Money(checked(Minor+other.Minor), Curr)):Result<Money, String>.Err("currency mismatch: {Curr} vs {other.Curr}")}
+}
+type Result<T,E> export readonly struct{
+  private readonly T? _ok
+  private readonly E? _err
+  private ctor (ok T?, err E?, isOk Bool){
+    IsOk=isOk
+    _ok=ok
+    _err=err
+  }
+  export get Bool IsOk
+  export static fn Ok(value T) Result<T,E>{new (value, default, true )}
+  export static fn Err(error E) Result<T,E>{new (default, error, false )}
+  export fn Unwrap() T{IsOk?_ok!:throw new InvalidOperationException($"unwrap on err: {_err}")}
+  export fn UnwrapErr() E{!IsOk?_err!:throw new InvalidOperationException("unwrap_err on ok value")}
+}
+type IRateProvider export interface{
+  fn Rate(from Currency, to Currency) Int64?{}
+}

@@ -1,0 +1,58 @@
+@1 @ns Ledger.Service @use Ledger.Core
+
+type LedgerService export static{
+  export const RoundingMode DefaultRounding=RoundingMode.Bankers
+  export static fn Net(postings IEnumerable<Posting>) ReconciliationReport<Currency>{
+    var nets=new Dictionary<Currency, Money>()
+    var failures=new List<String>()
+    for group in postings.GroupBy(p=>p.Amount.Curr){
+      var mut net=new Money(0, group.Key)
+      for p in group{
+        var sum=net.TryAdd(p.Amount)
+        if sum.IsOk{
+          net=sum.Unwrap()
+        }else{
+          failures.Add("{group.Key}: {sum.UnwrapErr()}")
+
+        }
+      }
+      nets[group.Key]=net
+    }
+    return new ReconciliationReport<Currency>(nets, failures)
+  }
+  export static fn ConvertTo(amount Money, home Currency, rates IRateProvider) Money?{
+    if amount.Curr==home{
+      return amount
+    }
+    var rate=rates.Rate(amount.Curr, home)
+    return rate is null ?null :new Money(checked((long)Math.Round(amount.Minor*(double)rate)), home)
+  }
+  export static fn Round(value Decimal, mode RoundingMode) Decimal{
+    mode switch{
+      RoundingMode.Floor => decimal.Floor(value)
+      RoundingMode.Ceiling => decimal.Ceiling(value)
+      RoundingMode.Nearest => decimal.Round(value, MidpointRounding.AwayFromZero)
+      RoundingMode.Bankers => decimal.Round(value, MidpointRounding.ToEven)
+      else throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown rounding mode.")
+    }
+  }
+  export static fn AuditTrail(postings IEnumerable<Posting>, cutoff DateTime) IEnumerable<Posting>{postings.Where(p=>!p.Voided).Where(p=>p.BookedAt<cutoff).OrderBy(p=>p.BookedAt).ThenBy(p=>p.Amount.Minor)}
+  export static fn SummaryLine(report ReconciliationReport<Currency>) String{report.Failures.Count==0?"{report.Nets.Count} currencies reconciled, 0 conflicts":"{report.Nets.Count} currencies reconciled, {report.Failures.Count} conflicts: {report.Failures.First()}"}
+  export static fn Parse(token String) Money{
+    var parts=token.Split(':')
+    if parts.Length !=2{
+      throw new FormatException("expected CURR:minor, got '{token}'")
+    }
+    if !Enum.TryParse<Currency>(parts[0], ignoreCase:false , out var curr){
+      throw new FormatException("unknown currency '{parts[0]}'")
+    }
+    return new Money(long.Parse(parts[1]), curr)
+  }
+}
+type Posting export record(Account String, BookedAt DateTime, Amount Money, Voided Bool = false){
+  export Bool IsFuture => BookedAt>DateTime.UtcNow
+}
+type ReconciliationReport<K> export record(Nets IReadOnlyDictionary<K,Money>, Failures IReadOnlyList<String>){
+  export Bool Clean => Failures.Count==0
+}
+"opaque:public enum RoundingMode\n{\n    /// <summary>Toward negative infinity.</summary>\n    Floor,\n    /// <summary>Toward positive infinity.</summary>\n    Ceiling,\n    /// <summary>0.5 goes away from zero — merchant expectation.</summary>\n    Nearest,\n    /// <summary>0.5 goes to even — banker's rounding.</summary>\n    Bankers,\n}"

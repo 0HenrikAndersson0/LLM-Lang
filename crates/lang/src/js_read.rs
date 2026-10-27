@@ -235,7 +235,7 @@ impl<'a> JsReader<'a> {
             let is_colon = n.kind() == ":";
             let empty = n.utf8_text(self.src.as_bytes()).unwrap_or("").trim().is_empty();
             if !is_colon && !empty {
-                return self.type_text(n);
+                return canon_ty_text(&self.type_text(n));
             }
             if !c.goto_next_sibling() {
                 return String::new();
@@ -837,6 +837,31 @@ impl<'a> JsReader<'a> {
         v
     }
 
+    /// destructure pattern → raw atoms (`[, q]`, `{id}`, `...rest`): syms
+    /// verbatim, identifiers at the leaves, type annotations erased
+    fn pattern_atoms(&self, node: tree_sitter::Node) -> Vec<Atom> {
+        match node.kind() {
+            "identifier" | "this" => vec![Atom::Ident(text(node, self.src).to_string())],
+            "comment" | "type_annotation" => vec![],
+            _ => {
+                let mut v: Vec<Atom> = vec![];
+                let mut c = node.walk();
+                if c.goto_first_child() {
+                    loop {
+                        let n = c.node();
+                        if matches!(n.kind(), "[" | "]" | "{" | "}" | "," | "..." | "=") {
+                            v.push(Atom::Sym(n.kind().into()));
+                        } else if n.kind() != "comment" && n.kind() != "type_annotation" {
+                            v.extend(self.pattern_atoms(n));
+                        }
+                        if !c.goto_next_sibling() { break; }
+                    }
+                }
+                v
+            }
+        }
+    }
+
     fn lambda_params(&self, p: tree_sitter::Node) -> Vec<Atom> {
         let mut v: Vec<Atom> = vec![Atom::Sym("(".into())];
         let mut c = p.walk();
@@ -852,11 +877,18 @@ impl<'a> JsReader<'a> {
                         "identifier" | "this" | "rest_pattern" | "object_pattern" | "array_pattern"
                         | "required_parameter" | "optional_parameter" | "formal_parameter"
                     ) {
-                        let part = if n.child_by_field_name("pattern").is_some() {
-                            // typed param wrapper → its pattern atom(s)
-                            n.child_by_field_name("pattern")
-                                .map(|p| self.atomize(p))
-                                .unwrap_or_default()
+                        let is_destructure = matches!(n.kind(), "array_pattern" | "object_pattern" | "rest_pattern");
+                        let part = if is_destructure {
+                            // destructure patterns carry as RAW atoms
+                            // (`([, q]) => …`) — opaque strings re-emit as
+                            // invalid quoted destructuring targets
+                            self.pattern_atoms(n)
+                        } else if let Some(p) = n.child_by_field_name("pattern") {
+                            if matches!(p.kind(), "array_pattern" | "object_pattern" | "rest_pattern") {
+                                self.pattern_atoms(p)
+                            } else {
+                                self.atomize(p)
+                            }
                         } else {
                             self.atomize(n)
                         };
@@ -1979,6 +2011,34 @@ fn children<'t, 'a>(node: tree_sitter::Node<'t>) -> impl Iterator<Item = tree_si
         }
         Some(c.node())
     })
+}
+
+/// brace payloads inside ty strings (`readonly {a: T; b: U}[]`) carry raw
+/// source spacing no atom rebuild (`parse_params` `spaced`) can reproduce —
+/// ty text canonizes to the spaced spelling so print→print identity holds
+/// from the first print (fresh-project canon gate). Non-brace ty texts are
+/// already spaced-stable (`readonly Staff[]`, `T?`, `A|B`, generics).
+fn canon_ty_text(s: &str) -> String {
+    if !s.contains('{') {
+        return s.to_string();
+    }
+    match crate::lexer::lex(s) {
+        Ok(l) => {
+            let atoms: Vec<crate::ast::Atom> = l
+                .tokens
+                .into_iter()
+                .filter(|(t, _, _)| !matches!(t, crate::lexer::Tok::Eof))
+                .map(|(t, _, _)| match t {
+                    crate::lexer::Tok::Ident(x) => crate::ast::Atom::Ident(x),
+                    crate::lexer::Tok::Number(x) => crate::ast::Atom::Number(x),
+                    crate::lexer::Tok::Sym(x) => crate::ast::Atom::Sym(x),
+                    other => crate::ast::Atom::Ident(format!("{other:?}")),
+                })
+                .collect();
+            crate::expander::spaced(&atoms)
+        }
+        Err(_) => s.to_string(),
+    }
 }
 
 fn pattern_name<'a>(node: tree_sitter::Node<'a>, src: &'a str) -> String {

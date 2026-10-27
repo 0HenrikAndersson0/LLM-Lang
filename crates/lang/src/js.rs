@@ -1309,6 +1309,21 @@ fn expr_at(atoms: &[Atom]) -> String {
                     };
                     i += 1; // past the opener; slice starts here
                     let inner = bracket_slice(atoms, &mut i, c);
+                    // lambda-param opaque capture (`filter(("opaque:[, q]")=>…)`)
+                    // — the parens slice leaves the Str alone; a lone opaque
+                    // Str inside ( ) is the param list, print it raw
+                    if c == '('
+                        && matches!(inner, [Atom::Str(k)] if k.starts_with("opaque:"))
+                        && matches!(atoms.get(i + 1), Some(a) if matches!(a, Atom::Sym(s3) if s3 == "=>"))
+                    {
+                        let payload = match &inner[0] {
+                            Atom::Str(k) => k["opaque:".len()..].to_string(),
+                            _ => unreachable!(),
+                        };
+                        out.push_str(&payload);
+                        i += 1;
+                        continue;
+                    }
                     // arrow-with-block body `=> {…}` — statementify (J2):
                     // split the inner run at depth-0 stmt keywords; every
                     // piece renders as a statement; a terminal bare expr is
@@ -1377,7 +1392,12 @@ fn expr_at(atoms: &[Atom]) -> String {
                 }
                 "?" => out.push('?'),
                 ":" => {
-                    if !out.ends_with(' ') {
+                    // keep the colon itself ALWAYS (keyword-key object-lits
+                    // like `{from: t}` already left a trailing keyword
+                    // space — dropping the colon there emitted `from slot`)
+                    if out.ends_with(' ') {
+                        out.push(':');
+                    } else {
                         out.push_str(": ");
                     }
                     // `: throw e` (C# throw-expr ternary) → JS needs an

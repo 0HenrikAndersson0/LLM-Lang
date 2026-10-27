@@ -1,28 +1,3 @@
-@1 @use cheerioselect @use domserializer @use domhandler @use htmlparser2 @use parse5 @use parse5htmlparser2treeadapter
+@1
 
-type HTMLParser2Options export{
-  Bool xmlMode
-}
-type CheerioOptions export{
-  HTMLParser2Options|Bool xml
-  Bool xmlMode
-  String|URL baseURI
-  SelectOptions. quirksMode
-  SelectOptions. pseudos
-}
-type InternalOptions export{
-  Bool _useHtmlParser2
-}
-var defaultOpts: InternalOptions={_useHtmlParser2:false }
-export fn flattenOptions(options: CheerioOptions|null?, baseOptions InternalOptions?) InternalOptions{
-  if !options{
-    return baseOptions??defaultOpts
-  }
-  var opts: InternalOptions={_useHtmlParser2:!!options.xmlMode, ...baseOptions, ...options}
-  if options.xml{
-    opts._useHtmlParser2=true
-    opts.xmlMode=true
-    if options.xml !==true{Object.assign(opts, options.xml)}
-  }else if options.xmlMode{opts._useHtmlParser2=true}
-  return opts
-}
+ir/ir/js_08_options.js("opaque:37", lines, "opaque:14 map", entries)

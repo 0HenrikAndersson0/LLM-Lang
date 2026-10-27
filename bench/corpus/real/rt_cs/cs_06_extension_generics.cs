@@ -174,7 +174,7 @@ public static class ByteSizeExtensions
         {
             return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol: !toWords));
         }
-        var parts = new List<String>(Math.Min(precision, 8));
+        var parts = new List<string>(Math.Min(precision, 8));
         void addPart(ulong bitsPerUnit, DataUnit unit)
     {
         if (parts.Count>=precision)
@@ -233,7 +233,7 @@ public static class ByteSizeExtensions
         {
             return string.Concat("0 ", toWords?humanizeUnit(DataUnit.Bit, 0): ByteSize.BitSymbol);
         }
-        var parts = new List<String>(Math.Min(precision, units.Length+2));
+        var parts = new List<string>(Math.Min(precision, units.Length+2));
         foreach (var unit in units)
         {
             if (parts.Count>=precision)

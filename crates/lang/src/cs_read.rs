@@ -963,24 +963,13 @@ impl<'a> CsReader<'a> {
             }
             "interface_declaration" => vec![self.type_decl(node, "interface")],
             "enum_declaration" => {
-                vec![Core::Type(TypeDecl {
-                    name: node.child_by_field_name("name")
-                        .map(|n| {
-                            let mut nm = text(n, self.src).to_string();
-                            if let Some(tp) = node.child_by_field_name("type_parameters") {
-                                nm = format!("{nm}{}", text(tp, self.src).replace(" ", ""));
-                            }
-                            nm
-                        })
-                        .unwrap_or_default(),
-                    kind: self.kind_word(node),
-                    primary: None,
-                    bases: vec![],
-                    constraints: vec![],
-                    modifiers: self.modifiers_export(node),
-                    members: vec![],
-                    span: self.span(node),
-                })]
+                // file-level enums: the kind word + members have no closed
+                // core form — verbatim file-scope capture (emit re-prints
+                // the raw enum, so the declared currency codes survive)
+                vec![Core::Expr(
+                    vec![Atom::Str(format!("opaque:{}", text(node, self.src).trim()))],
+                    self.span(node),
+                )]
             }
             "global_attribute_list" | "attribute_list" => vec![Core::Expr(
                 vec![Atom::Str(format!("opaque:{}", text(node, self.src).trim()))],

@@ -157,9 +157,15 @@ fn print_stmt(head: &[Atom], body: &Body, arms: &[Arm], level: usize) -> String 
                     let b_txt = render_atoms(b);
                     if pat.is_empty() || pat == "else" {
                         s.push_str(&format!("else {b_txt}"));
+                    } else if head_is_switch {
+                        // C# trailing-switch: `{pat} => {body}` — the arrow
+                        // makes the split point structural: dotted patterns
+                        // (`RoundingMode.Floor`) followed by body-leading
+                        // type words mis-split as binders under the space
+                        // convention (local-projects emit gate). `match` rows
+                        // keep the hand-canon space shape (frozen variants).
+                        s.push_str(&format!("{pat} => {b_txt}"));
                     } else {
-                        // `{pat} {call(…)}` — the SPACE keeps arm pattern and
-                        // body split across re-parses (fusing was unstable)
                         s.push_str(&format!("{pat} {b_txt}"));
                     }
                 }
@@ -354,9 +360,10 @@ fn print_fn(f: &FnDecl, level: usize) -> String {
         .map(|(n, t)| {
             if t.is_empty() {
                 n.clone()
-            } else if t.contains('(') || t.contains('|') || t.contains(' ') {
+            } else if t.contains('(') || t.contains('|') || t.contains('{') || t.contains(' ') {
                 // ambiguous type exprs / modifier-prefixed types (`out String`)
-                // print colon form (stability)
+                // / object-type payloads print colon form (stability): the
+                // first `:` after the name stays the split point on re-parse
                 format!("{n}: {t}")
             } else {
                 format!("{n} {t}")

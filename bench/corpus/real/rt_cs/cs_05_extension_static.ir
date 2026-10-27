@@ -222,8 +222,8 @@ type MetricNumeralExtensions export static{
   }
   static internal fn GetUnitText(scale Int, formats MetricNumeralFormats?, displayedNumber Decimal) String{
     return Math.Sign(scale)switch{
-      +1 GetUnitText(Symbols[0][scale-1], formats, displayedNumber)
-      -1 GetUnitText(Symbols[1][-scale-1], formats, displayedNumber)
+      +1 => GetUnitText(Symbols[0][scale-1], formats, displayedNumber)
+      -1 => GetUnitText(Symbols[1][-scale-1], formats, displayedNumber)
       else string.Empty
     }
   }

@@ -345,7 +345,30 @@ Each phase exit is a verification act, not a checklist:
   verdict + the round-trip gate result; fidelity row 17 → ✅ resolved.
   **The C# round-trip leg is clean at the emit stage for the whole
   corpus.** Next: behavior rig behind the real library (Phase-6), 6.2.
-- **v6.7 (2026-10-27, latest)** — **THE HUMANIZER SUITE GOES ALL-GREEN:
+- **v6.8 (2026-10-27, latest)** — **THE LOCAL-PROJECTS GATE: fresh,
+  never-seen code through the whole pipeline, compiled and RUN on both
+  targets — and the headline holds (57.3% o200k / 57.9% llama on the
+  fresh sample, vs the 58.3% weighted real-corpus class); the J6 floor
+  finding reproduces exactly (canon 110.7% of the bare doc-free
+  baseline; the round-tripped JS emit itself is 98.4% of the bare JS).**
+  Two locally authored projects (C# money/ledger library w/ full XML
+  docs + records/operators/generics/enums/switch-exprs; TS shift
+  scheduler w/ generics + destructure lambdas + template types) went
+  canon → hardened verify → emit → `dotnet build` + `dotnet run` /
+  `node --check` + behavior harness — ALL green. The gate exposed and
+  fixed 8 rows the rehearsed corpus never exercised: switch-arm canon
+  ambiguity (arms now carry ` => ` on C# trailing-switch rows), the
+  dict-initializer data-brace loss (inline payload re-fused; the old
+  verify lint could not see it — machine-canon files must now be their
+  own fixed point), opaque member captures corrupting emit, file-level
+  enums collapsing to empty classes (now verbatim file-scope capture),
+  expr-position type-words unmapped (`Int` → CS0246), destructured
+  lambda params as quoted strings, and keyword-key object-lits losing
+  their colon. Corpus regenerated; canon identity 35/35 under the
+  hardened lint; Humanizer re-run after the row pass: 61,581 tests —
+  61,580 pass / 0 fail / 1 skip (still all-green). Report:
+  `bench/results-local-projects.md`.
+- **v6.7 (2026-10-27)** — **THE HUMANIZER SUITE GOES ALL-GREEN:
   61,581 tests — 61,580 pass / 0 fail / 1 vendor-disabled skip.** The 3
   canon rows behind run-1's 2 failures landed as the additive row pass
   (fidelity 19 ✅ + 23 ✅ + 24 ✅): get-only auto-props canon with the

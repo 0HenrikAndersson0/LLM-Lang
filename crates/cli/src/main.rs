@@ -130,6 +130,27 @@ fn verify_files(paths: &[String]) {
         match llm_lang::expander::expand(&src) {
             Ok(core) => {
                 let canon = llm_lang::printer::print(&core);
+                // machine-canon files must be their own fixed point: canon1
+                // drift (file != print(expand(file))) is invisible to the
+                // two-round compare below if round-3 re-normalizes — the
+                // dict-initializer row was round-stable under the old lint
+                // yet lost data every round. Hand-canon files are fixture
+                // INPUT (comment rows, blank lines, pre-normalization shapes)
+                // and keep the two-round check only.
+                let hand_canon = src
+                    .lines()
+                    .any(|l| l.trim_start().starts_with("//") || l.trim().is_empty());
+                if !hand_canon {
+                    let file_canon: String = src
+                        .lines()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    if canon.trim_end() != file_canon.trim_end() {
+                        bad += 1;
+                        println!("{path}: canon DRIFT (file != print(expand(file)))");
+                        continue;
+                    }
+                }
                 match llm_lang::expander::expand(&canon) {
                     Ok(core2) => {
                         let canon2 = llm_lang::printer::print(&core2);

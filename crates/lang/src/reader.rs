@@ -666,7 +666,7 @@ impl Parser {
 }
 
 
-fn to_atom(t: TokPos) -> Atom {
+pub(crate) fn to_atom(t: TokPos) -> Atom {
     match t.tok {
         Tok::Ident(s) => Atom::Ident(s),
         Tok::Number(s) => Atom::Number(s),
