@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useInView, useCountUp } from "./anim.js";
 
 const LINES = [
