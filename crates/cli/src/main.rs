@@ -23,6 +23,8 @@ fn main() {
         }
         Some("canon") => canon_files(&args[1..]),
         Some("verify") => verify_files(&args[1..]),
+        Some("doc") => doc_files(&args[1..]),
+        Some("install-skill") => install_skill(&args[1..]),
         Some("js-kinds") => {
             // PLAN 4.2 groundwork: node-kind histogram over a JS/TS source dir
             for dir in &args[1..] {
@@ -41,7 +43,7 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: ircc [--expand] lex|parse|expand|to-js|from-js <files...>\n       ircc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       ircc from-js <js/ts files>   JS → canonical IR text (4.4 round-trip leg)\n       ircc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
+                "usage: ircc [--expand] lex|parse|expand|to-js|from-js <files...>\n       ircc to-js --map <files...>  write <file>.js + <file>.map.json (IR↔JS line map, 2.6)\n       ircc from-js <js/ts files>   JS → canonical IR text (4.4 round-trip leg)\n       ircc verify <files...>       canon-identity lint (exit 1 on drift)\n       ircc doc <name>              print embedded docs: spec|tutorial|fidelity|versioning|skill|agents\n       ircc install-skill [--agents | --claude | --opencode | --agents-md] [--dir <path>] [--force]\n       ircc js-kinds <dir>        node-kind histogram over a JS/TS dir (4.2 groundwork)\n       --expand  show macro-expanded core forms instead of the canonical print"
             );
             std::process::exit(2);
         }
@@ -208,6 +210,134 @@ fn from_js_files(paths: &[String]) {
             Ok(core) => print!("{}", llm_lang::printer::print(&core)),
             Err(e) => println!("// {path}: JS-READ-ERR {e}"),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// embedded docs + skill install (downstream distribution)
+
+const ASSET_SKILL: &str = include_str!("../assets/SKILL.md");
+const ASSET_AGENTS: &str = include_str!("../assets/AGENTS-MD.example");
+
+fn doc_files(paths: &[String]) {
+    let docs: &[(&str, &str)] = &[
+        ("skill", ASSET_SKILL),
+        ("agents", ASSET_AGENTS),
+        ("spec", include_str!("../../../docs/spec.md")),
+        ("tutorial", include_str!("../../../docs/tutorial.md")),
+        ("fidelity", include_str!("../../../docs/fidelity.md")),
+        ("versioning", include_str!("../../../docs/versioning.md")),
+    ];
+    if paths.is_empty() || paths[0] == "list" {
+        println!("embedded docs:");
+        for (name, _) in docs {
+            println!("  ircc doc {name}");
+        }
+        return;
+    }
+    let name = paths[0].as_str();
+    match docs.iter().find(|(n, _)| *n == name) {
+        Some((_, text)) => print!("{text}"),
+        None => {
+            println!("unknown doc '{name}' — try: ircc doc list");
+            std::process::exit(2);
+        }
+    }
+}
+
+fn install_skill(args: &[String]) {
+    let mut force = false;
+    let mut targets: Vec<&str> = vec![];
+    let mut dir: Option<String> = None;
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--force" => force = true,
+            "--agents" => targets.push("agents"),
+            "--claude" => targets.push("claude"),
+            "--opencode" => targets.push("opencode"),
+            "--agents-md" => targets.push("agents-md"),
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(d) => dir = Some(d.clone()),
+                    None => {
+                        println!("--dir needs a path");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            other => {
+                println!("unknown flag '{other}' — usage: ircc install-skill [--agents|claude|opencode|agents-md] [--dir <path>] [--force]");
+                std::process::exit(2);
+            }
+        }
+        i += 1;
+    }
+    if targets.is_empty() {
+        targets.push("agents");
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let mut bad = 0;
+    let _ = &mut dir;
+    for t in targets {
+        let (path, text, note): (std::path::PathBuf, &str, &str) = match t {
+            "agents" => (
+                std::path::PathBuf::from(&home)
+                    .join(".agents/skills/llm-lang/SKILL.md"),
+                ASSET_SKILL,
+                "(the neutral skills convention — opencode auto-loads it; Claude-compatible loaders too)",
+            ),
+            "claude" => (
+                std::path::PathBuf::from(&home)
+                    .join(".claude/skills/llm-lang/SKILL.md"),
+                ASSET_SKILL,
+                "(Claude Code global skills)",
+            ),
+            "opencode" => (
+                std::path::PathBuf::from(".opencode/skills/llm-lang/SKILL.md"),
+                ASSET_SKILL,
+                "(this project's opencode skills)",
+            ),
+            "agents-md" => (
+                std::path::PathBuf::from(
+                    dir.clone().unwrap_or_else(|| ".".to_string()),
+                )
+                .join("AGENTS.md"),
+                ASSET_AGENTS,
+                "(Codex / Gemini CLI / Cursor read the repo-root AGENTS.md)",
+            ),
+            other => {
+                println!("unknown target '{other}'");
+                std::process::exit(2);
+            }
+        };
+        if path.exists() && !force {
+            bad += 1;
+            println!(
+                "{}: exists — not overwritten (pass --force, or merge manually via `ircc doc {}`)",
+                path.display(),
+                if t == "agents-md" { "agents" } else { "skill" }
+            );
+            continue;
+        }
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                println!("{}: create_dir_all failed: {e}", parent.display());
+                bad += 1;
+                continue;
+            }
+        }
+        match std::fs::write(&path, text) {
+            Ok(_) => println!("{}: written {note}", path.display()),
+            Err(e) => {
+                println!("{}: write failed: {e}", path.display());
+                bad += 1;
+            }
+        }
+    }
+    if bad > 0 {
+        std::process::exit(1);
     }
 }
 

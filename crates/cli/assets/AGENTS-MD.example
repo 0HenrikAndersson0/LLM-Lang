@@ -1,0 +1,58 @@
+# AGENTS.md — working with LLM-Lang canon
+
+LLM-Lang compiles typed + documented code (JS/TS, C#) INTO compact canon
+text (`~57%` of typed+documented sources on o200k, behavior identity held
+down to Humanizer's 61,581-test vendored suite) and emits back OUT, round
+trip stable. Canon's whole point is agents reading, authoring, and
+repairing code — comments/doc-bloat drop by contract; executable
+semantics ride through verbatim.
+
+## Commands
+
+```
+ircc from-js file.ts  > file.ir     # JS/TS source → canon
+ircc from-cs file.cs  > file.ir     # C# source → canon
+ircc to-js file.ir    > file.js     # canon → JS emit (+ --map for a source map)
+ircc to-cs file.ir    > file.cs     # canon → C# emit
+ircc verify file.ir...              # canon-identity lint — RUN THIS, exit 1 on drift
+ircc doc spec|tutorial|fidelity|versioning|skill|agents   # embedded docs
+```
+
+## Rules
+
+1. **Canon identity**: every `.ir` file must be its own fixed point —
+   `ircc verify` checks `file == print(expand(file))` and print→print
+   stability; run it before proposing a change.
+2. **Core forms are additive-only**: existing canon text never changes
+   shape; growth lands as new rows (`ircc doc versioning`).
+3. **Fidelity is budgeted with `opaque`**: constructs without a core form
+   capture verbatim as `"opaque:…"` rows and re-emit byte-identically.
+4. **Comments drop by contract**: machine canon never carries `//` rows.
+
+## Canon rows (cheat sheet)
+
+```
+@1 @ns App.Billing
+type Invoice export record{
+  export ctor (id Long, total Decimal)
+  export Bool Settled => Total >= 0
+  export fn TryPost(acct String) Result<String,String>{…}
+}
+type Cache<T> : Object where T : class{ … }
+fn Charge(amount Decimal, curr Currency = Currency.Usd) Bool{…}
+var mut Balance = Money.Of(10.50m, Currency.Sek)
+export get String Label { get; }
+if a == b{ return 0 }
+for x in items{ total += x }
+mode switch{ Round.FLOOR => floor(mode), _ => bang }
+try risky() catch NotFound return null finally Log()
+return [.. items . Where(p => p.Active)]
+```
+
+Type words canonize capital (`String Int Bool Float Int64 ULong …`) and
+map back to lowercase keywords on emit; other identifiers pass verbatim.
+
+## Deep references
+
+`ircc doc spec | tutorial | fidelity | versioning` — or
+https://github.com/0HenrikAndersson0/LLM-Lang for the measured gates.

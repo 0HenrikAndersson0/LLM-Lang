@@ -80,7 +80,8 @@ rig runs the vendor's own 61,581-test suite against round-tripped code
 ## Repo structure
 
 - `crates/lang/` — the library (reader, expander, printer, js/cs readers+emitters)
-- `crates/cli/` — the `ircc` binary
+- `crates/cli/` — the `ircc` binary (+ `assets/` — the downstream agent
+  skill and AGENTS template; `ircc install-skill` / `ircc doc` serve them)
 - `bench/corpus/real/` — the measured corpus (`src/` originals, `ir/` canon,
   `rt/` + `rt_js/` + `rt_cs/` round-trip artifacts)
 - `bench/corpus/local/` — the fresh-code gate projects (emit these and compile them)
