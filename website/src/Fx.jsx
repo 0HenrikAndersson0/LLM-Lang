@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useInView, useCountUp } from "./anim.js";
 
 const LINES = [
