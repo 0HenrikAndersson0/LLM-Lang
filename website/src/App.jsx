@@ -1,5 +1,36 @@
+import GlyphRain from "./GlyphRain.jsx";
+import Terminal, { TokenBars } from "./Fx.jsx";
+import { useInView, useCountUp } from "./anim.js";
+
 const REPO = "https://github.com/0HenrikAndersson0/LLM-Lang";
 const RAW = `${REPO}/blob/main`;
+
+function Reveal({ children, as: Tag = "div", className = "", id }) {
+  const [ref, inView] = useInView();
+  return (
+    <Tag id={id} ref={ref} className={`reveal ${inView ? "in" : ""} ${className}`}>
+      {children}
+    </Tag>
+  );
+}
+
+const TICKER_ATOMS = "@1 @ns @use type export fn ctor var mut if for while switch try catch finally return opaque get where sealed record struct interface => -> { } ( ) [ ] Result<String,Func<T,U>> Record".split(" ");
+
+function Ticker() {
+  return (
+    <div className="ticker" aria-hidden="true">
+      <div className="ticker-track">
+        {[0, 1].map((k) => (
+          <span className="ticker-run" key={k}>
+            {TICKER_ATOMS.map((a, i) => (
+              <span className="ticker-item" key={i}>{a}</span>
+            ))}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Nav() {
   return (
@@ -22,42 +53,53 @@ function Nav() {
   );
 }
 
+function Stat({ value, suffix, label, proof, decimals = 0 }) {
+  const [ref, inView] = useInView();
+  const n = useCountUp(value, inView, 1900, (v) =>
+    decimals ? v.toFixed(decimals) : Math.round(v).toLocaleString("en-US"),
+  );
+  return (
+    <div className="stat" ref={ref}>
+      <div className="stat-num">
+        {n}{suffix}
+      </div>
+      <div className="stat-label">
+        {label} <a className="proof" href={proof}>[proof]</a>
+      </div>
+    </div>
+  );
+}
+
 function Hero() {
   return (
     <header className="hero" id="top">
-      <p className="kicker not-chat">for agents, not for humans</p>
-      <h1>
-        Source code is <em>bloated gossip</em>.
-        <br />
-        Canon is what agents should read.
-      </h1>
-      <p className="hero-sub">
-        LLM-Lang compiles typed + documented code into <strong>canon</strong> —
-        a compact transfer representation — and emits it back out to JS/TS or
-        C#, round-trip stable. Every executable byte survives. The chitchat
-        doesn't.
-      </p>
-      <div className="stat-strip">
-        <div className="stat">
-          <div className="stat-num">57.3%</div>
-          <div className="stat-label">tokens on fresh, never-seen code <a className="proof" href={`${RAW}/bench/results-local-projects.md`}>[proof]</a></div>
+      <GlyphRain />
+      <div className="hero-inner">
+        <p className="kicker not-chat">for agents, not for humans</p>
+        <h1>
+          Source code is <em>bloated gossip</em>.
+          <br />
+          Canon is what agents should read.
+        </h1>
+        <p className="hero-sub">
+          LLM-Lang compiles typed + documented code into <strong>canon</strong> —
+          a compact transfer representation — and emits it back out to JS/TS or
+          C#, round-trip stable. Every executable byte survives. The chitchat
+          doesn't.
+        </p>
+        <div className="stat-strip">
+          <Stat value={57.3} suffix="%" decimals={1} label="tokens on fresh, never-seen code" proof={`${RAW}/bench/results-local-projects.md`} />
+          <Stat value={61580} label="/ 61,581 vendored tests pass, round-tripped" proof={`${RAW}/bench/results-humanizer-rig.md`} />
+          <Stat value={100} suffix="%" label="canon identity — a canon file is its own fixed point" proof={`${RAW}/bench/results-round-trip.md`} />
         </div>
-        <div className="stat">
-          <div className="stat-num">61,580</div>
-          <div className="stat-label">/ 61,581 vendored tests pass, round-tripped <a className="proof" href={`${RAW}/bench/results-humanizer-rig.md`}>[proof]</a></div>
+        <div className="hero-ctas">
+          <a className="btn primary" href="#use">
+            Try it <span className="arrow">→</span>
+          </a>
+          <a className="btn ghost" href="#how">
+            How it works
+          </a>
         </div>
-        <div className="stat">
-          <div className="stat-num">100%</div>
-          <div className="stat-label">canon identity — a canon file is its own fixed point <a className="proof" href={`${RAW}/bench/results-round-trip.md`}>[proof]</a></div>
-        </div>
-      </div>
-      <div className="hero-ctas">
-        <a className="btn primary" href="#use">
-          Try it <span className="arrow">→</span>
-        </a>
-        <a className="btn ghost" href="#how">
-          How it works
-        </a>
       </div>
     </header>
   );
@@ -100,7 +142,7 @@ const CodePane = {
 
 function SideBySide() {
   return (
-    <section className="sbs">
+    <Reveal as="section" className="sbs" id="sbs">
       <p className="kicker">the whole trick, visible</p>
       <h2>Same function. Every semantic byte. Zero gossip.</h2>
       <p className="section-sub">
@@ -137,7 +179,7 @@ function SideBySide() {
         file re-emits the exact function, compiles under <code>dotnet build</code>,
         and runs correct behavior.
       </p>
-    </section>
+    </Reveal>
   );
 }
 
@@ -150,7 +192,7 @@ function Proof() {
     ["Canon identity", "35/35 files are their own fixed point (ircc verify exits 1 on drift)", "crates/cli/src/main.rs"],
   ];
   return (
-    <section className="proof" id="proof">
+    <Reveal as="section" className="proof" id="proof">
       <p className="kicker">proof, not vibes</p>
       <h2>We measured everything. The receipts are in the repo.</h2>
       <p className="section-sub">
@@ -183,7 +225,8 @@ function Proof() {
           <div className="big-label">tokens: the honest corpus-wide cost of carrying where-constraints, get-only props and ulong semantics</div>
         </div>
       </div>
-    </section>
+      <TokenBars />
+    </Reveal>
   );
 }
 
@@ -195,7 +238,7 @@ function How() {
     ["4", "Emit back out", "ircc to-js app.ir > app.js (with --map for line-mapped feedback) or to-cs. The output compiles and behaves like the original — proven, not assumed."],
   ];
   return (
-    <section className="how" id="how">
+    <Reveal as="section" className="how" id="how">
       <p className="kicker">the pipeline</p>
       <h2>Four verbs. That's the whole toolchain.</h2>
       <div className="steps">
@@ -214,13 +257,14 @@ function How() {
         <code>ircc from-*</code> → <code className="hl">canon .ir</code> →{" "}
         <code>ircc to-*</code> → <code>Target (JS, C#)</code>
       </div>
-    </section>
+      <Terminal />
+    </Reveal>
   );
 }
 
 function Use() {
   return (
-    <section className="use" id="use">
+    <Reveal as="section" className="use" id="use">
       <p className="kicker">use it</p>
       <h2>One binary. Five verbs. No config.</h2>
       <pre className="code install-block">
@@ -240,13 +284,13 @@ function Use() {
         from source is one <code>cargo build --release</code> away —{" "}
         <a href={REPO}>repo instructions</a>.
       </p>
-    </section>
+    </Reveal>
   );
 }
 
 function Agents() {
   return (
-    <section className="agents" id="agents">
+    <Reveal as="section" className="agents" id="agents">
       <p className="kicker">for agent builders</p>
       <h2>The language distributes itself to your agent.</h2>
       <p className="section-sub">
@@ -265,13 +309,13 @@ function Agents() {
         and a row-shape cheat sheet. The full grammar prints from{" "}
         <code>ircc doc spec</code> — embedded in the binary, no repo needed.
       </p>
-    </section>
+    </Reveal>
   );
 }
 
 function Honest() {
   return (
-    <section className="honest" id="honest">
+    <Reveal as="section" className="honest" id="honest">
       <p className="kicker">the honesty section</p>
       <h2>Where the savings stop — measured, not hand-waved.</h2>
       <div className="honest-grid">
@@ -303,7 +347,7 @@ function Honest() {
           </p>
         </div>
       </div>
-    </section>
+    </Reveal>
   );
 }
 
@@ -318,7 +362,7 @@ const FAQ = [
 
 function Faq() {
   return (
-    <section className="faq" id="faq">
+    <Reveal as="section" className="faq" id="faq">
       <p className="kicker">FAQ</p>
       <h2>We give an FAQ.</h2>
       <div className="faq-list">
@@ -329,7 +373,7 @@ function Faq() {
           </details>
         ))}
       </div>
-    </section>
+    </Reveal>
   );
 }
 
@@ -365,6 +409,7 @@ export default function App() {
     <>
       <Nav />
       <Hero />
+      <Ticker />
       <SideBySide />
       <Proof />
       <How />
