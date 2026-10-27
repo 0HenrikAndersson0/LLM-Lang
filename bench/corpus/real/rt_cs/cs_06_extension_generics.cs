@@ -169,13 +169,13 @@ public static class ByteSizeExtensions
         }
         var formatter = Configurator.GetFormatter(culture);
         var isNegative = input.Bits<0;
-        var remainingBits = isNegative?(Int64)(-(input.Bits+1))+1: (long)input.Bits;
+        var remainingBits = isNegative?(ulong)(-(input.Bits+1))+1: (ulong)input.Bits;
         if (remainingBits==0)
         {
             return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol: !toWords));
         }
         var parts = new List<String>(Math.Min(precision, 8));
-        void addPart(long bitsPerUnit, DataUnit unit)
+        void addPart(ulong bitsPerUnit, DataUnit unit)
     {
         if (parts.Count>=precision)
         {
@@ -189,12 +189,12 @@ public static class ByteSizeExtensions
         parts.Add(string.Concat(count.ToString(formatProvider), " ", formatter.DataUnitHumanize(unit, count, toSymbol: !toWords)));
         remainingBits%=bitsPerUnit;
     }
-        addPart((long)ByteSize.BytesInExabyte*ByteSize.BitsInByte, DataUnit.Exabyte);
-        addPart((long)ByteSize.BytesInPetabyte*ByteSize.BitsInByte, DataUnit.Petabyte);
-        addPart((long)ByteSize.BytesInTerabyte*ByteSize.BitsInByte, DataUnit.Terabyte);
-        addPart((long)ByteSize.BytesInGigabyte*ByteSize.BitsInByte, DataUnit.Gigabyte);
-        addPart((long)ByteSize.BytesInMegabyte*ByteSize.BitsInByte, DataUnit.Megabyte);
-        addPart((long)ByteSize.BytesInKilobyte*ByteSize.BitsInByte, DataUnit.Kilobyte);
+        addPart((ulong)ByteSize.BytesInExabyte*ByteSize.BitsInByte, DataUnit.Exabyte);
+        addPart((ulong)ByteSize.BytesInPetabyte*ByteSize.BitsInByte, DataUnit.Petabyte);
+        addPart((ulong)ByteSize.BytesInTerabyte*ByteSize.BitsInByte, DataUnit.Terabyte);
+        addPart((ulong)ByteSize.BytesInGigabyte*ByteSize.BitsInByte, DataUnit.Gigabyte);
+        addPart((ulong)ByteSize.BytesInMegabyte*ByteSize.BitsInByte, DataUnit.Megabyte);
+        addPart((ulong)ByteSize.BytesInKilobyte*ByteSize.BitsInByte, DataUnit.Kilobyte);
         addPart(ByteSize.BitsInByte, DataUnit.Byte);
         addPart(1, DataUnit.Bit);
         return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign: null, string.Join(separator, parts));
@@ -227,7 +227,7 @@ public static class ByteSizeExtensions
             builtInFormatter=null ;
         }
         var isNegative = input.Bits<0;
-        var remainingBits = isNegative?(Int64)(-(input.Bits+1))+1: (long)input.Bits;
+        var remainingBits = isNegative?(ulong)(-(input.Bits+1))+1: (ulong)input.Bits;
         var units = unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits: BinaryCompositeUnits;
         if (remainingBits==0)
         {
@@ -240,7 +240,7 @@ public static class ByteSizeExtensions
             {
                 break;
             }
-            var bitsPerUnit = (long)unit.Bytes*ByteSize.BitsInByte;
+            var bitsPerUnit = (ulong)unit.Bytes*ByteSize.BitsInByte;
             var count = remainingBits/bitsPerUnit;
             if (count==0)
             {
@@ -253,7 +253,7 @@ public static class ByteSizeExtensions
         addSmallUnit(ByteSize.BitsInByte, ByteSize.ByteSymbol, DataUnit.Byte);
         addSmallUnit(1, ByteSize.BitSymbol, DataUnit.Bit);
         return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign: null, string.Join(separator, parts));
-        void addSmallUnit(long bitsPerUnit, string symbol, DataUnit dataUnit)
+        void addSmallUnit(ulong bitsPerUnit, string symbol, DataUnit dataUnit)
     {
         if (parts.Count>=precision)
         {
@@ -267,7 +267,7 @@ public static class ByteSizeExtensions
         parts.Add(string.Concat(count.ToString(formatProvider), " ", toWords?humanizeUnit(dataUnit, count): symbol));
         remainingBits%=bitsPerUnit;
     }
-        string humanizeUnit(DataUnit dataUnit, long count) =>
+        string humanizeUnit(DataUnit dataUnit, ulong count) =>
         builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol: false ): formatter.DataUnitHumanize(dataUnit, count, toSymbol: false );
     }
     static readonly CompositeUnit[] DecimalCompositeUnits = [new (ByteSize.BytesInDecimalExabyte, "EB", DataUnit.DecimalExabyte), new (ByteSize.BytesInDecimalPetabyte, "PB", DataUnit.DecimalPetabyte), new (ByteSize.BytesInDecimalTerabyte, "TB", DataUnit.DecimalTerabyte), new (ByteSize.BytesInDecimalGigabyte, "GB", DataUnit.DecimalGigabyte), new (ByteSize.BytesInDecimalMegabyte, "MB", DataUnit.DecimalMegabyte), new (ByteSize.BytesInDecimalKilobyte, "kB", DataUnit.DecimalKilobyte)];

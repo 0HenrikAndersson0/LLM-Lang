@@ -1,14 +1,17 @@
 @1 @ns Humanizer
 
-type RussianGrammaticalNumberDetector{
-  fn Detect(Int64 number) RussianGrammaticalNumber{
-    var tens = number % 100 / 10
-    if tens != 1{
-      var unity = number % 10
-      // Teens are always plural; last digit matters only when tens != 1.
-      if unity == 1{return RussianGrammaticalNumber.Singular}
-      if unity is > 1 and < 5{return RussianGrammaticalNumber.Paucal}
+type RussianGrammaticalNumberDetector static{
+  export static fn Detect(number Int64) RussianGrammaticalNumber{
+    var tens=number%100/10
+    if tens !=1{
+      var unity=number%10
+      if unity==1{
+        return RussianGrammaticalNumber.Singular
+      }
+      if unity is >1 and<5{
+        return RussianGrammaticalNumber.Paucal
+      }
     }
-    RussianGrammaticalNumber.Plural
+    return RussianGrammaticalNumber.Plural
   }
 }

@@ -72,14 +72,79 @@ the emitted round-tripped corpus) compiles 834 → 0 errors** — canon
 identity 9/9 (`ircc verify`) + all test suites (59 rows) green; JS
 behavior 3/3 BEHAVIOR-MATCH re-verified; loop selftests ×4 green.
 
-## Remaining (queued)
+## Library test suite vs the rig (2026-10-27): 61,581 total — 61,578 ✓ / 2 ✗ / 1 skip
 
-- **The library's own test suite against the rig assembly** — the
-  strongest behavior evidence. Environment-bound: the vendor pins SDK
-  11 (`global.json`, rollForward latestFeature) and the Microsoft
-  Testing Platform runner refuses VSTest targets on SDK 10
-  ("opt-in to the new dotnet test experience"); the produced test-exec
-  also failed to bind Humanizer at module-init locally. Needs either
-  `sdk install` of the pinned SDK or `-p:RunAnalyzers=false` +
-  runner resolution — scoped but not closed this pass.
+The strongest behavior evidence, now measured. Rig rebuilt from scratch
+(`/tmp` was wiped; no script existed — recipe below, committed mirrors are
+byte-identical to vendor main `4574b93` 2026-10-07, `cmp`-verified ×9) and
+run on the repo's committed `rt_cs` emissions.
+
+**Verdict: 99.997% test-level behavior identity at library scale** — the
+vendor's own 61,581-test suite against the round-tripped assembly: 61,578
+pass, 2 fail (both root-caused to canon rows below), 1 skip
+(`Create_MixedDoubleSet_MeetsPerformanceGate` — vendor-disabled perf gate,
+not a fidelity row). Every `Verify` snapshot passed except the public-API
+approver; culture/locale/string formatters all green.
+
+| # | failure | root row | corpus evidence |
+|---|---------|----------|-----------------|
+| 1 | `Approve_Public_Api` (API approver, 1 line each) | **get-only auto-property → field**: `protected CultureInfo Culture { get; }` canon'd as `protected CultureInfo Culture;` | cs_08 src line 15 vs rt line 8 |
+| 2 | `Approve_Public_Api` (same test, second row) | **generic `where` constraint erased**: `where TLocaliser : class` (own line) dropped from the type row | cs_02 src lines 8–9 vs rt line 4 |
+| 3 | `HumanizesNegativeCompositeValuesWithOneLeadingSign` (assert `"-1 EB"` vs `"--1 EB"`) | **unsigned erasure**: every `ulong` canon'd signed — `(ulong)(-(input.Bits+1))+1 : (ulong)input.Bits` → `(Int64)… : (long)…`, `void addPart(ulong …)` → `(long …)`, `(ulong)BytesInExabyte*…` → `(long)…` | cs_06 src 528–539 vs rt 172–198 |
+
+Row 3 is the semantic star: the UB-free unchecked wrap at the EB boundary
+(6.4e19 bits > ulong max) survives unsigned math but flips sign in signed
+division → parts print `-1` *plus* the `isNegative` prefix → `--1 EB`.
+It compiles 0-errors and passes canon identity; only the vendor's own
+boundary test separates the two. This is the whole argument for running
+the real library suite.
+
+### Run recipe (SDK 10.0.403 — the pinned SDK 11 is NOT required)
+
+1. `git clone --depth 50 Humanizr/Humanizer` → `fetch --unshallow`
+   (Nerdbank.GitVersioning needs full history for version height).
+2. Scratch only: `mv global.json global.json.vendor-pin` (the
+   `11.0.100-rc.1` pin is bypassed, not honored).
+3. Remove the 9 mirror files; copy `bench/corpus/real/rt_cs/cs_*.cs` in
+   (placed under `src/Humanizer/CorpusRT/` for default globbing).
+4. `dotnet build src/Humanizer/Humanizer.csproj -c Release
+   -p:RunAnalyzers=false -p:TargetFrameworks=net10.0` — the global
+   `TargetFrameworks` override is load-bearing (`-f net10.0` leaves a
+   partial restore graph that poisons the P2P: test deps.json got
+   `Humanizer` assets as `bin/placeholder` → module-init
+   `FileNotFoundException: Humanizer, Version=4.0.0.0`).
+5. Build tests the same way; if `Humanizer.Tests.deps.json` lacks a
+   `Humanizer/…` entry, move it aside — MTP exe runs via app-dir probing
+   (`./Humanizer.Tests` artifacts path: `artifacts/bin/Humanizer.Tests/release_net10.0/`).
+
+net11.0/net48/netstandard2.0 TFMs unexercised; `dotnet test` (VSTest) path
+unexercised — irrelevant for net10.0 gates.
+
+### Run 2 after the row pass (2026-10-27, same day): **all green**
+
+The 3 rows landed as an additive row pass (reader + expander + printer +
+emit, one Canon row per row):
+
+| row | fix | where |
+|---|---|---|
+| get-only auto-property (23) | accessor-only getter rows canon `get` mod word (`protected get CultureInfo Culture`); emit restores `… { get; }` (no trailing `;` without an initializer; `= init;` rows keep theirs) + spec ty list unchanged | cs_read `property_decl`/`is_getter_only`, expander `mod_words` + `get` drain, cs `member_var` |
+| generic constraint carry (19) | `TypeDecl.constraints` (additive field, all construction sites); reader captures `type_parameter_constraints_clause` children normalized to the expander's `constraint_text` shape; canon prints ` type Name<T> … where T : class{` (re-parse stable); emit restores C# order after the base list | cs_read `type_decl`/`constraint_clause_text`, expander type arm + `constraint_text`, printer `print_type`, cs `emit_type` |
+| unsigned type-words (24) | `ulong` canonizes capital `ULong` (spec §1 ty list extended, additive); emit maps `ULong→ulong`; the cast arm widened — single mapped Ident in parens is a cast (the `(ULong)(-x)` paren-operand shape previously rendered raw) | cs_read `canon_word`, cs `map_type` + cast arm, spec.md |
+
+**Result: 61,581 tests — 61,580 pass / 0 fail / 1 vendor-disabled skip.**
+Bench re-measured on the 6.1 basis: **C# canon 64.2% o200k / 64.1%
+llama** (+2 tokens corpus-wide for all 3 rows — the honest cost), weighted
+58.3% — unchanged. Gates re-run: canon identity 18/18 (`ircc verify` over
+`ir/` + `rt_cs/`), 59 test rows, JS behavior 3/3 BEHAVIOR-MATCH, loop
+selftests ×4 — all green.
+
+Also this session: the JS behavior gate was found failing at HEAD
+(`function isCheerio<T>` leaked into the rig — the member pass's fn
+type-param re-attach reached canon but `to-js`'s generid erase missed the
+re-attached name; the earlier "3/3 re-verified" did not hold on current
+code). Fixed (generic-name erase in `js.rs`, top-level + member arms);
+behavior re-verified 3/3 for real.
+
+## Remaining
+
 - **6.2 loop at scale** (model time).

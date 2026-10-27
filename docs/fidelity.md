@@ -68,7 +68,9 @@ The 4.5 JS budget above was JS-only. The C# reader (`cs_read.rs`) adds:
 |---|---|---|
 | 17 | **char literals vs string literals** | ✅ **RESOLVED 2026-10-10 (the @2 admission)**: canon v1.1 gained `Atom::Char` (single-quoted 1-char; double-quoted 1-char stays Str — 1-char JS strings are meaningful). The C# emit restores `'X'`; JS emit renders `"X"` (JSON string; JS has no chars). Token-neutral (probe: ±1 over 36 swaps — `bench/results-char-atom.md`). The 8 char-family emit rows cleared; the round-trip corpus re-emits with zero non-stub diagnostics |
 | 18 | accessibility nuance | ✅ **RESOLVED 2026-10-10 (member-row pass)**: member rows carry access words in canon (`protected CultureInfo Culture`, `export ctor (…)`, compound `private protected`; internal stays free — the emitter's internal default *is* C#'s default). The vendor rig's ~400 CS0122 rows cleared; `ircc verify` green across the corpus | canon_modifiers, expand_member, print_member, member_access |
-| 19 | `where` generic constraints | dropped (contract); the C# emitter emits type params without them |
+| 19 | `where` generic constraints | ✅ **RESOLVED 2026-10-27 (suite-gate pass)**: `TypeDecl.constraints` carries the clause text (`TLocaliser : class`) — reader captures the declaration's constraint clauses, canon prints ` where <clause>` after the base list (re-parses stable), emit restores C# order. The vendor API approver's diff confirmed exactly this row |
+| 23 | get-only auto-properties | ✅ **RESOLVED 2026-10-27 (suite-gate pass)**: accessor-only getter rows canon with the `get` mod word; emit restores `<ty> <name> { get; }` (initializer rows keep ` = init;`; `{ get; set; }` stays the deferred field row — no corpus instance). Caught by the vendor's API approver, not the compiler |
+| 24 | unsigned type-words (`ulong`) | ✅ **RESOLVED 2026-10-27 (suite-gate pass)**: `ulong` canonizes capital `ULong` (spec ty list extended) and emit maps back to `ulong`; the cast-mapping arm widened (single mapped Ident in parens = cast — `(ULong)(-x)`'s paren operand previously fell to the raw render). Flipped wrap-boundary semantics (`--1 EB`) caught by the vendor suite's boundary test |
 | 20 | data-braces vs interpolation in C# strings | **distinguished at the reader** (interpolated_string vs plain literal): plain literals canon-escape `{{…}}`, interpolation canon's `x{e}y`; the C# emit restores literal braces — *this one is preserved*, recorded because JS canon cannot make the same distinction |
 | 21 | `<rest-omitted>` hand-canon elision rows | cs_08's hand rendition elided 2 long bodies — the machine canon re-reads the full source, so these exist only in the hand fixture |
 | 22 | `#if` preprocessor regions | captured verbatim (`opaque:` atom rows in the canon); the C# emit flags them `/* opaque */` — the NET8_OR_GREATER guards pass textually, not semantically |
@@ -81,6 +83,19 @@ above. **C# leg (5.6 leg-1):** C# → IR canon → C# re-emits syntax-clean
 9/9 (`bench/results-cs-diff.md`). **C# leg-2 (2026-10-10, member-row
 pass):** the vendored Humanizer behavior rig builds **0 errors** with the
 round-tripped corpus compiled into the real library tree (was ~834
-diagnostics; `bench/results-humanizer-rig.md`). The library's own test
-suite is the queued strongest-evidence layer (needs the vendor's pinned
-SDK 11 environment).
+diagnostics; `bench/results-humanizer-rig.md`). The library's own test suite ran 2026-10-27 on SDK 10.0.403
+(`bench/results-humanizer-rig.md`). Run 1 (the raw pass before the row
+work): **61,581 tests, 61,578 pass / 2 fail / 1 vendor-disabled skip —
+99.997%**, the 2 failures = rows 23+24+19 exactly (the approver diff
+contains ONLY those rows). **Run 2 after the 3-row pass (same day):
+61,581 tests, 61,580 pass / 0 fail / 1 skip — every runnable test
+green.** Bench re-measured on the same 6.1 basis: C# canon 64.2%
+o200k / 64.1% llama (+2 tokens corpus-wide for all 3 rows), weighted
+58.3% — unchanged to the decimal.
+
+Also 2026-10-27: the J1 JS behavior gate was found failing at HEAD
+(`function isCheerio<T>` — the 7140a7f fn type-param re-attach reached
+canon but the JS emitter's callee-generics erase missed the re-attached
+name; the member-pass "3/3 re-verified" did not hold on current code).
+Fixed generically (bare name erase to-js, top-level + members);
+**behavior 3/3 BEHAVIOR-MATCH re-verified for real this time**.

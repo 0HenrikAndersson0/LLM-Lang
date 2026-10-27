@@ -43,6 +43,7 @@ fn map_type(ty: &str) -> String {
         ("Short", "short"),
         ("UShort", "ushort"),
         ("UInt", "uint"),
+        ("ULong", "ulong"),
         ("Char", "char"),
     ];
     let mut out = String::with_capacity(ty.len());
@@ -383,10 +384,11 @@ impl<'a> ExprCtx<'a> {
                         let c = if s == "(" { ')' } else { ']' };
                         let mut j = i + 1;
                         let inner = bracket_slice(atoms, &mut j, c);
-                        // `(Float)x` cast → mapped keyword
+                        // `(Float)x` cast → mapped keyword; any single
+                        // mapped Ident in parens is a cast (groupings of
+                        // verbatim idents don't hit the map)
                         if s == "(" && inner.len() == 1
                             && matches!(&inner[0], Atom::Ident(t) if map_type(&t.to_string()) != *t)
-                            && matches!(atoms.get(j), Some(Atom::Ident(_)) | Some(Atom::Number(_)))
                         {
                             let t = match &inner[0] { Atom::Ident(t) => t.clone(), _ => unreachable!() };
                             out.push_str(&format!("({})", map_type(&t)));
@@ -1264,6 +1266,12 @@ fn emit_type(t: &TypeDecl, level: usize, out: &mut String) -> Result<(), CsLower
         out.push_str(" : ");
         out.push_str(&t.bases.iter().map(|b| map_type(b)).collect::<Vec<_>>().join(", "));
     }
+    // generic constraints (fidelity row 19 resolved): C# order — after the
+    // base list, before the body brace
+    for c in &t.constraints {
+        out.push_str(" where ");
+        out.push_str(&map_type(c));
+    }
     out.push('\n');
     out.push_str(&ind);
     out.push_str("{\n");
@@ -1456,6 +1464,26 @@ fn member_var(v: &VarDecl, t: &TypeDecl, level: usize, assigned: &[String]) -> R
     let mut s = String::new();
     s.push_str(&ind);
     push_member_front(v, t, &mut s);
+    // get-only auto-property carry (fidelity row 23): canon rows with the
+    // `get` mod word restore the property shape (a field would change the
+    // API surface — the vendor's API approver caught exactly that)
+    if mods_any(v, "get") {
+        if mods_any(v, "readonly") {
+            s.push_str("readonly ");
+        }
+        s.push_str(&map_type(&ty));
+        s.push(' ');
+        s.push_str(&v.name);
+        s.push_str(" { get; }");
+        // an auto-property with no initializer takes no trailing `;`
+        if matches!(&v.value, Some(a) if !a.is_empty()) {
+            s.push_str(" = ");
+            s.push_str(&expr(v.value.as_ref().unwrap()));
+            s.push(';');
+        }
+        s.push('\n');
+        return Ok(s);
+    }
     // C# consts are implicitly static — suppress (CS0504)
     if (is_static || v.modifiers.iter().any(|m| m == "static")) && !const_row {
         s.push_str("static ");
@@ -1634,6 +1662,7 @@ pub fn emit(core: &[Core]) -> Result<String, CsLowerError> {
                         kind: "class".into(),
                         primary: None,
                         bases: vec![],
+                        constraints: vec![],
                         modifiers: vec!["export".into()],
                         members: vec![],
                         span: crate::expander::SPAN_SYNTH,

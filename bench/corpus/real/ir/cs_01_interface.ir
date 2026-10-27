@@ -1,13 +1,12 @@
 @1 @ns Humanizer
 
-// interface: `type IFormatter interface{` — signature-only members
-type IFormatter interface{
-  DateHumanize_Now() String
-  DateHumanize_Never() String
-  DateHumanize(TimeUnit timeUnit, Tense timeUnitTense, Int unit) String
-  TimeSpanHumanize_Zero() String
-  TimeSpanHumanize(TimeUnit timeUnit, Int unit, Bool toWords=false) String
-  TimeSpanHumanize_Age() String
-  DataUnitHumanize(DataUnit dataUnit, Float count, Bool toSymbol=true) String
-  TimeUnitHumanize(TimeUnit timeUnit) String
+type IFormatter export interface{
+  fn DateHumanize_Now() String{}
+  fn DateHumanize_Never() String{}
+  fn DateHumanize(timeUnit TimeUnit, timeUnitTense Tense, unit Int) String{}
+  fn TimeSpanHumanize_Zero() String{}
+  fn TimeSpanHumanize(timeUnit TimeUnit, unit Int, toWords: Bool = false) String{}
+  fn TimeSpanHumanize_Age() String{}
+  fn DataUnitHumanize(dataUnit DataUnit, count Float, toSymbol: Bool = true) String{}
+  fn TimeUnitHumanize(timeUnit TimeUnit) String{}
 }

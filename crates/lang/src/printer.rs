@@ -460,6 +460,12 @@ fn print_type(t: &TypeDecl, level: usize) -> String {
         s.push_str(" : ");
         s.push_str(&t.bases.join(", "));
     }
+    // generic constraints (fidelity row 19 resolved): canon prints C# order
+    // (after the base list, before the body brace) and re-parses stably
+    for c in &t.constraints {
+        s.push_str(" where ");
+        s.push_str(c);
+    }
     s.push('{');
     s.push('\n');
     for m in &t.members {

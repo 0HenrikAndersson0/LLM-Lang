@@ -1,7 +1,7 @@
 @1 @ns Humanizer
 
 type DefaultCollectionFormatter(defaultSeparator String) : ICollectionFormatter{
-  protected String DefaultSeparator=defaultSeparator
+  protected readonly String DefaultSeparator=defaultSeparator
   export virtual fn Humanize<T>(collection IEnumerable<T>) String{Humanize(collection, o=>o?.ToString(), DefaultSeparator)}
   export virtual fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
   export fn Humanize<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>) String{Humanize(collection, objectFormatter, DefaultSeparator)}
@@ -16,34 +16,34 @@ type DefaultCollectionFormatter(defaultSeparator String) : ICollectionFormatter{
     ArgumentNullException.ThrowIfNull(objectFormatter)
     return HumanizeDisplayObjects(collection, objectFormatter, separator)
   }
-  fn HumanizeDisplayStrings<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
+  internal fn HumanizeDisplayStrings<T>(collection IEnumerable<T>, objectFormatter Func<T,String?>, separator String) String{
     var items=CreateDisplayItems(collection)
     for item in collection{
       AddDisplayString(items, objectFormatter(item))
     }
     return HumanizeDisplayItems(items, separator)
   }
-  fn HumanizeDisplayObjects<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
+  internal fn HumanizeDisplayObjects<T>(collection IEnumerable<T>, objectFormatter Func<T,Object?>, separator String) String{
     var items=CreateDisplayItems(collection)
     for item in collection{
       AddDisplayString(items, objectFormatter(item)?.ToString())
     }
     return HumanizeDisplayItems(items, separator)
   }
-  static fn CreateDisplayItems<T>(collection IEnumerable<T>) List<String>{
-    collection switch{
+  static internal fn CreateDisplayItems<T>(collection IEnumerable<T>) List<String>{
+    return collection switch{
       ICollection<T>items new (items.Count)
       IReadOnlyCollection<T>items new (items.Count)
       else []
     }
   }
-  static fn AddDisplayString(items List<String>, item String?){
+  static internal fn AddDisplayString(items List<String>, item String?){
     if string.IsNullOrWhiteSpace(item){
       return
     }
     items.Add(item!.Trim())
   }
-  fn HumanizeDisplayItems(items List<String>, separator String) String{
+  internal fn HumanizeDisplayItems(items List<String>, separator String) String{
     var count=items.Count
     if count==0{
       return ""
@@ -57,7 +57,7 @@ type DefaultCollectionFormatter(defaultSeparator String) : ICollectionFormatter{
     }
     return string.Format(conjunctionFormat, JoinLeadingItems(items), separator, items[^1])
   }
-  static fn JoinLeadingItems(items List<String>) String{
+  static internal fn JoinLeadingItems(items List<String>) String{
     var count=items.Count-1
     if count==1{
       return items[0]

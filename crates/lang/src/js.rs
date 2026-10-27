@@ -405,7 +405,15 @@ fn emit_fn(f: &FnDecl, level: usize, in_class: bool) -> Result<String, JsLowerEr
     }
     let _ = is_ctor;
     s.push_str("function ");
-    s.push_str(&f.name);
+    // callee-generics erase (v4.2): canon re-attaches type params to the
+    // name (`fn isCheerio<T>(…)`, `fn domEach<T extends …>(…)`) — JS prints
+    // the bare name
+    if f.name != "<ctor>" {
+        let bare: Vec<&str> = f.name.splitn(2, '<').collect();
+        s.push_str(bare[0]);
+    } else {
+        s.push_str(&f.name);
+    }
     s.push_str(&params_js(&f.params, is_ctor));
     s.push(' ');
     s.push_str(&emit_body(&f.body, level, f.ret.is_some())?);
@@ -565,7 +573,12 @@ fn emit_member_fnlike(c: &Core, level: usize) -> Result<String, JsLowerError> {
                 None => String::new(),
             };
             let _ = receiver_prefix;
-            let name = if is_ctor { "constructor".to_string() } else { f.name.clone() };
+            let name = if is_ctor {
+                "constructor".to_string()
+            } else {
+                // generic-method type params are canon-attached to the name
+                f.name.splitn(2, '<').next().unwrap_or(&f.name).to_string()
+            };
             let mut s = ind.clone();
             if is_async {
                 s.push_str("async ");

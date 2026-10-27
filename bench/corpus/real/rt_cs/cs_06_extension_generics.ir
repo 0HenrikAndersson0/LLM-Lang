@@ -89,12 +89,12 @@ type ByteSizeExtensions export static{
     }
     var formatter=Configurator.GetFormatter(culture)
     var isNegative=input.Bits<0
-    var mut remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
+    var mut remainingBits=isNegative?(ULong)(-(input.Bits+1))+1:(ULong)input.Bits
     if remainingBits==0{
       return string.Concat("0 ", formatter.DataUnitHumanize(DataUnit.Bit, 0, toSymbol:!toWords))
     }
     var parts=new List<String>(Math.Min(precision, 8))
-    fn addPart(bitsPerUnit Int64, unit DataUnit){
+    fn addPart(bitsPerUnit ULong, unit DataUnit){
       if parts.Count>=precision{
         return
       }
@@ -105,12 +105,12 @@ type ByteSizeExtensions export static{
       parts.Add(string.Concat(count.ToString(formatProvider), " ", formatter.DataUnitHumanize(unit, count, toSymbol:!toWords)))
       remainingBits%=bitsPerUnit
     }
-    addPart((Int64)ByteSize.BytesInExabyte*ByteSize.BitsInByte, DataUnit.Exabyte)
-    addPart((Int64)ByteSize.BytesInPetabyte*ByteSize.BitsInByte, DataUnit.Petabyte)
-    addPart((Int64)ByteSize.BytesInTerabyte*ByteSize.BitsInByte, DataUnit.Terabyte)
-    addPart((Int64)ByteSize.BytesInGigabyte*ByteSize.BitsInByte, DataUnit.Gigabyte)
-    addPart((Int64)ByteSize.BytesInMegabyte*ByteSize.BitsInByte, DataUnit.Megabyte)
-    addPart((Int64)ByteSize.BytesInKilobyte*ByteSize.BitsInByte, DataUnit.Kilobyte)
+    addPart((ULong)ByteSize.BytesInExabyte*ByteSize.BitsInByte, DataUnit.Exabyte)
+    addPart((ULong)ByteSize.BytesInPetabyte*ByteSize.BitsInByte, DataUnit.Petabyte)
+    addPart((ULong)ByteSize.BytesInTerabyte*ByteSize.BitsInByte, DataUnit.Terabyte)
+    addPart((ULong)ByteSize.BytesInGigabyte*ByteSize.BitsInByte, DataUnit.Gigabyte)
+    addPart((ULong)ByteSize.BytesInMegabyte*ByteSize.BitsInByte, DataUnit.Megabyte)
+    addPart((ULong)ByteSize.BytesInKilobyte*ByteSize.BitsInByte, DataUnit.Kilobyte)
     addPart(ByteSize.BitsInByte, DataUnit.Byte)
     addPart(1, DataUnit.Bit)
     return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign:null , string.Join(separator, parts))
@@ -137,7 +137,7 @@ type ByteSizeExtensions export static{
       builtInFormatter=null
     }
     var isNegative=input.Bits<0
-    var mut remainingBits=isNegative?(Int64)(-(input.Bits+1))+1:(Int64)input.Bits
+    var mut remainingBits=isNegative?(ULong)(-(input.Bits+1))+1:(ULong)input.Bits
     var units=unitSystem==ByteSizeUnitSystem.DecimalSi?DecimalCompositeUnits:BinaryCompositeUnits
     if remainingBits==0{
       return string.Concat("0 ", toWords?humanizeUnit(DataUnit.Bit, 0):ByteSize.BitSymbol)
@@ -147,7 +147,7 @@ type ByteSizeExtensions export static{
       if parts.Count>=precision{
         break
       }
-      var bitsPerUnit=(Int64)unit.Bytes*ByteSize.BitsInByte
+      var bitsPerUnit=(ULong)unit.Bytes*ByteSize.BitsInByte
       var count=remainingBits/bitsPerUnit
       if count==0{
         continue
@@ -159,7 +159,7 @@ type ByteSizeExtensions export static{
     addSmallUnit(ByteSize.BitsInByte, ByteSize.ByteSymbol, DataUnit.Byte)
     addSmallUnit(1, ByteSize.BitSymbol, DataUnit.Bit)
     return string.Concat(isNegative?NumberFormatInfo.GetInstance(formatProvider).NegativeSign:null , string.Join(separator, parts))
-    fn addSmallUnit(bitsPerUnit Int64, symbol String, dataUnit DataUnit){
+    fn addSmallUnit(bitsPerUnit ULong, symbol String, dataUnit DataUnit){
       if parts.Count>=precision{
         return
       }
@@ -170,7 +170,7 @@ type ByteSizeExtensions export static{
       parts.Add(string.Concat(count.ToString(formatProvider), " ", toWords?humanizeUnit(dataUnit, count):symbol))
       remainingBits%=bitsPerUnit
     }
-    fn humanizeUnit(dataUnit DataUnit, count Int64) String{builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol:false ):formatter.DataUnitHumanize(dataUnit, count, toSymbol:false )}
+    fn humanizeUnit(dataUnit DataUnit, count ULong) String{builtInFormatter is not null ?builtInFormatter.DataUnitHumanizeExact(dataUnit, count, toSymbol:false ):formatter.DataUnitHumanize(dataUnit, count, toSymbol:false )}
   }
   static readonly Array<CompositeUnit> DecimalCompositeUnits =[new (ByteSize.BytesInDecimalExabyte, "EB", DataUnit.DecimalExabyte), new (ByteSize.BytesInDecimalPetabyte, "PB", DataUnit.DecimalPetabyte), new (ByteSize.BytesInDecimalTerabyte, "TB", DataUnit.DecimalTerabyte), new (ByteSize.BytesInDecimalGigabyte, "GB", DataUnit.DecimalGigabyte), new (ByteSize.BytesInDecimalMegabyte, "MB", DataUnit.DecimalMegabyte), new (ByteSize.BytesInDecimalKilobyte, "kB", DataUnit.DecimalKilobyte)]
   static readonly Array<CompositeUnit> BinaryCompositeUnits =[new (ByteSize.BytesInPebibyte, "PiB", DataUnit.BinaryPebibyte), new (ByteSize.BytesInTebibyte, "TiB", DataUnit.BinaryTebibyte), new (ByteSize.BytesInGibibyte, "GiB", DataUnit.BinaryGibibyte), new (ByteSize.BytesInMebibyte, "MiB", DataUnit.BinaryMebibyte), new (ByteSize.BytesInKibibyte, "KiB", DataUnit.BinaryKibibyte)]

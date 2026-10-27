@@ -14,7 +14,7 @@ documents: `docs/language-design.md` (design + measured decisions),
 - **Comments**: none (dropped by contract; the readability floor is the
   layout itself). Hand canon may carry `//` rows; machine canon drops.
 - **Identifiers**: unabbreviated (the readability floor). Type words
-  canonize capital: `String Int Bool Float Int64 Decimal Char Byte Short
+  canonize capital: `String Int Bool Float Int64 ULong Decimal Char Byte Short
   UShort UInt SByte Object`. Target keywords stay lowercase keywords.
 - **Atoms**: idents, numbers (with `m`/`d`/`f` suffixes pass through),
   strings `"…{interp}…"` (C#-reader also accepts literal-brace data
@@ -65,6 +65,7 @@ expansion every form is in the table above — nothing else remains.
 | `Bool` | boolean | bool |
 | `Float` | number | double |
 | `Int64` | number | long |
+| `ULong` | number | ulong |
 | `Decimal` | number | decimal |
 | `T?` | erased | `T?` |
 | `Array<T>` | array/Array | `T[]` |

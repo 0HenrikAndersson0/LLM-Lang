@@ -70,6 +70,10 @@ pub struct TypeDecl {
     pub kind: String,        // class | interface | record | struct (canon: words)
     pub primary: Option<Vec<(String, String)>>, // (name, type)
     pub bases: Vec<String>,
+    /// generic `where` clauses carried verbatim after the base list
+    /// (`TLocaliser : class` — the C#-reader captures the clause text; canon
+    /// prints ` where <clause>` before the body brace; emit restores C# order)
+    pub constraints: Vec<String>,
     pub modifiers: Vec<String>, // export, sealed, abstract
     pub members: Vec<Core>,
     /// header-run span (decl line)
@@ -653,38 +657,46 @@ fn expand_line(f: &Form) -> Result<Core, ExpandError> {
                 primary = Some(pv);
                 i += off;
             }
-            let bases = match atoms.get(i) {
-                Some(Atom::Sym(s)) if s == ":" => {
-                    let base_start = i + 1;
-                    match atoms[base_start..].iter().position(|a| matches!(a, Atom::Sym(x) if x == "{")) {
-                        Some(end) if end > 0 => {
-                            let b: Vec<String> = split_commas(&atoms[base_start..base_start + end]).iter().map(|g| dotted(g)).collect();
-                            i = base_start + end + 1;
-                            let _ = i;
-                            b
-                        }
-                        _ => {
-                            let b: Vec<String> = split_commas(&atoms[base_start..]).iter().map(|g| dotted(g)).collect();
-                            i = atoms.len();
-                            let _ = i;
-                            b
-                        }
-                    }
+            // clause scanner: atoms up to the next ` where`/`{` boundary
+            let clause_end = |from: usize| -> usize {
+                atoms[from..]
+                    .iter()
+                    .position(|a| matches!(a, Atom::Sym(x) if x == "{")
+                        || matches!(a, Atom::Ident(x) if x == "where"))
+                    .map(|p| from + p)
+                    .unwrap_or(atoms.len())
+            };
+            let mut constraints: Vec<String> = Vec::new();
+            let bases = if matches!(atoms.get(i), Some(Atom::Sym(s)) if s == ":") {
+                let base_start = i + 1;
+                let end = clause_end(base_start);
+                let b: Vec<String> = split_commas(&atoms[base_start..end]).iter().map(|g| dotted(g)).collect();
+                let mut all = b;
+                i = end;
+                while matches!(atoms.get(i), Some(Atom::Ident(w)) if w == "where") {
+                    let c_start = i + 1;
+                    let c_end = clause_end(c_start);
+                    constraints.push(constraint_text(&atoms[c_start..c_end]));
+                    i = c_end;
                 }
-                Some(Atom::Sym(s)) if s == "{" => {
-                    i += 1;
-                    let _ = i;
-                    Vec::new()
+                all
+            } else {
+                let mut all = Vec::new();
+                while matches!(atoms.get(i), Some(Atom::Ident(w)) if w == "where") {
+                    let c_start = i + 1;
+                    let c_end = clause_end(c_start);
+                    constraints.push(constraint_text(&atoms[c_start..c_end]));
+                    i = c_end;
                 }
-                Some(_) => Vec::new(),
-                None => Vec::new(),
+                let _ = &mut all;
+                all
             };
             let mut members = Vec::new();
             for c in &children {
                 let mc = expand_member(c)?;
                 members.push(mc);
             }
-            Ok(Core::Type(TypeDecl { name, kind, primary, bases, modifiers, members, span }))
+            Ok(Core::Type(TypeDecl { name, kind, primary, bases, constraints, modifiers, members, span }))
         }
         "var" | "const" | "volatile" | "let" | "export" => {
             let mut mods = Vec::new();
@@ -1219,8 +1231,9 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
     // modifier-led member rows (`internal virtual fn Humanize(...)`,
     // `protected CultureInfo Culture` from the C# round trip): delegate to
     // expand_line once a `fn` token exists downstream; non-fn rows drain
-    // the mod words in place (ctor + field/property paths carry them)
-    let mod_words: &[&str] = &["export", "internal", "protected", "private", "virtual", "override", "static", "sealed", "abstract", "readonly", "volatile", "new", "extern", "unsafe", "explicit"];
+    // the mod words in place (ctor + field/property paths carry them).
+    // `get` = the get-only-property carry (fidelity row 23)
+    let mod_words: &[&str] = &["export", "internal", "protected", "private", "virtual", "override", "static", "sealed", "abstract", "readonly", "volatile", "get", "new", "extern", "unsafe", "explicit"];
     let lead_mod = matches!(&atoms[0], Atom::Ident(w) if mod_words.contains(&w.as_str()));
     if lead_mod && atoms.iter().any(|a| matches!(a, Atom::Ident(x) if x == "fn")) {
         return expand_line(f);
@@ -1292,6 +1305,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 kind: kw.clone(),
                 primary: None,
                 bases: vec![],
+                constraints: vec![],
                 modifiers: vec![],
                 members,
                 span,
@@ -1379,7 +1393,7 @@ fn expand_member(f: &Form) -> Result<Core, ExpandError> {
                 }));
             }
             let _ = off;
-            Ok(Core::Type(TypeDecl { name, kind, primary: None, bases: vec![], modifiers: vec![], members, span }))
+            Ok(Core::Type(TypeDecl { name, kind, primary: None, bases: vec![], constraints: vec![], modifiers: vec![], members, span }))
         }
         _ => {
             // field `Type name[= x]` / property `Type name => expr`
@@ -1513,6 +1527,20 @@ fn parse_params(atoms: &[Atom]) -> Result<(usize, Vec<(String, String)>), Expand
         params.push((name, ty));
     }
     Ok((ci + 1, params))
+}
+
+/// generic `where` clause atoms (`TLocaliser : class`) → canon text,
+/// mirrored by the C# reader's normalization so print→re-parse is stable
+fn constraint_text(atoms: &[Atom]) -> String {
+    let colon = atoms.iter().position(|a| matches!(a, Atom::Sym(x) if x == ":"));
+    match colon {
+        Some(ci) => {
+            let name = dotted(&atoms[..ci]);
+            let parts: Vec<String> = split_commas(&atoms[ci + 1..]).iter().map(|g| dotted(g)).collect();
+            format!("{name} : {}", parts.join(", "))
+        }
+        None => dotted(atoms),
+    }
 }
 
 /// split an atom run on top-level commas ((), [] and <> all nest)

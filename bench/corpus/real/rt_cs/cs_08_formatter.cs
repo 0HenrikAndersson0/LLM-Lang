@@ -5,7 +5,7 @@ public class DefaultFormatter : IGrammaticalCaseTimeSpanFormatter
     static readonly DefaultFormatter EnglishFallback = new (CultureInfo.GetCultureInfo("en"));
     readonly LocalePhraseTable phraseTable;
     private protected LocalePhraseTable PhraseTable => phraseTable;
-    protected CultureInfo Culture;
+    protected CultureInfo Culture { get; }
     public DefaultFormatter(CultureInfo culture)
     {
         Culture=culture;

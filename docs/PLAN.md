@@ -345,6 +345,49 @@ Each phase exit is a verification act, not a checklist:
   verdict + the round-trip gate result; fidelity row 17 → ✅ resolved.
   **The C# round-trip leg is clean at the emit stage for the whole
   corpus.** Next: behavior rig behind the real library (Phase-6), 6.2.
+- **v6.7 (2026-10-27, latest)** — **THE HUMANIZER SUITE GOES ALL-GREEN:
+  61,581 tests — 61,580 pass / 0 fail / 1 vendor-disabled skip.** The 3
+  canon rows behind run-1's 2 failures landed as the additive row pass
+  (fidelity 19 ✅ + 23 ✅ + 24 ✅): get-only auto-props canon with the
+  `get` mod word and emit `{ get; }`; `TypeDecl.constraints` (additive
+  field at every construction site) carries `where T : class` clauses
+  canon→emit; `ulong` canonizes `ULong` (spec ty list extended,
+  additive) with the emit cast arm widened to the paren-operand shape.
+  Row-3's wrap-boundary (`--1 EB`) is exactly the class of bug only the
+  real library suite separates — it passed canon identity and compiled
+  0-errors at run 1. Bench re-measured on the 6.1 basis: **C# canon
+  64.2%/64.1%, weighted 58.3% — all 3 rows cost +2 tokens corpus-wide**;
+  JS canon byte-identical. Gates: canon identity 18/18, 59 test rows,
+  JS behavior 3/3 (re-verified), loop selftests ×4. **Also: the J1 JS
+  behavior gate was found failing at HEAD** — `function isCheerio<T>`
+  leaked into the rig (the 7140a7f fn type-param re-attach reached
+  canon; `to-js`'s callee-generics erase missed the re-attached name —
+  the member-pass "3/3 re-verified" claim did not hold on current
+  code); fixed generically (generic-name erase in js.rs, top-level +
+  member arms) and behavior re-verified 3/3 for real. The stale
+  committed `ir/*.ir` files (pre-member-pass canon, no mod words) were
+  regenerated from the current corpus generation.
+- **v6.6 (2026-10-27)** — **THE HUMANIZER SUITE RAN AGAINST THE
+  RIG: 61,581 tests — 61,578 pass / 2 fail / 1 vendor-disabled skip
+  (99.997%).** SDK 11 turned out NOT to be required: the queue's "vendor
+  pins SDK 11" row was an environment row, not a work row — the suite
+  runs on SDK 10.0.403 via the scratch-clone recipe (global.json pin
+  renamed, global `TargetFrameworks=net10.0` override — load-bearing:
+  `-f` leaves a partial restore graph that poisons the P2P into
+  `bin/placeholder` assets → the module-init `FileNotFoundException`;
+  deps.json moved aside → MTP exe runs via app-dir probing; full recipe
+  in `bench/results-humanizer-rig.md`). The rig was rebuilt from scratch
+  (`/tmp` wiped; committed mirrors re-verified byte-identical ×9 vs
+  vendor main `4574b93` 2026-10-07). **The 2 failures decompose to 3
+  canonicalization rows** (fidelity 23+24 new; 19 confirmed): cs_08
+  get-only auto-property → field demotion, cs_02 `where TLocaliser :
+  class` constraint erased (both caught by the API approver — the diff
+  contains ONLY those rows; every Verify snapshot + culture test green),
+  cs_06 unsigned erasure (`ulong` → `(long)`/`Int64` throughout — the
+  EB wrap-boundary flips sign in signed division → `--1 EB`, caught by
+  the vendor's own boundary test after compiling 0-errors and passing
+  canon identity). The 3 rows are the precise next-pass set (~1 session,
+  member-row-pass style). Fidelity addendum recorded.
 - **v6.5 (2026-10-11, latest)** — **THE VENDORED HUMANIZER BEHAVIOR RIG
   BUILDS 834 → 0 errors: the member-row pass landed** (the precise
   next-pass row set from dcf53f1). Additive canon rows, the type-modifier

@@ -976,6 +976,7 @@ impl<'a> CsReader<'a> {
                     kind: self.kind_word(node),
                     primary: None,
                     bases: vec![],
+                    constraints: vec![],
                     modifiers: self.modifiers_export(node),
                     members: vec![],
                     span: self.span(node),
@@ -1096,6 +1097,20 @@ impl<'a> CsReader<'a> {
                 }
             }
         }
+        // generic constraint clauses (fidelity row 19 resolved): direct
+        // children of the declaration, siblings of the base list
+        let mut constraints = vec![];
+        {
+            let mut wc = node.walk();
+            if wc.goto_first_child() {
+                loop {
+                    if wc.node().kind() == "type_parameter_constraints_clause" {
+                        constraints.push(self.constraint_clause_text(wc.node()));
+                    }
+                    if !wc.goto_next_sibling() { break; }
+                }
+            }
+        }
         let mut members = vec![];
         if let Some(body) = node.child_by_field_name("body") {
             let mut c = body.walk();
@@ -1133,6 +1148,7 @@ impl<'a> CsReader<'a> {
             kind: kind_hint.into(),
             primary,
             bases,
+            constraints,
             modifiers: self.modifiers_export(node),
             members,
             span: self.span(node),
@@ -1447,26 +1463,92 @@ impl<'a> CsReader<'a> {
             found
         };
         let value: Option<Vec<Atom>> = value.map(|v| self.atomize(v));
+        let mut mods = canon_modifiers(&mods);
+        // get-only auto-property carry (fidelity row 23): accessor-only
+        // properties canon with the `get` mod word so the API shape
+        // (property, not field) survives the round trip
+        if self.is_getter_only(node) {
+            mods.push("get".into());
+        }
         match value {
             Some(atoms) => vec![Core::Var(VarDecl {
                 name,
                 ty: Some(ty),
                 value: Some(atoms),
-                modifiers: canon_modifiers(&mods),
+                modifiers: mods,
                 objlit: None,
                 span,
             })],
             None => {
-                // accessor-only: signature var (canon `Type Name`)
+                // accessor-only: signature var (canon [`get`] `Type Name`)
                 vec![Core::Var(VarDecl {
                     name,
                     ty: Some(ty),
                     value: None,
-                    modifiers: canon_modifiers(&mods),
+                    modifiers: mods,
                     objlit: None,
                     span,
                 })]
             }
+        }
+    }
+
+    /// does this property declaration carry a getter and no setter/init?
+    /// (auto-props with accessors only — `{ get; }`; computed `=>` rows
+    /// never reach here, `{ get; set; }` stays the deferred field row)
+    fn is_getter_only(&self, node: tree_sitter::Node<'a>) -> bool {
+        let mut ac = node.walk();
+        if !ac.goto_first_child() {
+            return false;
+        }
+        loop {
+            if ac.node().kind() == "accessor_list" {
+                let mut has_get = false;
+                let mut blocked = false;
+                let mut dc = ac.node().walk();
+                if dc.goto_first_child() {
+                    loop {
+                        let d = dc.node();
+                        if d.kind() == "accessor_declaration" {
+                            let mut kc = d.walk();
+                            if kc.goto_first_child() {
+                                loop {
+                                    match kc.node().kind() {
+                                        "get" => has_get = true,
+                                        "set" | "init" | "add" | "remove" => blocked = true,
+                                        _ => {}
+                                    }
+                                    if !kc.goto_next_sibling() { break; }
+                                }
+                            }
+                        }
+                        if !dc.goto_next_sibling() { break; }
+                    }
+                }
+                return has_get && !blocked;
+            }
+            if !ac.goto_next_sibling() { break; }
+        }
+        false
+    }
+
+    /// generic constraint clauses (`where TLocaliser : class`) → canon text,
+    /// normalized to the expander's `constraint_text` shape so canon is
+    /// stable across reader ↔ emit (fidelity row 19 resolved)
+    fn constraint_clause_text(&self, node: tree_sitter::Node<'a>) -> String {
+        let raw = text(node, self.src).trim();
+        let raw = raw.strip_prefix("where").unwrap_or(raw).trim();
+        match raw.find(':') {
+            Some(ci) => {
+                let name = raw[..ci].split_whitespace().collect::<Vec<_>>().join(" ");
+                let list = raw[ci + 1..]
+                    .split(',')
+                    .map(|p| p.split_whitespace().collect::<Vec<_>>().join(" "))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{name} : {list}")
+            }
+            None => raw.replace(char::is_whitespace, " "),
         }
     }
 
@@ -1919,7 +2001,7 @@ fn canon_word(w: &str) -> String {
         "short" => "Short".into(),
         "ushort" => "UShort".into(),
         "uint" => "UInt".into(),
-        "ulong" => "Int64".into(),
+        "ulong" => "ULong".into(),
         "float" => "Float".into(),
         other => other.to_string(),
     }

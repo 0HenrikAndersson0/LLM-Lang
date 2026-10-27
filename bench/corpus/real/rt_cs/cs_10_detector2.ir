@@ -1,6 +1,6 @@
 @1 @ns Humanizer
 
-type LithuanianNumberFormDetector static{
+type LithuanianNumberFormDetector{
   export static fn Detect(number Int64) LithuanianNumberForm{
     var tens=number%100/10
     var units=number%10

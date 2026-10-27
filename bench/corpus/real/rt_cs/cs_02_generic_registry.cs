@@ -1,7 +1,7 @@
 namespace Humanizer;
 using System.Runtime.CompilerServices;
 
-public class LocaliserRegistry<TLocaliser>
+public class LocaliserRegistry<TLocaliser> where TLocaliser : class
 {
     readonly Dictionary<string,Func<CultureInfo,TLocaliser>> localisersBuilder = [];
     readonly object lockObject = new ();

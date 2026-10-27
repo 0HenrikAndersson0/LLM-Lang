@@ -100,7 +100,7 @@ on *locals*, fn type-parameter declarations, `as const`.
 
 ## 6. Type words and signatures
 
-IR canon stores capital type words (`String/Int/Bool/Float/Int64/Decimal`)
+IR canon stores capital type words (`String/Int/Bool/Float/Int64/ULong/Decimal`)
 — measured tie in Phase 0, chosen for C# familiarity. C# keywords differ —
 emitter maps (corpus-grounded):
 
@@ -111,6 +111,7 @@ emitter maps (corpus-grounded):
 | `Bool` | `bool` | |
 | `Float` | `double` | cs_01 original: `double count` |
 | `Int64` | `long` | |
+| `ULong` | `ulong` | fidelity 24 (suite-gate pass): the EB wrap-boundary is semantics-carrying — `ULong` folded to `Int64` flipped the vendor suite's `--1 EB` row |
 | `Decimal` | `decimal` | |
 | `Array<T>` | `T[]`` | generics otherwise verbatim (`Dictionary<Char, UnitPrefix>`, `Func<CultureInfo, TLocaliser>`) |
 | other idents | verbatim | `TimeUnit`, `CultureInfo`, `TLocaliser`… |

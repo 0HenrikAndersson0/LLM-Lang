@@ -160,10 +160,13 @@ async fn Load(Int id) User?{
 - **C# emit + round-trip (Phase 5):** `ircc to-cs` / `ircc from-cs` —
   golden gate 8/9 (1 proven-upstream fragment), canon identity 9/9,
   double round-trip re-emits clean; the LLM loop test passed for the C#
-  baseline (`bench/scripts/loop/report_5p5_cs.md`); the **vendored
+  baseline (`bench/scripts/loop/report_5p5_cs.md`); the   **vendored
   Humanizer behavior rig compiles the round-tripped corpus inside the
   real library tree with 0 errors** (was ~834 diagnostics,
-  `bench/results-humanizer-rig.md`).
+  `bench/results-humanizer-rig.md`); **Humanizer's own test suite ran
+  against that   assembly on SDK 10.0.403: after one row pass (get-only properties,
+  `where` constraints, unsigned type-words), the full suite is green —
+  **61,581 tests, 61,580 pass / 0 fail / 1 vendor-disabled skip**.
 - **Phase 6 (hardening):** machine-canon bench re-measured (36.7% JS /
   64.2% C#, weighted 58.3% — `results-6p1.md`), spec + tutorial +
   versioning policy shipped (`docs/spec.md`, `docs/tutorial.md`,
